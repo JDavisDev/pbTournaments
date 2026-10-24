@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/* Design tokens. Status colors are what directors read across the room:
+   green = playing, amber = called (waiting for players), red = late. */
+:root {
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --surface-2: #eef1ec;
+  --border: #dde2da;
+  --text: #17201a;
+  --muted: #5f6b62;
+  --accent: #1f7a4d;
+  --accent-text: #ffffff;
+  --accent-soft: #e2f2e8;
+  --live: #1f7a4d;
+  --live-soft: #e2f2e8;
+  --called: #b26a00;
+  --called-soft: #fff1d6;
+  --late: #c0392b;
+  --late-soft: #fde4e1;
+  --idle: #8a948c;
+  --info: #2f5fb3;
+  --info-soft: #e3ebfa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1411;
+    --surface: #171e19;
+    --surface-2: #1f2822;
+    --border: #2c372f;
+    --text: #e8eee9;
+    --muted: #9aa69d;
+    --accent: #3fb57a;
+    --accent-text: #08130c;
+    --accent-soft: #173826;
+    --live: #3fb57a;
+    --live-soft: #173826;
+    --called: #f0a83a;
+    --called-soft: #3a2a0d;
+    --late: #ff6b5c;
+    --late-soft: #3f1915;
+    --idle: #6d786f;
+    --info: #7aa2f0;
+    --info-soft: #1b2a47;
+  }
+}
+
+/* The TV board is always dark: it's read from across a gym. */
+.tv {
+  --bg: #090d0a;
+  --surface: #121914;
+  --surface-2: #1a231c;
+  --border: #26332a;
+  --text: #f1f6f2;
+  --muted: #93a197;
+  --accent: #46c785;
+  --accent-text: #06120a;
+  --accent-soft: #143322;
+  --live: #46c785;
+  --live-soft: #143322;
+  --called: #ffb547;
+  --called-soft: #3a2a0d;
+  --late: #ff6b5c;
+  --late-soft: #3f1915;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-live: var(--live);
+  --color-live-soft: var(--live-soft);
+  --color-called: var(--called);
+  --color-called-soft: var(--called-soft);
+  --color-late: var(--late);
+  --color-late-soft: var(--late-soft);
+  --color-idle: var(--idle);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Tabular numbers for scores, times and standings. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}

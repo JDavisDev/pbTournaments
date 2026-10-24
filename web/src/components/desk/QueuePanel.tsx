@@ -1,0 +1,101 @@
+'use client';
+
+import { holdMatch, moveInQueue } from '@/lib/api';
+import { blockedLabel, minutesSince } from '@/lib/format';
+import { useAction } from '@/lib/hooks';
+import type { QueueRow } from '@/lib/types';
+import { Badge, Empty, ErrorText } from '../ui';
+
+export function QueueStatus({ row }: { row: QueueRow }) {
+  if (!row.blocked_reason) return <Badge tone="live">Ready</Badge>;
+  const tone = row.blocked_reason === 'on_hold' ? 'called' : row.blocked_reason === 'not_checked_in' ? 'late' : 'neutral';
+  return <Badge tone={tone}>{blockedLabel[row.blocked_reason]}</Badge>;
+}
+
+export function QueuePanel({
+  queue,
+  staff,
+  now,
+  onChanged,
+}: {
+  queue: QueueRow[];
+  staff: boolean;
+  now: number;
+  onChanged: () => void;
+}) {
+  const { busy, error, run } = useAction();
+  if (queue.length === 0) return <Empty>The queue is empty.</Empty>;
+
+  const move = (row: QueueRow, before: string | null) => run(() => moveInQueue(row.match_id, before), onChanged);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <ErrorText>{error}</ErrorText>
+      <ol className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface">
+        {queue.map((row, i) => (
+          <li key={row.match_id} className="flex items-start gap-3 px-3 py-2.5">
+            <span className="tnum mt-0.5 w-6 shrink-0 text-right text-sm font-semibold text-muted">{row.queue_rank}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <QueueStatus row={row} />
+                {row.overdue && <Badge tone="late">Overdue</Badge>}
+                <span className="truncate text-xs text-muted">
+                  {row.event_name} · {row.label}
+                </span>
+              </div>
+              <p className="mt-1 text-sm leading-snug">
+                <span className="font-medium">{row.team1_name}</span>
+                <span className="text-muted"> v </span>
+                <span className="font-medium">{row.team2_name}</span>
+              </p>
+              {row.waiting_since && !row.blocked_reason && (
+                <p className="text-xs text-muted">Waiting {minutesSince(row.waiting_since, now)}m</p>
+              )}
+            </div>
+            {staff && (
+              <div className="flex shrink-0 items-center gap-0.5">
+                <IconButton label="Move to top" disabled={busy || i === 0} onClick={() => move(row, queue[0].match_id)}>
+                  ⤒
+                </IconButton>
+                <IconButton label="Move up" disabled={busy || i === 0} onClick={() => move(row, queue[i - 1].match_id)}>
+                  ↑
+                </IconButton>
+                <IconButton
+                  label="Move down"
+                  disabled={busy || i === queue.length - 1}
+                  onClick={() => move(row, queue[i + 2]?.match_id ?? null)}
+                >
+                  ↓
+                </IconButton>
+                <IconButton
+                  label={row.blocked_reason === 'on_hold' ? 'Release' : 'Hold'}
+                  disabled={busy}
+                  onClick={() => run(() => holdMatch(row.match_id, row.blocked_reason !== 'on_hold'), onChanged)}
+                >
+                  {row.blocked_reason === 'on_hold' ? '▶' : '⏸'}
+                </IconButton>
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function IconButton({
+  label,
+  children,
+  ...props
+}: { label: string; children: React.ReactNode } & React.ComponentProps<'button'>) {
+  return (
+    <button
+      title={label}
+      aria-label={label}
+      className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text disabled:opacity-30"
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
