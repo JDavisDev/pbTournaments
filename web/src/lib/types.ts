@@ -2,7 +2,26 @@
 
 export type TournamentStatus = 'draft' | 'registration' | 'live' | 'complete';
 export type EventFormat = 'round_robin' | 'pools_to_bracket' | 'single_elim';
-export type MatchStatus = 'waiting' | 'queued' | 'assigned' | 'in_progress' | 'completed';
+export type MatchStatus = 'waiting' | 'queued' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
+export type BracketType = 'single' | 'double';
+/** Which format a match uses (see TournamentEvent.round_formats). */
+export type RoundKey =
+  | 'pool'
+  | 'final'
+  | 'semifinal'
+  | 'quarterfinal'
+  | 'earlier'
+  | 'bronze'
+  | 'winners'
+  | 'losers'
+  | 'grand_final';
+
+export interface RoundFormat {
+  key: RoundKey;
+  games_to: number;
+  best_of: number;
+  point_cap?: number | null;
+}
 export type BlockedReason =
   | 'on_hold'
   | 'event_not_started'
@@ -30,7 +49,206 @@ export interface Tournament {
   overdue_after_minutes: number;
   match_slot_minutes: number;
   auto_assign: boolean;
+  entry_fee_cents: number;
+  extra_event_fee_cents: number;
+  early_entry_fee_cents: number | null;
+  early_extra_event_fee_cents: number | null;
+  early_until: string | null;
+  refund_fee_cents: number;
+  stream_url: string | null;
+  location: string | null;
+  dupr_score_type: 'SIDEOUT' | 'RALLY';
+  /** A practice tournament: the demo clock works and its texts show on team pages. */
+  is_demo: boolean;
 }
+
+/** demo_inbox(): a text sent to a demo team's player; links are paths (/s/<code>). */
+export interface DemoText {
+  id: number;
+  created_at: string;
+  player_name: string;
+  body: string;
+}
+
+export interface RegistrationForm {
+  player: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+    sms_opt_in: boolean;
+    gender: 'male' | 'female' | null;
+    birth_date: string | null;
+    dupr_doubles: number | null;
+    dupr_singles: number | null;
+    self_rating: number | null;
+    dupr_id?: string | null;
+  };
+  entries: { event_id: string; partner_name?: string; partner_email?: string }[];
+}
+
+/** What a player sees about their own registration. */
+export interface RegistrationView {
+  id: string;
+  tournament_id: string;
+  tournament_name: string;
+  status: 'pending' | 'paid' | 'cancelled' | 'refunded';
+  amount_cents: number;
+  player_name: string;
+  email: string;
+  entries: { event_id: string; event_name: string; partner_name: string | null; team_id: string | null; team_name: string | null }[];
+}
+
+/** One row per registration entry (registration_details view), for directors. */
+export interface RegistrationRow {
+  registration_id: string;
+  tournament_id: string;
+  status: RegistrationView['status'];
+  amount_cents: number;
+  payment_provider: string | null;
+  created_at: string;
+  paid_at: string | null;
+  player_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string | null;
+  sms_opt_in: boolean;
+  gender: 'male' | 'female' | null;
+  birth_date: string | null;
+  dupr_doubles: string | null;
+  dupr_singles: string | null;
+  self_rating: string | null;
+  event_id: string;
+  event_name: string;
+  partner_name: string | null;
+  partner_email: string | null;
+  team_id: string | null;
+  team_name: string | null;
+}
+
+export interface TextLogRow {
+  id: number;
+  tournament_id: string;
+  kind: string;
+  via: 'sms' | 'email';
+  subject: string | null;
+  created_at: string;
+  sent_at: string | null;
+  channel: 'sms' | 'email' | 'log' | 'none' | null;
+  to_phone: string | null;
+  to_email: string | null;
+  body: string;
+  error: string | null;
+  /** Twilio's message id and latest delivery report (queued, sent, delivered, undelivered, failed). */
+  provider_id: string | null;
+  delivery_status: string | null;
+  player_name: string;
+  court_name: string | null;
+}
+
+/** The Twilio setup, as checked by /api/twilio/check. */
+export interface TwilioCheck {
+  mode: 'live' | 'log';
+  sender: string | null;
+  callbackUrl: string | null;
+  account: { status: string; type: string; name: string } | null;
+  error: string | null;
+  warnings: string[];
+}
+
+export interface RosterPlayer {
+  player_id: string;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  email: string | null;
+  sms_opt_in: boolean;
+  checked_in: boolean;
+  dupr_id: string | null;
+  dupr_doubles: number | null;
+  dupr_singles: number | null;
+  self_rating: number | null;
+  /** Set when a director confirmed the ratings (by hand or from a DUPR list). */
+  rating_checked_at: string | null;
+}
+
+/** division_eligibility(): one row per team; problems is empty when it's fine. */
+export interface EligibilityRow {
+  event_id: string;
+  team_id: string;
+  team_name: string;
+  problems: string[];
+  /** Players in a rated division whose rating no director has confirmed. */
+  unchecked_ratings: number;
+}
+
+/** dupr_results(): a played match with what DUPR's club CSV upload needs. */
+export interface DuprResultRow {
+  match_id: string;
+  event_id: string;
+  event_name: string;
+  label: string;
+  completed_at: string;
+  match_type: 'S' | 'D';
+  event: string;
+  date: string;
+  player_a1: string;
+  player_a1_dupr_id: string | null;
+  player_a2: string | null;
+  player_a2_dupr_id: string | null;
+  player_b1: string;
+  player_b1_dupr_id: string | null;
+  player_b2: string | null;
+  player_b2_dupr_id: string | null;
+  games: [number, number][];
+  location: string | null;
+  score_type: 'SIDEOUT' | 'RALLY';
+  missing_ids: string[];
+  exported_at: string | null;
+}
+
+/** team_roster view */
+export interface TeamRosterRow {
+  team_id: string;
+  tournament_id: string;
+  event_id: string;
+  event_name: string;
+  event_sort_order: number;
+  name: string;
+  seed: number | null;
+  pool: number | null;
+  checked_in_at: string | null;
+  withdrawn_at: string | null;
+  match_count: number;
+  players: RosterPlayer[];
+}
+
+/** checkin_roster view: one row per player */
+export interface CheckinPlayer {
+  tournament_id: string;
+  player_id: string;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  checked_in_at: string | null;
+  teams: { team_id: string; team_name: string; event_id: string; event_name: string }[];
+}
+
+/** division_checkin view */
+export interface DivisionCheckin {
+  tournament_id: string;
+  event_id: string;
+  event_name: string;
+  sort_order: number;
+  not_before: string | null;
+  teams: number;
+  teams_ready: number;
+  players: number;
+  players_in: number;
+}
+
+export type MessageScope = 'player' | 'team' | 'event' | 'everyone' | 'not_checked_in';
 
 export interface TournamentEvent {
   id: string;
@@ -42,11 +260,38 @@ export interface TournamentEvent {
   advance_per_pool: number;
   games_to: number;
   best_of: number;
+  point_cap: number | null;
   playoff_games_to: number | null;
   playoff_best_of: number | null;
+  playoff_point_cap: number | null;
   not_before: string | null;
   sort_order: number;
   playoffs_seeded_at: string | null;
+  gender: 'open' | 'mens' | 'womens' | 'mixed';
+  min_age: number | null;
+  max_age: number | null;
+  age_basis: 'tournament_day' | 'year_end';
+  skill_rule: 'open' | 'only' | 'and_under' | 'and_above' | 'range';
+  skill_level: string | null;
+  skill_level_to: string | null;
+  rating_source: 'dupr' | 'dupr_or_self';
+  allow_play_up: boolean;
+  max_teams: number | null;
+  partner_required: boolean;
+  /** Expected minutes per match (court time included); null = the tournament's match_slot_minutes. */
+  pool_match_minutes: number | null;
+  bracket_match_minutes: number | null;
+  rating_tolerance: number;
+  play_up_limit: number | null;
+  require_dupr_id: boolean;
+  team_rating_max: number | null;
+  team_age_min: number | null;
+  max_rounds: number | null;
+  bracket_type: BracketType;
+  third_place_match: boolean;
+  grand_final_reset: boolean;
+  confirm_seeds: boolean;
+  round_formats: RoundFormat[];
 }
 
 export interface Team {
@@ -78,6 +323,12 @@ export interface CourtBoardRow {
   assigned_at: string | null;
   started_at: string | null;
   no_show_deadline: string | null;
+  stream_url: string | null;
+  stage: 'pool' | 'bracket' | null;
+  games_to: number | null;
+  best_of: number | null;
+  point_cap: number | null;
+  format_text: string | null;
 }
 
 export interface QueueRow {
@@ -102,6 +353,13 @@ export interface MatchDetails {
   event_name: string;
   event_format: EventFormat;
   stage: 'pool' | 'bracket';
+  /** main: pools, single elimination, the winners bracket; losers; final: grand final and bronze. */
+  side: 'main' | 'losers' | 'final';
+  round_key: RoundKey;
+  is_bye: boolean;
+  /** A slot no team will fill: the other team goes through without playing. */
+  team1_bye: boolean;
+  team2_bye: boolean;
   pool: number;
   pool_letter: string | null;
   round: number;
@@ -127,6 +385,18 @@ export interface MatchDetails {
   winner_team_id: string | null;
   forfeit: boolean;
   winner_to_match_id: string | null;
+  loser_to_match_id: string | null;
+  court_stream_url: string | null;
+  games_to: number;
+  best_of: number;
+  point_cap: number | null;
+  /** e.g. "one game to 15, win by 2" */
+  format_text: string;
+}
+
+/** The match behind a score link. */
+export interface CodeMatch extends MatchDetails {
+  tournament_name: string;
 }
 
 export interface StandingRow {
@@ -140,6 +410,7 @@ export interface StandingRow {
   played: number;
   wins: number;
   losses: number;
+  win_pct: number;
   points_for: number;
   points_against: number;
   point_diff: number;

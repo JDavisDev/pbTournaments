@@ -16,7 +16,7 @@ export function ResultsPanel({
   onCorrect: (m: MatchDetails) => void;
 }) {
   const done = matches
-    .filter((m) => m.status === 'completed')
+    .filter((m) => m.status === 'completed' && !m.is_bye)
     .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
     .slice(0, 60);
   if (done.length === 0) return <Empty>No results yet.</Empty>;

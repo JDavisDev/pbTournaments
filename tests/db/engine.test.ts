@@ -43,33 +43,37 @@ async function eventWithTeams(tournamentId: string, name: string, teamCount: num
 }
 
 describe('score validation', () => {
-  const winnerSlot = async (games: number[][], gamesTo = 11, bestOf = 1) =>
-    (await one(db, 'select private.match_winner_slot($1::jsonb, $2, $3) as slot', [JSON.stringify(games), gamesTo, bestOf]))
-      .slot;
+  const winnerSlot = async (games: number[][], bestOf = 1) =>
+    (await one(db, 'select private.match_winner_slot($1::jsonb, $2) as slot', [JSON.stringify(games), bestOf])).slot;
 
+  // Formats differ (win by 2, hard caps, timed games), so unusual scores are
+  // accepted; the screens ask the director to confirm them.
   it.each([
     [[[11, 9]], 1],
     [[[7, 11]], 2],
     [[[12, 14]], 2],
     [[[11, 0]], 1],
+    [[[11, 10]], 1],
+    [[[14, 15]], 2],
+    [[[14, 11]], 1],
   ])('accepts %j', async (games, slot) => {
     expect(await winnerSlot(games)).toBe(slot);
   });
 
-  it.each([[[[11, 10]]], [[[10, 8]]], [[[14, 11]]], [[[-1, 11]]], [[]]])('rejects %j', async (games) => {
-    await expect(winnerSlot(games)).rejects.toThrow();
+  it.each([
+    [[[11, 11]], /tied/],
+    [[[-1, 11]], /possible score/],
+    [[[150, 3]], /possible score/],
+    [[], /at least one game/],
+  ])('rejects %j', async (games, message) => {
+    await expect(winnerSlot(games)).rejects.toThrow(message);
   });
 
   it('plays best of 3 to two game wins', async () => {
-    expect(await winnerSlot([[11, 9], [9, 11], [11, 7]], 11, 3)).toBe(1);
-    expect(await winnerSlot([[5, 11], [9, 11]], 11, 3)).toBe(2);
-    await expect(winnerSlot([[11, 9]], 11, 3)).rejects.toThrow(/needs 2 game wins/);
-    await expect(winnerSlot([[11, 9], [11, 7], [11, 3]], 11, 3)).rejects.toThrow(/already won/);
-  });
-
-  it('uses the event’s game target', async () => {
-    expect(await winnerSlot([[15, 13]], 15)).toBe(1);
-    await expect(winnerSlot([[11, 9]], 15)).rejects.toThrow(/game to 15/);
+    expect(await winnerSlot([[11, 9], [9, 11], [11, 7]], 3)).toBe(1);
+    expect(await winnerSlot([[5, 11], [9, 11]], 3)).toBe(2);
+    await expect(winnerSlot([[11, 9]], 3)).rejects.toThrow(/needs 2 game wins/);
+    await expect(winnerSlot([[11, 9], [11, 7], [11, 3]], 3)).rejects.toThrow(/already won/);
   });
 });
 
@@ -86,7 +90,9 @@ describe('court assignment', () => {
     const texts = await rows(db, 'select * from public.notifications order by id');
     expect(texts).toHaveLength(8);
     for (const text of texts) {
-      expect(text.body).toMatch(/^Court [12] now: \S+\/\S+ vs \S+\/\S+$/);
+      expect(text.body).toMatch(
+        /^Your match is ready on COURT [12] versus \S+\/\S+\. One game to \d+, win by 2\. Promptly report your scores here: \{url\} when finished\.$/,
+      );
     }
   });
 
@@ -526,7 +532,7 @@ describe('director tools', () => {
   it('bumps the live revision that screens subscribe to', async () => {
     const { tournamentId, match } = await oneMatchOnOneCourt();
     const before = (await one(db, 'select revision from public.tournament_live where tournament_id = $1', [tournamentId])).revision;
-    await db.query('select public.confirm_on_court($1)', [match.id]);
+    await reportScore(db, match.id, [[11, 4]]);
     const after = (await one(db, 'select revision from public.tournament_live where tournament_id = $1', [tournamentId])).revision;
     expect(Number(after)).toBeGreaterThan(Number(before));
   });
@@ -563,6 +569,22 @@ describe('access rules', () => {
       const created = await one(db, 'select * from public.create_tournament($1, $2, $3, $4)', [other.organizationId, 'Their Open', '2026-12-01', 4]);
       expect(created.organization_id).toBe(other.organizationId);
     });
+  });
+
+  it('lets directors edit their tournament, events, teams and courts directly', async () => {
+    const { tournamentId, director } = await createLiveTournament(db, { courts: 2, start: START });
+    await actAs(db, director);
+    await asRole(db, 'authenticated', async () => {
+      await db.query('update public.tournaments set name = $2, entry_fee_cents = 4250 where id = $1', [tournamentId, 'Renamed']);
+      const e = await one(db, `insert into public.events (tournament_id, name) values ($1, 'Open') returning id`, [tournamentId]);
+      await db.query(`update public.events set pool_count = 2 where id = $1`, [e.id]);
+      const t = await one(db, `insert into public.teams (event_id, name) values ($1, 'Davis/Lee') returning id`, [e.id]);
+      await db.query(`update public.teams set seed = 1 where id = $1`, [t.id]);
+      await db.query(`update public.courts set name = 'Center Court' where tournament_id = $1 and name = 'Court 1'`, [tournamentId]);
+      await db.query('delete from public.events where id = $1', [e.id]);
+    });
+    const live = await one(db, 'select revision from public.tournament_live where tournament_id = $1', [tournamentId]);
+    expect(Number(live.revision)).toBeGreaterThan(5);
   });
 
   it('lets players in the match report its score, and nobody else', async () => {

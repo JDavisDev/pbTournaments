@@ -4,14 +4,18 @@ import Link from 'next/link';
 import { use } from 'react';
 import { Bracket } from '@/components/Bracket';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { DemoInbox } from '@/components/DemoTools';
 import { QueueStatus } from '@/components/desk/QueuePanel';
 import { MatchRow } from '@/components/MatchRow';
 import { StandingsTable } from '@/components/StandingsTable';
-import { Card, Empty, Spinner } from '@/components/ui';
+import { Icon } from '@/components/Icon';
+import { CourtSign, FormatLine, MatchSteps, useMyTeam, useScoreCode } from '@/components/MatchDay';
+import { StreamEmbed } from '@/components/StreamEmbed';
+import { Button, Card, Empty, LinkButton, Spinner } from '@/components/ui';
 import { getEvents, getMatches, getQueue, getStandings, getTeams, getTournament } from '@/lib/api';
-import { minutesSince, ordinal, poolName } from '@/lib/format';
+import { isPlayable, minutesSince, ordinal, poolName } from '@/lib/format';
 import { useLiveTournament, useNow } from '@/lib/hooks';
-import type { MatchDetails } from '@/lib/types';
+import type { MatchDetails, QueueRow, Team } from '@/lib/types';
 
 async function load(id: string) {
   const [tournament, events, teams, matches, standings, queue] = await Promise.all([
@@ -31,6 +35,7 @@ const statusOrder: Record<MatchDetails['status'], number> = {
   queued: 1,
   waiting: 2,
   completed: 3,
+  cancelled: 4,
 };
 
 export function TeamView({ params }: { params: Promise<{ id: string; teamId: string }> }) {
@@ -49,7 +54,7 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
   const queueById = new Map(data.queue.map((q) => [q.match_id, q]));
   // Live first, then upcoming in queue order, then results (latest first).
   const mine = data.matches
-    .filter((m) => m.team1_id === teamId || m.team2_id === teamId)
+    .filter((m) => (m.team1_id === teamId || m.team2_id === teamId) && isPlayable(m))
     .sort(
       (a, b) =>
         statusOrder[a.status] - statusOrder[b.status] ||
@@ -64,7 +69,9 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
   const losses = mine.filter((m) => m.status === 'completed' && m.winner_team_id !== teamId).length;
 
   // Byes: pool rounds this team sits out.
-  const poolMatches = data.matches.filter((m) => m.event_id === event.id && m.stage === 'pool' && m.pool === team.pool);
+  const poolMatches = data.matches.filter(
+    (m) => m.event_id === event.id && m.stage === 'pool' && m.pool === team.pool && isPlayable(m),
+  );
   const rounds = [...new Set(poolMatches.map((m) => m.round))].sort((a, b) => a - b);
   const byes = rounds.filter((r) => !poolMatches.some((m) => m.round === r && (m.team1_id === teamId || m.team2_id === teamId)));
 
@@ -76,7 +83,7 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-2xl font-semibold">{team.name}</h2>
+        <h2 className="text-4xl">{team.name}</h2>
         <p className="text-muted">
           <Link href={`/t/${id}/events/${event.id}`} className="hover:underline">
             {event.name}
@@ -87,45 +94,12 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
         </p>
       </div>
 
-      {onCourt ? (
-        <Card className={`border-2 p-5 ${onCourt.status === 'in_progress' ? 'border-live bg-live-soft/40' : 'border-called bg-called-soft/40'}`}>
-          <p className="text-sm font-medium text-muted">{onCourt.status === 'in_progress' ? 'Playing now' : 'You’re up!'}</p>
-          <p className="mt-1 text-3xl font-bold">{onCourt.court_name}</p>
-          <p className="mt-1">
-            {onCourt.team1_name} <span className="text-muted">v</span> {onCourt.team2_name}
-          </p>
-          {onCourt.status === 'assigned' && (
-            <p className="mt-1 text-sm text-called">Called {minutesSince(onCourt.assigned_at, now)} min ago. Head to the court.</p>
-          )}
-        </Card>
-      ) : next && nextQueue ? (
-        <Card className="p-5">
-          <p className="text-sm font-medium text-muted">Next match</p>
-          <p className="mt-1 text-2xl font-bold">#{nextQueue.queue_rank} in line</p>
-          <p className="mt-1">
-            {next.team1_name} <span className="text-muted">v</span> {next.team2_name}
-            <span className="text-muted"> · {next.label}</span>
-          </p>
-          <div className="mt-2">
-            <QueueStatus row={nextQueue} />
-          </div>
-          <p className="mt-2 text-sm text-muted">We’ll text you the court number when it’s your turn.</p>
-        </Card>
-      ) : (
-        <Card className="p-5">
-          <p className="text-muted">
-            {mine.some((m) => m.status === 'waiting')
-              ? 'Your next match depends on other results. Check back soon.'
-              : mine.length && mine.every((m) => m.status === 'completed')
-                ? 'All your matches are done.'
-                : 'Your schedule hasn’t been built yet.'}
-          </p>
-        </Card>
-      )}
+      <MatchDayPanel tournamentId={id} team={team} mine={mine} onCourt={onCourt} next={next} nextQueue={nextQueue} now={now} />
+      {data.tournament.is_demo && <DemoInbox tournamentId={id} teamId={teamId} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section>
-          <h3 className="mb-3 text-lg font-semibold">Schedule</h3>
+          <h3 className="mb-3 text-3xl">Schedule</h3>
           {byes.length > 0 && (
             <p className="mb-2 text-sm text-muted">
               Bye in round{byes.length > 1 ? 's' : ''} {byes.join(', ')}.
@@ -144,7 +118,7 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
 
         {standings.length > 0 && (
           <section>
-            <h3 className="mb-3 text-lg font-semibold">{poolName(team.pool)} standings</h3>
+            <h3 className="mb-3 text-3xl">{poolName(team.pool)} standings</h3>
             <StandingsTable
               rows={standings}
               tournamentId={id}
@@ -157,10 +131,116 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
 
       {bracket.length > 0 && (inBracket || event.format === 'single_elim') && (
         <section>
-          <h3 className="mb-3 text-lg font-semibold">Bracket</h3>
+          <h3 className="mb-3 text-3xl">Bracket</h3>
           <Bracket matches={bracket} highlightTeamId={teamId} />
         </section>
       )}
     </div>
+  );
+}
+
+/** What this team should do right now, in the five match-day steps. */
+function MatchDayPanel({
+  tournamentId,
+  team,
+  mine,
+  onCourt,
+  next,
+  nextQueue,
+  now,
+}: {
+  tournamentId: string;
+  team: Team;
+  mine: MatchDetails[];
+  onCourt?: MatchDetails;
+  next?: MatchDetails;
+  nextQueue?: QueueRow;
+  now: number;
+}) {
+  const [myTeam, setMyTeam] = useMyTeam(tournamentId);
+  const scoreCode = useScoreCode(onCourt?.id);
+  const allDone = mine.length > 0 && mine.every((m) => m.status === 'completed');
+  const step = allDone ? 4 : onCourt ? 2 : !team.checked_in_at ? 0 : 1;
+  const capitalized = (text: string) => text.replace(/^./, (c) => c.toUpperCase());
+
+  return (
+    <section className="flex flex-col gap-4" aria-label="Your match day">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-3xl">Match day</h3>
+        {myTeam === team.id ? (
+          <Button size="sm" variant="ghost" onClick={() => setMyTeam(null)}>
+            <Icon name="check" /> Saved as my team
+          </Button>
+        ) : (
+          <Button size="sm" onClick={() => setMyTeam(team.id)}>
+            This is my team
+          </Button>
+        )}
+      </div>
+
+      {mine.length > 0 && (
+        <MatchSteps
+          current={step}
+          hints={{
+            0: team.checked_in_at ? undefined : 'At the front desk. Both players check in.',
+            1: nextQueue ? `You’re number ${nextQueue.queue_rank} in line. We’ll text you the court.` : undefined,
+            2: onCourt ? `Go to ${onCourt.court_name} now and play. ${capitalized(onCourt.format_text)}.` : undefined,
+          }}
+        />
+      )}
+
+      {onCourt ? (
+        <Card className="flex flex-col gap-4 p-5 text-center">
+          <p className="text-lg font-semibold">Your match is on</p>
+          <CourtSign name={onCourt.court_name ?? ''} />
+          <p className="text-xl">
+            <span className="font-semibold">{onCourt.team1_name}</span> <span className="text-muted">vs</span>{' '}
+            <span className="font-semibold">{onCourt.team2_name}</span>
+          </p>
+          <FormatLine text={onCourt.format_text} />
+          <p className="text-called">
+            Called {minutesSince(onCourt.assigned_at, now)} min ago. Head to the court and start; enter the score when you finish.
+          </p>
+          {scoreCode ? (
+            <LinkButton variant="primary" href={`/s/${scoreCode}`} className="h-14 text-lg">
+              Enter the score <Icon name="arrow" />
+            </LinkButton>
+          ) : (
+            <p className="rounded-xl bg-surface-2 px-4 py-3 text-left">
+              <b>To enter the score:</b> tap the link in the text we sent you, or tell the front desk.
+            </p>
+          )}
+          {onCourt.court_stream_url && <StreamEmbed url={onCourt.court_stream_url} title={`${onCourt.court_name} live`} />}
+        </Card>
+      ) : next ? (
+        <Card className="flex flex-col gap-2 p-5">
+          <p className="text-lg font-semibold">Your next match</p>
+          {nextQueue && (
+            <p className="font-display text-6xl leading-none font-extrabold uppercase">
+              {nextQueue.queue_rank === 1 ? 'You’re next' : `#${nextQueue.queue_rank} in line`}
+            </p>
+          )}
+          <p className="text-xl">
+            {next.team1_name} <span className="text-muted">vs</span> {next.team2_name}
+          </p>
+          <p className="text-muted">{next.label}</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <FormatLine text={next.format_text} />
+            {nextQueue && <QueueStatus row={nextQueue} />}
+          </div>
+          <p className="text-muted">Stay nearby. We’ll text you the court number when it’s your turn.</p>
+        </Card>
+      ) : (
+        <Card className="p-5">
+          <p className="text-lg">
+            {mine.some((m) => m.status === 'waiting')
+              ? 'Your next match depends on other results. Check back soon.'
+              : allDone
+                ? 'All your matches are done. Thanks for playing!'
+                : 'Your schedule hasn’t been built yet.'}
+          </p>
+        </Card>
+      )}
+    </section>
   );
 }

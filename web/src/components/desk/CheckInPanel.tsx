@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '../Icon';
 import { useState } from 'react';
 import { checkInTeam } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
@@ -47,7 +48,7 @@ export function CheckInPanel({
             </div>
             {t.checked_in_at ? (
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => checkInTeam(t.id, false), onChanged)}>
-                ✓ In · undo
+                <Icon name="check" className="h-4 w-4" /> In · undo
               </Button>
             ) : (
               <Button size="sm" variant="primary" disabled={busy} onClick={() => run(() => checkInTeam(t.id), onChanged)}>

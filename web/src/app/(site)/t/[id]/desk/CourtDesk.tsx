@@ -2,6 +2,7 @@
 
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { Icon } from '@/components/Icon';
 import { CheckInPanel } from '@/components/desk/CheckInPanel';
 import { CourtCard, courtState } from '@/components/desk/CourtCard';
 import { MatchActionsDialog } from '@/components/desk/MatchActionsDialog';
@@ -17,16 +18,18 @@ import {
   getQueue,
   getTeams,
   getTournament,
-  isStaff,
   rebuildQueue,
   setAutoAssign,
   setCourtCount,
   setTournamentStatus,
 } from '@/lib/api';
-import { useAction, useLiveTournament, useLoad, useNow, useSession } from '@/lib/hooks';
+import { DemoClock } from '@/components/DemoTools';
+import { isPlayable } from '@/lib/format';
+import { rulesOf } from '@/lib/scoring';
+import { useAction, useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import type { CourtBoardRow } from '@/lib/types';
 
-type Tab = 'queue' | 'checkin' | 'results';
+type Tab = 'courts' | 'queue' | 'checkin' | 'results';
 
 async function loadDesk(id: string) {
   const [tournament, courts, queue, matches, events, teams] = await Promise.all([
@@ -42,11 +45,12 @@ async function loadDesk(id: string) {
 
 export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const session = useSession();
-  const staff = useLoad(() => (session ? isStaff(id) : Promise.resolve(false)), [id, session?.user.id]);
+  const staff = useStaffAccess(id);
   const { data, error, reload } = useLiveTournament(id, () => loadDesk(id), 15_000);
   const now = useNow(10_000);
-  const [tab, setTab] = useState<Tab>('queue');
+  const [tab, setTab] = useState<Tab>('courts');
+  // Wide screens always show courts, so the sidebar shows the queue instead.
+  const sideTab = tab === 'courts' ? 'queue' : tab;
   const [score, setScore] = useState<ScoreTarget | null>(null);
   const [actions, setActions] = useState<CourtBoardRow | null>(null);
   const control = useAction();
@@ -57,10 +61,11 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
   if (!staff.data) return <Empty>The court desk is for this tournament’s directors. Sign in with a director account.</Empty>;
 
   const { tournament: t, courts, queue, matches, events, teams } = data;
-  const states = courts.map((c) => courtState(c, now));
+  const states = courts.map((c) => courtState(c));
   const count = (s: string) => states.filter((x) => x === s).length;
   const ready = queue.filter((q) => !q.blocked_reason).length;
-  const done = matches.filter((m) => m.status === 'completed').length;
+  const playable = matches.filter(isPlayable);
+  const done = playable.filter((m) => m.status === 'completed').length;
   const notIn = teams.filter((x) => !x.checked_in_at && !x.withdrawn_at).length;
   const live = t.status === 'live';
 
@@ -78,11 +83,11 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
             </Button>
           ) : t.auto_assign ? (
             <Button disabled={control.busy} onClick={() => control.run(() => setAutoAssign(id, false), reload)}>
-              ⏸ Pause assigning
+              <Icon name="pause" /> Pause assigning
             </Button>
           ) : (
             <Button variant="primary" disabled={control.busy} onClick={() => control.run(() => setAutoAssign(id, true), reload)}>
-              ▶ Resume assigning
+              <Icon name="play" /> Resume assigning
             </Button>
           )}
           {(!live || !t.auto_assign) && (
@@ -118,14 +123,12 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
           </Button>
         </div>
 
-        <dl className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
-          <Stat label="Playing" value={count('playing')} tone="text-live" />
-          <Stat label="Called" value={count('called')} tone="text-called" />
-          <Stat label="Late" value={count('late')} tone="text-late" />
+        <dl className="grid w-full grid-cols-4 gap-2 text-sm sm:flex sm:w-auto sm:flex-wrap sm:gap-x-5 sm:gap-y-1">
+          <Stat label="On court" value={count('playing')} tone="text-live" />
           <Stat label="Open" value={count('open')} />
           <Stat label="Ready in queue" value={ready} />
           <Stat label="Not checked in" value={notIn} />
-          <Stat label="Matches done" value={`${done}/${matches.length}`} />
+          <Stat label="Matches done" value={`${done}/${playable.length}`} />
         </dl>
 
         <Button
@@ -143,6 +146,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
         </Button>
       </Card>
       <ErrorText>{control.error}</ErrorText>
+      {t.is_demo && <DemoClock tournamentId={id} now={now} timeZone={t.time_zone} onChanged={reload} />}
       {live && !t.auto_assign && (
         <p className="rounded-lg bg-called-soft px-3 py-2 text-sm text-called">
           Assigning is paused. Courts won’t get new matches until you resume (or send matches by hand).
@@ -154,12 +158,26 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
         </p>
       )}
 
+      {/* Phones and tablets: one view at a time. */}
+      <div className="sticky top-0 z-20 -mx-4 bg-bg/95 px-4 py-2 backdrop-blur xl:hidden">
+        <TabBar
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            ['courts', `Courts`],
+            ['queue', `Queue ${queue.length}`],
+            ['checkin', notIn ? `Check-in ${notIn}` : 'Check-in'],
+            ['results', 'Results'],
+          ]}
+        />
+      </div>
+
       <div className="grid gap-4 xl:grid-cols-[1fr_26rem]">
-        <section>
+        <section className={tab === 'courts' ? '' : 'max-xl:hidden'}>
           {courts.length === 0 ? (
             <Empty>No courts. Use + to add some.</Empty>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3">
+            <div className="grid gap-3 sm:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]">
               {courts.map((c) => (
                 <CourtCard
                   key={c.court_id}
@@ -174,8 +192,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
                       matchId: c.match_id!,
                       team1: c.team1_name!,
                       team2: c.team2_name!,
-                      eventId: c.event_id!,
-                      stage: matches.find((m) => m.id === c.match_id)?.stage ?? 'pool',
+                      rules: rulesOf(c),
                       mode: 'report',
                     })
                   }
@@ -185,29 +202,21 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
           )}
         </section>
 
-        <aside className="flex flex-col gap-3">
-          <div className="flex gap-1 rounded-lg bg-surface-2 p-1">
-            {(
-              [
+        <aside className={`flex flex-col gap-3 ${tab === 'courts' ? 'max-xl:hidden' : ''}`}>
+          <div className="max-xl:hidden">
+            <TabBar
+              active={sideTab}
+              onChange={setTab}
+              tabs={[
                 ['queue', `Queue (${queue.length})`],
                 ['checkin', `Check-in${notIn ? ` (${notIn})` : ''}`],
                 ['results', 'Results'],
-              ] as [Tab, string][]
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium ${
-                  tab === key ? 'bg-surface shadow-sm' : 'text-muted hover:text-text'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+              ]}
+            />
           </div>
-          {tab === 'queue' && <QueuePanel queue={queue} staff now={now} onChanged={reload} />}
-          {tab === 'checkin' && <CheckInPanel teams={teams} events={events} onChanged={reload} />}
-          {tab === 'results' && (
+          {sideTab === 'queue' && <QueuePanel queue={queue} staff now={now} onChanged={reload} />}
+          {sideTab === 'checkin' && <CheckInPanel teams={teams} events={events} onChanged={reload} />}
+          {sideTab === 'results' && (
             <ResultsPanel
               matches={matches}
               timeZone={t.time_zone}
@@ -217,8 +226,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
                   matchId: m.id,
                   team1: m.team1_name,
                   team2: m.team2_name,
-                  eventId: m.event_id,
-                  stage: m.stage,
+                  rules: rulesOf(m),
                   games: m.games,
                   mode: 'correct',
                 })
@@ -228,7 +236,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
         </aside>
       </div>
 
-      <ScoreDialog target={score} events={events} onClose={() => setScore(null)} onDone={reload} />
+      <ScoreDialog target={score} onClose={() => setScore(null)} onDone={reload} />
       <MatchActionsDialog court={actions} courts={courts} onClose={() => setActions(null)} onDone={reload} />
     </div>
   );
@@ -236,9 +244,37 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
 
 function Stat({ label, value, tone = '' }: { label: string; value: number | string; tone?: string }) {
   return (
-    <div className="flex items-baseline gap-1.5">
-      <dd className={`tnum text-lg font-semibold ${tone}`}>{value}</dd>
-      <dt className="text-muted">{label}</dt>
+    <div className="flex flex-col items-center sm:flex-row sm:items-baseline sm:gap-1.5">
+      <dd className={`tnum font-display text-3xl leading-none font-bold ${tone}`}>{value}</dd>
+      <dt className="text-center text-xs leading-tight text-muted sm:text-sm">{label}</dt>
+    </div>
+  );
+}
+
+function TabBar({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: [Tab, string][];
+  active: Tab;
+  onChange: (tab: Tab) => void;
+}) {
+  return (
+    <div className="flex gap-1 rounded-lg bg-surface-2 p-1" role="tablist">
+      {tabs.map(([key, label]) => (
+        <button
+          key={key}
+          role="tab"
+          aria-selected={active === key}
+          onClick={() => onChange(key)}
+          className={`flex-1 rounded-md px-2 py-2 text-sm font-medium whitespace-nowrap ${
+            active === key ? 'bg-surface shadow-sm' : 'text-muted hover:text-text'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   );
 }

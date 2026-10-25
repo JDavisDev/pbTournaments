@@ -1,21 +1,22 @@
 'use client';
 
-import type { Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useEffectEvent, useState } from 'react';
-import { isSupabaseConfigured, supabase } from './supabase';
+import { isStaff } from './api';
+import { auth, type AuthUser } from './auth';
+import { isBackendConfigured, isLocalMode } from './config';
+import { localCall } from './localClient';
+import { supabase } from './supabase';
+import { useViewMode } from './viewMode';
 
-/** The signed-in session (null when signed out, undefined while loading). */
-export function useSession(): Session | null | undefined {
-  const [session, setSession] = useState<Session | null | undefined>(isSupabaseConfigured ? undefined : null);
+/** The signed-in director (null when signed out, undefined while loading). */
+export function useSession(): AuthUser | null | undefined {
+  const [user, setUser] = useState<AuthUser | null | undefined>(isBackendConfigured ? undefined : null);
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    supabase()
-      .auth.getSession()
-      .then(({ data }) => setSession(data.session));
-    const { data } = supabase().auth.onAuthStateChange((_event, s) => setSession(s));
-    return () => data.subscription.unsubscribe();
+    if (!isBackendConfigured) return;
+    auth.current().then(setUser);
+    return auth.subscribe(setUser);
   }, []);
-  return session;
+  return user;
 }
 
 interface LiveState<T> {
@@ -24,17 +25,12 @@ interface LiveState<T> {
   reload: () => void;
 }
 
-/**
- * Loads data for a tournament and reloads it whenever anything in the
- * tournament changes. Screens subscribe to one row (tournament_live) over
- * Realtime instead of every table; a slow poll covers dropped connections.
- */
 /** Data plus error from an async loader, with a way to load again. */
 function useLoader<T>(load: () => Promise<T>) {
   const [data, setData] = useState<T>();
-  const [error, setError] = useState<string | null>(isSupabaseConfigured ? null : 'not-configured');
+  const [error, setError] = useState<string | null>(isBackendConfigured ? null : 'not-configured');
   const reload = () => {
-    if (!isSupabaseConfigured) return;
+    if (!isBackendConfigured) return;
     load()
       .then((d) => {
         setData(d);
@@ -45,12 +41,39 @@ function useLoader<T>(load: () => Promise<T>) {
   return { data, error, reload };
 }
 
+// In local mode the demo clock can run ahead of real time; elapsed times and
+// countdowns use the server's clock.
+let clockOffset = 0;
+
+/**
+ * Loads data for a tournament and reloads it whenever anything in the
+ * tournament changes. Screens watch one row (tournament_live): over Realtime
+ * with Supabase, by polling in local mode. A slow poll covers dropped connections.
+ */
 export function useLiveTournament<T>(tournamentId: string, load: () => Promise<T>, pollMs = 20_000): LiveState<T> {
   const state = useLoader(load);
   const refresh = useEffectEvent(() => state.reload());
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isBackendConfigured) return;
+
+    if (isLocalMode) {
+      let revision: string | null | undefined;
+      const check = () =>
+        localCall<{ revision: string | null; now: string }>('getLiveState', [tournamentId])
+          .then((live) => {
+            clockOffset = new Date(live.now).getTime() - Date.now();
+            if (live.revision !== revision) {
+              revision = live.revision;
+              refresh();
+            }
+          })
+          .catch(() => refresh());
+      check();
+      const poll = setInterval(check, 1500);
+      return () => clearInterval(poll);
+    }
+
     refresh();
     // Many rows change at once (a score report assigns several courts), so
     // wait a beat and reload once.
@@ -90,11 +113,27 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): LiveState<T
   return state;
 }
 
+/**
+ * Whether to show director tools for this tournament: the signed-in user is
+ * its staff and isn't viewing as a player (demo sites). `data` is undefined
+ * while loading; `account` says whether they're staff at all.
+ */
+export function useStaffAccess(tournamentId: string) {
+  const session = useSession();
+  const staff = useLoad(() => (session ? isStaff(tournamentId) : Promise.resolve(false)), [tournamentId, session?.id]);
+  const view = useViewMode();
+  return {
+    data: staff.data === undefined ? undefined : staff.data && view === 'admin',
+    account: staff.data,
+    view,
+  };
+}
+
 /** Re-renders every `ms` so elapsed times and no-show countdowns stay current. */
 export function useNow(ms = 15_000): number {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now() + clockOffset);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), ms);
+    const t = setInterval(() => setNow(Date.now() + clockOffset), ms);
     return () => clearInterval(t);
   }, [ms]);
   return now;

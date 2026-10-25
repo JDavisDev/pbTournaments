@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Button, Card, ErrorText, Field, Input } from '@/components/ui';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { auth } from '@/lib/auth';
+import { isBackendConfigured, isLocalMode } from '@/lib/config';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,40 +15,47 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  if (!isSupabaseConfigured) return <ConnectNotice />;
+  if (!isBackendConfigured) return <ConnectNotice />;
 
-  async function attempt(action: () => Promise<{ error: { message: string } | null }>, success: () => void) {
+  async function attempt(action: () => Promise<unknown>) {
     setBusy(true);
     setError(null);
     setMessage(null);
-    const { error } = await action();
-    setBusy(false);
-    if (error) setError(error.message);
-    else success();
+    try {
+      await action();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   const signIn = () =>
-    attempt(
-      () => supabase().auth.signInWithPassword({ email, password }),
-      () => router.push('/'),
-    );
+    attempt(async () => {
+      await auth.signIn(email, password);
+      router.push('/');
+    });
 
   const signUp = () =>
-    attempt(
-      () => supabase().auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } }),
-      () => setMessage('Check your email to confirm your account, then sign in.'),
-    );
+    attempt(async () => {
+      if ((await auth.signUp(email, password)) === 'signed-in') router.push('/');
+      else setMessage('Check your email to confirm your account, then sign in.');
+    });
 
   const emailLink = () =>
-    attempt(
-      () => supabase().auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } }),
-      () => setMessage('We sent you a sign-in link.'),
-    );
+    attempt(async () => {
+      await auth.emailLink!(email);
+      setMessage('We sent you a sign-in link.');
+    });
 
   return (
     <Card className="mx-auto mt-6 max-w-sm p-6">
-      <h1 className="text-xl font-semibold">Director sign in</h1>
-      <p className="mt-1 text-sm text-muted">Players don’t need an account to follow a tournament.</p>
+      <h1 className="text-3xl">Director sign in</h1>
+      <p className="mt-1 text-sm text-muted">
+        {isLocalMode
+          ? 'Local test mode: create any account. It only exists on this computer.'
+          : 'Players don’t need an account to follow a tournament.'}
+      </p>
       <form
         className="mt-5 flex flex-col gap-4"
         onSubmit={(e) => {
@@ -71,13 +79,15 @@ export default function LoginPage() {
         <Button variant="primary" type="submit" disabled={busy || !email || !password}>
           Sign in
         </Button>
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid gap-2 ${auth.emailLink ? 'grid-cols-2' : ''}`}>
           <Button type="button" onClick={signUp} disabled={busy || !email || password.length < 6}>
             Create account
           </Button>
-          <Button type="button" onClick={emailLink} disabled={busy || !email}>
-            Email me a link
-          </Button>
+          {auth.emailLink && (
+            <Button type="button" onClick={emailLink} disabled={busy || !email}>
+              Email me a link
+            </Button>
+          )}
         </div>
       </form>
     </Card>

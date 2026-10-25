@@ -59,7 +59,7 @@ function Actions({
       </p>
 
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold">Move to another court</h3>
+        <h3 className="text-lg">Move to another court</h3>
         <div className="flex gap-2">
           <Select className="flex-1" value={target} onChange={(e) => setTarget(e.target.value)}>
             <option value="">Choose a court…</option>
@@ -77,7 +77,7 @@ function Actions({
       </section>
 
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold">Send back to the queue</h3>
+        <h3 className="text-lg">Send back to the queue</h3>
         <p className="text-xs text-muted">
           It keeps its place in line. A team marked missing is checked out until they check in again.
         </p>
@@ -95,7 +95,7 @@ function Actions({
       </section>
 
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold">Forfeit</h3>
+        <h3 className="text-lg">Forfeit</h3>
         <div className="flex gap-2">
           <Select className="flex-1" value={winner} onChange={(e) => setWinner(e.target.value)}>
             <option value="">Winner…</option>
@@ -112,7 +112,7 @@ function Actions({
       </section>
 
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold">Court problem</h3>
+        <h3 className="text-lg">Court problem</h3>
         <Button disabled={busy} onClick={() => run(() => setCourtPaused(court.court_id, true), done)}>
           Pause {court.court_name} (this match goes back to the queue)
         </Button>

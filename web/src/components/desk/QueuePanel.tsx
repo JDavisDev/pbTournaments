@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '../Icon';
 import { holdMatch, moveInQueue } from '@/lib/api';
 import { blockedLabel, minutesSince } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
@@ -33,7 +34,7 @@ export function QueuePanel({
       <ErrorText>{error}</ErrorText>
       <ol className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface">
         {queue.map((row, i) => (
-          <li key={row.match_id} className="flex items-start gap-3 px-3 py-2.5">
+          <li key={row.match_id} className="flex flex-wrap items-start gap-x-3 gap-y-1.5 px-3 py-2.5">
             <span className="tnum mt-0.5 w-6 shrink-0 text-right text-sm font-semibold text-muted">{row.queue_rank}</span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
@@ -53,26 +54,26 @@ export function QueuePanel({
               )}
             </div>
             {staff && (
-              <div className="flex shrink-0 items-center gap-0.5">
+              <div className="flex shrink-0 items-center gap-0.5 max-sm:ml-9 max-sm:w-full max-sm:gap-2">
                 <IconButton label="Move to top" disabled={busy || i === 0} onClick={() => move(row, queue[0].match_id)}>
-                  ⤒
+                  <Icon name="top" />
                 </IconButton>
                 <IconButton label="Move up" disabled={busy || i === 0} onClick={() => move(row, queue[i - 1].match_id)}>
-                  ↑
+                  <Icon name="up" />
                 </IconButton>
                 <IconButton
                   label="Move down"
                   disabled={busy || i === queue.length - 1}
                   onClick={() => move(row, queue[i + 2]?.match_id ?? null)}
                 >
-                  ↓
+                  <Icon name="down" />
                 </IconButton>
                 <IconButton
                   label={row.blocked_reason === 'on_hold' ? 'Release' : 'Hold'}
                   disabled={busy}
                   onClick={() => run(() => holdMatch(row.match_id, row.blocked_reason !== 'on_hold'), onChanged)}
                 >
-                  {row.blocked_reason === 'on_hold' ? '▶' : '⏸'}
+                  <Icon name={row.blocked_reason === 'on_hold' ? 'play' : 'pause'} />
                 </IconButton>
               </div>
             )}
@@ -92,7 +93,7 @@ function IconButton({
     <button
       title={label}
       aria-label={label}
-      className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text disabled:opacity-30"
+      className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text disabled:opacity-30 max-sm:h-9 max-sm:w-11 max-sm:border max-sm:border-border"
       {...props}
     >
       {children}

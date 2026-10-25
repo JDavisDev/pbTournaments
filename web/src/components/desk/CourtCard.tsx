@@ -1,35 +1,32 @@
 'use client';
 
 import { useState } from 'react';
-import { assignMatchToCourt, confirmOnCourt, setCourtPaused } from '@/lib/api';
-import { minutesSince } from '@/lib/format';
+import { assignMatchToCourt, setCourtPaused } from '@/lib/api';
+import { minutesSince, shortFormat } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
 import type { CourtBoardRow, QueueRow } from '@/lib/types';
 import { Badge, Button, ErrorText, Select } from '../ui';
 
-export type CourtState = 'paused' | 'open' | 'called' | 'late' | 'playing';
+// A match called to a court is playing: players head over and report the
+// score when they finish, which frees the court.
+export type CourtState = 'paused' | 'open' | 'playing';
 
-export function courtState(c: CourtBoardRow, now: number): CourtState {
+export function courtState(c: CourtBoardRow): CourtState {
   if (!c.match_id) return c.out_of_service ? 'paused' : 'open';
-  if (c.match_status === 'in_progress') return 'playing';
-  return c.no_show_deadline && now > new Date(c.no_show_deadline).getTime() ? 'late' : 'called';
+  return 'playing';
 }
 
 const frame: Record<CourtState, string> = {
   paused: 'border-border bg-surface-2 opacity-70',
   open: 'border-dashed border-border bg-surface',
-  called: 'border-called bg-called-soft/40',
-  late: 'border-late bg-late-soft/60',
   playing: 'border-live bg-live-soft/40',
 };
 
 export function CourtStatus({ court, now }: { court: CourtBoardRow; now: number }) {
-  const state = courtState(court, now);
+  const state = courtState(court);
   if (state === 'paused') return <Badge>Paused</Badge>;
   if (state === 'open') return <Badge>Open</Badge>;
-  if (state === 'playing') return <Badge tone="live">Playing · {minutesSince(court.started_at, now)}m</Badge>;
-  if (state === 'late') return <Badge tone="late">No-show? {minutesSince(court.assigned_at, now)}m</Badge>;
-  return <Badge tone="called">Called · {minutesSince(court.assigned_at, now)}m</Badge>;
+  return <Badge tone="live">On court · {minutesSince(court.started_at ?? court.assigned_at, now)}m</Badge>;
 }
 
 export function CourtCard({
@@ -49,16 +46,16 @@ export function CourtCard({
   onMore: () => void;
   onChanged: () => void;
 }) {
-  const state = courtState(court, now);
+  const state = courtState(court);
   const { busy, error, run } = useAction();
   const [pick, setPick] = useState('');
   // Matches that can go here now: everything except ones whose players are on court.
   const sendable = queue.filter((q) => q.blocked_reason !== 'player_on_court');
 
   return (
-    <div className={`flex min-h-44 flex-col rounded-xl border-2 p-3 ${frame[state]}`}>
+    <div className={`flex flex-col rounded-xl border-2 p-3 sm:min-h-44 ${frame[state]}`}>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-lg font-semibold">{court.court_name}</h3>
+        <h3 className="text-3xl">{court.court_name}</h3>
         <CourtStatus court={court} now={now} />
       </div>
 
@@ -67,9 +64,12 @@ export function CourtCard({
           <p className="truncate text-xs text-muted">
             {court.event_name} · {court.label}
           </p>
-          <p className="mt-1 leading-tight font-medium">{court.team1_name}</p>
+          {court.best_of && court.games_to && (
+            <p className="truncate text-xs text-muted">{shortFormat({ games_to: court.games_to, best_of: court.best_of, point_cap: court.point_cap })}</p>
+          )}
+          <p className="mt-1 font-display text-2xl leading-none font-bold uppercase">{court.team1_name}</p>
           <p className="text-xs text-muted">vs</p>
-          <p className="leading-tight font-medium">{court.team2_name}</p>
+          <p className="font-display text-2xl leading-none font-bold uppercase">{court.team2_name}</p>
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center text-sm text-muted">
@@ -84,11 +84,6 @@ export function CourtCard({
               <Button size="sm" variant="primary" onClick={onScore}>
                 Score
               </Button>
-              {court.match_status === 'assigned' && (
-                <Button size="sm" disabled={busy} onClick={() => run(() => confirmOnCourt(court.match_id!), onChanged)}>
-                  Players here
-                </Button>
-              )}
               <Button size="sm" variant="ghost" onClick={onMore}>
                 More…
               </Button>

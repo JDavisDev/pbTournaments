@@ -161,8 +161,12 @@ create trigger matches_set_queue_status
 -- ---------------------------------------------------------------------------
 
 -- Checks a list of game scores and returns the winning slot (1 or 2).
--- Games go to games_to, win by 2: 11-9 and 13-11 are valid, 11-10 and 14-11 aren't.
-create function private.match_winner_slot(p_games jsonb, p_games_to int, p_best_of int)
+-- Formats vary (win by 2, hard caps, timed games), so any finished-looking
+-- score is accepted: 11-9, 11-10, 15-14 and 14-11 all count. The screens show
+-- a confirmation, with a warning for scores unusual under the event's rules.
+-- Rejected: ties, negative or implausible numbers, too few games for the
+-- best-of, and games entered after the match was already won.
+create function private.match_winner_slot(p_games jsonb, p_best_of int)
 returns smallint
 language plpgsql immutable set search_path = '' as $$
 declare
@@ -189,12 +193,11 @@ begin
     end if;
     v_a := (v_game ->> 0)::int;
     v_b := (v_game ->> 1)::int;
-    if v_a < 0 or v_b < 0
-       or greatest(v_a, v_b) < p_games_to
-       or abs(v_a - v_b) < 2
-       or (greatest(v_a, v_b) > p_games_to and abs(v_a - v_b) <> 2) then
-      raise exception 'Game %: %-% is not a finished game to % (win by 2)', v_number, v_a, v_b, p_games_to
-        using errcode = '22023';
+    if v_a < 0 or v_b < 0 or greatest(v_a, v_b) > 99 then
+      raise exception 'Game %: %-% isn''t a possible score', v_number, v_a, v_b using errcode = '22023';
+    end if;
+    if v_a = v_b then
+      raise exception 'Game %: a game can''t end tied (%-%)', v_number, v_a, v_b using errcode = '22023';
     end if;
     if v_a > v_b then
       v_wins1 := v_wins1 + 1;
@@ -209,22 +212,19 @@ begin
   return case when v_wins1 = v_needed then 1 else 2 end;
 end $$;
 
--- The winning team for p_games, using pool or playoff scoring for the stage.
+-- The winning team for p_games, using pool or playoff best-of for the stage.
 create function private.score_winner(m public.matches, p_games jsonb) returns uuid
 language plpgsql stable set search_path = '' as $$
 declare
   e public.events;
-  v_games_to int;
   v_best_of int;
 begin
   select * into e from public.events where id = m.event_id;
-  v_games_to := e.games_to;
   v_best_of := e.best_of;
   if m.stage = 'bracket' then
-    v_games_to := coalesce(e.playoff_games_to, e.games_to);
     v_best_of := coalesce(e.playoff_best_of, e.best_of);
   end if;
-  if private.match_winner_slot(p_games, v_games_to, v_best_of) = 1 then
+  if private.match_winner_slot(p_games, v_best_of) = 1 then
     return m.team1_id;
   end if;
   return m.team2_id;
@@ -245,6 +245,8 @@ returns void
 language plpgsql set search_path = '' as $$
 declare
   m public.matches;
+  v_next public.matches;
+  v_withdrawn uuid;
 begin
   update public.matches
   set status = 'completed', winner_team_id = p_winner, games = p_games,
@@ -254,6 +256,19 @@ begin
 
   if m.winner_to_match_id is not null then
     perform private.place_in_slot(m.winner_to_match_id, m.winner_to_slot, p_winner);
+    -- A withdrawn team waiting in the next match forfeits it straight away.
+    select * into v_next from public.matches where id = m.winner_to_match_id;
+    select id into v_withdrawn from public.teams
+    where id in (v_next.team1_id, v_next.team2_id) and withdrawn_at is not null
+    limit 1;
+    if v_next.status = 'queued' and v_withdrawn is not null then
+      perform private.finish_match(
+        v_next.id,
+        case when v_withdrawn = v_next.team1_id then v_next.team2_id else v_next.team1_id end,
+        null,
+        true
+      );
+    end if;
   end if;
   if m.stage = 'pool' then
     perform private.seed_playoffs_when_pools_done(m.event_id);
@@ -371,19 +386,25 @@ begin
   end loop;
 end $$;
 
+-- One text per player, naming their opponents. {url} becomes the match's
+-- score-report link when the sender delivers it.
 create function private.notify_match_players(p_match uuid, p_kind text) returns void
 language sql set search_path = '' as $$
   insert into public.notifications (tournament_id, player_id, match_id, kind, body)
   select m.tournament_id, tp.player_id, m.id, p_kind,
-         left(case p_kind
-                when 'court_changed' then 'Court change: ' || t1.name || ' vs ' || t2.name || ' now on ' || c.name
-                else c.name || ' now: ' || t1.name || ' vs ' || t2.name
-              end, 160)
+         case p_kind
+           when 'court_changed' then
+             'Court change: your match versus ' || opponent.name || ' is now on ' || upper(c.name)
+             || '. Report your scores here: {url}'
+           else
+             'Your match is ready on ' || upper(c.name) || ' versus ' || opponent.name
+             || ', promptly report your scores here: {url} when finished.'
+         end
   from public.matches m
   join public.courts c on c.id = m.court_id
-  join public.teams t1 on t1.id = m.team1_id
-  join public.teams t2 on t2.id = m.team2_id
   join public.team_players tp on tp.team_id in (m.team1_id, m.team2_id)
+  join public.teams opponent
+    on opponent.id = case when tp.team_id = m.team1_id then m.team2_id else m.team1_id end
   where m.id = p_match
 $$;
 
@@ -899,7 +920,55 @@ begin
   update public.events set playoffs_seeded_at = null where id = p_event;
 end $$;
 
--- Staff, or a player on the team, can check the team in (or undo it).
+-- A team is ready (checked in) exactly when all of its players are, so
+-- checking a player in or out updates every team they're on.
+create function private.sync_team_checkins(p_tournament uuid, p_player uuid) returns void
+language sql set search_path = '' as $$
+  update public.teams t
+  set checked_in_at = case
+        when not exists (
+          select 1 from public.team_players tp
+          where tp.team_id = t.id
+            and not exists (
+              select 1 from public.player_checkins pc
+              where pc.tournament_id = p_tournament and pc.player_id = tp.player_id
+            )
+        ) then coalesce(t.checked_in_at, private.clock())
+      end
+  where t.tournament_id = p_tournament
+    and t.id in (select tp.team_id from public.team_players tp where tp.player_id = p_player)
+$$;
+
+create function private.set_player_checked_in(p_tournament uuid, p_player uuid, p_in boolean) returns void
+language plpgsql set search_path = '' as $$
+begin
+  if p_in then
+    insert into public.player_checkins (tournament_id, player_id, checked_in_at)
+    values (p_tournament, p_player, private.clock())
+    on conflict do nothing;
+  else
+    delete from public.player_checkins where tournament_id = p_tournament and player_id = p_player;
+  end if;
+  perform private.sync_team_checkins(p_tournament, p_player);
+end $$;
+
+create function private.set_team_checked_in(p_tournament uuid, p_team uuid, p_in boolean) returns void
+language plpgsql set search_path = '' as $$
+declare
+  v_player uuid;
+begin
+  for v_player in select player_id from public.team_players where team_id = p_team loop
+    perform private.set_player_checked_in(p_tournament, v_player, p_in);
+  end loop;
+  -- A team entered by name only (no players yet) is checked in directly.
+  if not exists (select 1 from public.team_players where team_id = p_team) then
+    update public.teams
+    set checked_in_at = case when p_in then coalesce(checked_in_at, private.clock()) end
+    where id = p_team;
+  end if;
+end $$;
+
+-- Staff, or a player on the team, can check the whole team in (or undo it).
 create function public.check_in_team(p_team uuid, p_checked_in boolean default true)
 returns public.teams
 language plpgsql security definer set search_path = '' as $$
@@ -916,11 +985,9 @@ begin
   end if;
   perform private.lock_tournament(v_tournament);
 
-  update public.teams
-  set checked_in_at = case when p_checked_in then coalesce(checked_in_at, private.clock()) end
-  where id = p_team
-  returning * into t;
+  perform private.set_team_checked_in(v_tournament, p_team, p_checked_in);
   perform private.auto_assign(v_tournament);
+  select * into t from public.teams where id = p_team;
   return t;
 end $$;
 
@@ -1061,7 +1128,7 @@ begin
   set status = 'queued', court_id = null, assigned_at = null, started_at = null
   where id = p_match;
   if p_absent_team is not null then
-    update public.teams set checked_in_at = null where id = p_absent_team;
+    perform private.set_team_checked_in(m.tournament_id, p_absent_team, false);
   end if;
   perform private.auto_assign(m.tournament_id);
 

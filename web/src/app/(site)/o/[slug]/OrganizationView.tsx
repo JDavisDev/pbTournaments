@@ -8,7 +8,7 @@ import { Badge, Button, Card, Empty, ErrorText, Field, Input, PageTitle, Spinner
 import { addOrganizationMember, createTournament, getOrganizationBySlug, getOrganizationTournaments } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useAction, useLoad, useSession } from '@/lib/hooks';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isBackendConfigured } from '@/lib/config';
 
 const statusTone = { draft: 'neutral', registration: 'info', live: 'live', complete: 'neutral' } as const;
 
@@ -19,7 +19,7 @@ export function OrganizationView({ params }: { params: Promise<{ slug: string }>
   const org = useLoad(() => getOrganizationBySlug(slug), [slug]);
   const tournaments = useLoad(
     () => (org.data ? getOrganizationTournaments(org.data.id) : Promise.resolve([])),
-    [org.data?.id, session?.user.id],
+    [org.data?.id, session?.id],
   );
 
   const [name, setName] = useState('');
@@ -30,7 +30,7 @@ export function OrganizationView({ params }: { params: Promise<{ slug: string }>
   const invite = useAction();
   const [invited, setInvited] = useState<string | null>(null);
 
-  if (!isSupabaseConfigured) return <ConnectNotice />;
+  if (!isBackendConfigured) return <ConnectNotice />;
   if (org.error) return <Empty>{org.error}</Empty>;
   if (!org.data) return <Spinner />;
   const organization = org.data;
@@ -40,7 +40,7 @@ export function OrganizationView({ params }: { params: Promise<{ slug: string }>
       <PageTitle title={organization.name} subtitle={`/${organization.slug}`} />
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <section>
-          <h2 className="mb-3 text-lg font-semibold">Tournaments</h2>
+          <h2 className="mb-3 text-3xl">Tournaments</h2>
           {tournaments.data === undefined ? (
             <Spinner />
           ) : tournaments.data.length === 0 ? (
@@ -65,7 +65,7 @@ export function OrganizationView({ params }: { params: Promise<{ slug: string }>
         {session && (
           <aside className="flex flex-col gap-4">
             <Card className="p-5">
-              <h2 className="mb-3 font-semibold">New tournament</h2>
+              <h2 className="mb-3 text-xl">New tournament</h2>
               <form
                 className="flex flex-col gap-3"
                 onSubmit={(e) => {
@@ -99,7 +99,7 @@ export function OrganizationView({ params }: { params: Promise<{ slug: string }>
             </Card>
 
             <Card className="p-5">
-              <h2 className="mb-1 font-semibold">Add a director</h2>
+              <h2 className="mb-1 text-xl">Add a director</h2>
               <p className="mb-3 text-sm text-muted">They need to create an account first.</p>
               <form
                 className="flex flex-col gap-3"

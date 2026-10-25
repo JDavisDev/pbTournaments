@@ -24,8 +24,15 @@ alter table public.notifications enable row level security; -- service role only
 -- Public pages: anyone can read organizations, and tournaments once they're
 -- out of draft (with their events, teams, courts and matches).
 grant select on public.organizations, public.tournaments, public.events, public.teams,
-  public.team_players, public.courts, public.matches, public.tournament_live,
+  public.team_players, public.courts, public.tournament_live,
   public.court_board, public.match_details, public.standings to anon, authenticated;
+-- Every match column except report_code, the private link in players' texts.
+grant select (id, tournament_id, event_id, stage, pool, round, position, label, team1_id, team2_id,
+              team1_seed, team2_seed, winner_to_match_id, winner_to_slot, wave, queue_seq, on_hold,
+              status, court_id, queued_at, assigned_at, started_at, completed_at, games,
+              winner_team_id, forfeit, side, round_key, loser_to_match_id, loser_to_slot,
+              team1_bye, team2_bye, is_bye)
+  on public.matches to anon, authenticated;
 grant select on public.organization_members, public.tournament_staff, public.players to authenticated;
 
 -- Organizations ----------------------------------------------------------
@@ -53,7 +60,8 @@ create policy "Staff edit tournament" on public.tournaments for update to authen
   using (public.is_tournament_staff(id)) with check (public.is_tournament_staff(id));
 -- status and auto_assign go through set_tournament_status() / set_auto_assign().
 grant update (name, starts_on, time_zone, min_rest_minutes, no_show_minutes, overdue_after_minutes,
-              match_slot_minutes)
+              match_slot_minutes, entry_fee_cents, extra_event_fee_cents, early_entry_fee_cents,
+              early_extra_event_fee_cents, early_until, refund_fee_cents, stream_url)
   on public.tournaments to authenticated;
 create policy "Organization admins delete tournaments" on public.tournaments for delete to authenticated
   using (public.is_organization_member(organization_id, array['owner', 'admin']));
@@ -73,8 +81,12 @@ create policy "Staff manage events" on public.events for all to authenticated
   using (public.is_tournament_staff(tournament_id))
   with check (public.is_tournament_staff(tournament_id));
 grant insert, delete on public.events to authenticated;
-grant update (name, kind, format, pool_count, advance_per_pool, games_to, best_of,
-              playoff_games_to, playoff_best_of, not_before, sort_order)
+grant update (name, kind, format, pool_count, advance_per_pool, games_to, best_of, point_cap,
+              playoff_games_to, playoff_best_of, playoff_point_cap, not_before, sort_order,
+              gender, min_age, max_age, age_basis, skill_rule, skill_level, skill_level_to,
+              rating_source, allow_play_up, max_teams, partner_required,
+              max_rounds, bracket_type, third_place_match, grand_final_reset, confirm_seeds,
+              round_formats)
   on public.events to authenticated;
 
 create policy "Courts of visible tournaments" on public.courts for select to anon, authenticated
@@ -83,7 +95,7 @@ create policy "Staff rename courts" on public.courts for update to authenticated
   using (public.is_tournament_staff(tournament_id))
   with check (public.is_tournament_staff(tournament_id));
 -- Adding/removing and pausing go through set_court_count() / set_court_out_of_service().
-grant update (name, sort_order) on public.courts to authenticated;
+grant update (name, sort_order, stream_url) on public.courts to authenticated;
 
 create policy "Teams of visible tournaments" on public.teams for select to anon, authenticated
   using (exists (select 1 from public.tournaments t where t.id = tournament_id));
@@ -125,7 +137,8 @@ create policy "Update own player row" on public.players for update to authentica
 create policy "Directors add players" on public.players for insert to authenticated
   with check (exists (select 1 from public.organization_members om where om.user_id = auth.uid()));
 grant insert on public.players to authenticated;
-grant update (first_name, last_name, email, phone, sms_opt_in, dupr_id, dupr_doubles, dupr_singles)
+grant update (first_name, last_name, email, phone, sms_opt_in, gender, birth_date, dupr_id, dupr_doubles,
+              dupr_singles, self_rating)
   on public.players to authenticated;
 
 -- Realtime: screens subscribe to their tournament's tournament_live row.

@@ -2,27 +2,51 @@
 
 import Link from 'next/link';
 import { ConnectNotice } from '@/components/ConnectNotice';
-import { Badge, Card, Empty, LinkButton, PageTitle, Spinner } from '@/components/ui';
+import { Badge, Card, Empty, LinkButton, Spinner } from '@/components/ui';
 import { getLiveTournaments, getMyOrganizations } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useLoad, useSession } from '@/lib/hooks';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { DemoCard } from '@/components/DemoTools';
+import { isBackendConfigured, isDemoMode } from '@/lib/config';
 
 export default function Home() {
   const session = useSession();
-  const orgs = useLoad(getMyOrganizations, [session?.user.id]);
+  const orgs = useLoad(getMyOrganizations, [session?.id]);
   const live = useLoad(getLiveTournaments, []);
 
-  if (!isSupabaseConfigured) return <ConnectNotice />;
+  if (!isBackendConfigured) return <ConnectNotice />;
 
   return (
     <>
-      <PageTitle title="Tournaments" subtitle="Registration, brackets and live court assignment." />
+      <section className="mb-12 pt-6 pb-4 sm:pt-12">
+        <h1 className="max-w-4xl text-6xl sm:text-8xl lg:text-9xl">
+          Every court.
+          <br />
+          Always full.
+        </h1>
+        <p className="mt-5 max-w-xl text-lg text-muted">
+          Registration, brackets and live court assignment. Players get a text when they’re up, and the next match goes
+          out the moment a score comes in.
+        </p>
+        <div className="mt-7 flex flex-wrap gap-3">
+          {session ? (
+            <LinkButton variant="primary" href="/orgs/new">
+              Start a tournament
+            </LinkButton>
+          ) : (
+            <LinkButton variant="primary" href="/login">
+              Run a tournament
+            </LinkButton>
+          )}
+          <LinkButton href="#live">Find a tournament</LinkButton>
+        </div>
+      </section>
+      {isDemoMode && session !== undefined && <DemoCard signedIn={!!session} />}
 
       {session && (
         <section className="mb-10">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Your organizations</h2>
+            <h2 className="text-3xl">Your organizations</h2>
             <LinkButton href="/orgs/new">New organization</LinkButton>
           </div>
           {orgs.data === undefined ? (
@@ -44,8 +68,8 @@ export default function Home() {
         </section>
       )}
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Happening now</h2>
+      <section id="live">
+        <h2 className="mb-3 text-3xl">Happening now</h2>
         {live.error ? (
           <Empty>{live.error}</Empty>
         ) : live.data === undefined ? (

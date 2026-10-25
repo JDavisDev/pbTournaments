@@ -21,9 +21,10 @@ export function StandingsTable({
             <th className="px-3 py-2 font-medium">Team</th>
             <th className="px-2 py-2 text-right font-medium" title="Wins">W</th>
             <th className="px-2 py-2 text-right font-medium" title="Losses">L</th>
+            <th className="px-2 py-2 text-right font-medium max-sm:hidden" title="Win percentage">W%</th>
             <th className="px-2 py-2 text-right font-medium" title="Point differential">+/−</th>
-            <th className="px-2 py-2 text-right font-medium" title="Points for">PF</th>
-            <th className="px-3 py-2 text-right font-medium" title="Points against">PA</th>
+            <th className="px-2 py-2 text-right font-medium max-sm:hidden" title="Points for">PF</th>
+            <th className="px-3 py-2 text-right font-medium max-sm:hidden" title="Points against">PA</th>
           </tr>
         </thead>
         <tbody>
@@ -49,9 +50,10 @@ export function StandingsTable({
               </td>
               <td className="px-2 py-2 text-right">{r.wins}</td>
               <td className="px-2 py-2 text-right">{r.losses}</td>
+              <td className="px-2 py-2 text-right text-muted max-sm:hidden">{Number(r.win_pct).toFixed(3).replace(/^0/, '')}</td>
               <td className="px-2 py-2 text-right">{r.point_diff > 0 ? `+${r.point_diff}` : r.point_diff}</td>
-              <td className="px-2 py-2 text-right text-muted">{r.points_for}</td>
-              <td className="px-3 py-2 text-right text-muted">{r.points_against}</td>
+              <td className="px-2 py-2 text-right text-muted max-sm:hidden">{r.points_for}</td>
+              <td className="px-3 py-2 text-right text-muted max-sm:hidden">{r.points_against}</td>
             </tr>
           ))}
         </tbody>

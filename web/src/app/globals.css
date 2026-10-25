@@ -1,68 +1,73 @@
 @import "tailwindcss";
 
-/* Design tokens. Status colors are what directors read across the room:
+/* Design tokens. Black and white, with one medium-dark green for "live".
+   "accent" is ink: the color of primary actions (black on light, white on
+   dark). Status colors are what directors read across the room:
    green = playing, amber = called (waiting for players), red = late. */
 :root {
-  --bg: #f6f7f5;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #eef1ec;
-  --border: #dde2da;
-  --text: #17201a;
-  --muted: #5f6b62;
-  --accent: #1f7a4d;
+  --surface-2: #f5f5f5;
+  --border: #e5e5e5;
+  --text: #111111;
+  --muted: #55555a;
+  --accent: #111111;
   --accent-text: #ffffff;
-  --accent-soft: #e2f2e8;
-  --live: #1f7a4d;
-  --live-soft: #e2f2e8;
-  --called: #b26a00;
-  --called-soft: #fff1d6;
-  --late: #c0392b;
-  --late-soft: #fde4e1;
-  --idle: #8a948c;
-  --info: #2f5fb3;
-  --info-soft: #e3ebfa;
+  --accent-soft: #f2f2f2;
+  --brand: #1d6b44;
+  --live: #1d6b44;
+  --live-soft: #e3f1e9;
+  --called: #b25a00;
+  --called-soft: #fdf1e2;
+  --late: #d30005;
+  --late-soft: #fde7e7;
+  --idle: #8d8d90;
+  --info: #2450c4;
+  --info-soft: #e8eefc;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1411;
-    --surface: #171e19;
-    --surface-2: #1f2822;
-    --border: #2c372f;
-    --text: #e8eee9;
-    --muted: #9aa69d;
-    --accent: #3fb57a;
-    --accent-text: #08130c;
-    --accent-soft: #173826;
-    --live: #3fb57a;
-    --live-soft: #173826;
-    --called: #f0a83a;
-    --called-soft: #3a2a0d;
-    --late: #ff6b5c;
-    --late-soft: #3f1915;
-    --idle: #6d786f;
-    --info: #7aa2f0;
-    --info-soft: #1b2a47;
+    --bg: #000000;
+    --surface: #0d0d0d;
+    --surface-2: #1a1a1a;
+    --border: #2a2a2a;
+    --text: #ffffff;
+    --muted: #b4b4b8;
+    --accent: #ffffff;
+    --accent-text: #000000;
+    --accent-soft: #1f1f1f;
+    --brand: #43b97a;
+    --live: #43b97a;
+    --live-soft: #0f2a1c;
+    --called: #f2a33a;
+    --called-soft: #2d1e08;
+    --late: #ff4f45;
+    --late-soft: #33110f;
+    --idle: #6d6d70;
+    --info: #86a6ff;
+    --info-soft: #131c35;
   }
 }
 
-/* The TV board is always dark: it's read from across a gym. */
+/* The TV board is always black: it's read from across a gym. */
 .tv {
-  --bg: #090d0a;
-  --surface: #121914;
-  --surface-2: #1a231c;
-  --border: #26332a;
-  --text: #f1f6f2;
-  --muted: #93a197;
-  --accent: #46c785;
-  --accent-text: #06120a;
-  --accent-soft: #143322;
-  --live: #46c785;
-  --live-soft: #143322;
+  --bg: #000000;
+  --surface: #0b0b0b;
+  --surface-2: #161616;
+  --border: #262626;
+  --text: #ffffff;
+  --muted: #8f8f92;
+  --accent: #ffffff;
+  --accent-text: #000000;
+  --accent-soft: #1a1a1a;
+  --brand: #43b97a;
+  --live: #43b97a;
+  --live-soft: #0d2418;
   --called: #ffb547;
-  --called-soft: #3a2a0d;
-  --late: #ff6b5c;
-  --late-soft: #3f1915;
+  --called-soft: #2e1f06;
+  --late: #ff4f45;
+  --late-soft: #33110f;
 }
 
 @theme inline {
@@ -75,6 +80,7 @@
   --color-accent: var(--accent);
   --color-accent-text: var(--accent-text);
   --color-accent-soft: var(--accent-soft);
+  --color-brand: var(--brand);
   --color-live: var(--live);
   --color-live-soft: var(--live-soft);
   --color-called: var(--called);
@@ -84,14 +90,77 @@
   --color-idle: var(--idle);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-code);
+  --font-display: var(--font-barlow-condensed);
+
+  /* A larger type scale than Tailwind's: nothing under 14px, body at 18px.
+     All in rem, so phone and browser text-size settings scale everything. */
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.3;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.45;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.55;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.5;
+}
+
+/* Text size: follows the phone's setting (iPhone "Larger Text" via the
+   system body font on touch screens), and the A+ button in the header. */
+@media (pointer: coarse) {
+  @supports (font: -apple-system-body) {
+    html {
+      font: -apple-system-body;
+    }
+  }
+}
+html[data-text='large'] {
+  font-size: 112.5%;
+}
+html[data-text='larger'] {
+  font-size: 128%;
 }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: var(--text-base);
+  line-height: 1.55;
+}
+
+/* A clear, thick focus ring for keyboard users. */
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Court lines: a sideline with the kitchen line, used as a divider. */
+.court-rule {
+  height: 10px;
+  background:
+    linear-gradient(var(--brand), var(--brand)) left center / 100% 3px no-repeat,
+    linear-gradient(var(--brand), var(--brand)) 62% center / 3px 100% no-repeat;
+}
+
+/* Headlines: heavy, condensed, uppercase, tight. */
+h1,
+h2,
+h3,
+.display {
+  font-family: var(--font-barlow-condensed), var(--font-body), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  line-height: 0.95;
+}
+h1 {
+  font-weight: 800;
+}
+h2,
+h3,
+.display {
+  font-weight: 700;
 }
 
 /* Tabular numbers for scores, times and standings. */
