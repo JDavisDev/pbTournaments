@@ -8,14 +8,25 @@ Pickleball tournament platform: registration, brackets and automatic court assig
 - `scripts/simulate.ts` – plays a 200-player tournament day through the engine and reports how well courts were used
 - `docs/api.md` – the backend API, also the spec for the Kotlin mobile apps
 
+## Try it
+
+Needs [Node.js](https://nodejs.org) 20 or newer.
+
+```bash
+npm run demo                # → http://localhost:3000
+```
+
+This installs the website's packages on the first run and starts it with its own database on your computer: no accounts, keys or internet services. Create any account (it only exists locally), then **Start one in play** on the home page. On the court desk, **fast-forward** plays the day forward; texts appear on the tournament's Texts page and on each team's page instead of being sent.
+
 ## Setup
 
 ```bash
 npm install                 # root tools: Supabase CLI, PGlite, Vitest
 npm --prefix web install
+cp web/.env.example web/.env.local
 ```
 
-`web/.env.local` chooses where the data lives (see `web/.env.example`).
+`web/.env.local` chooses where the data lives; the example starts in local mode and lists every setting.
 
 ### Local test database (no Docker, no Supabase)
 
@@ -54,9 +65,10 @@ npx supabase db push
 ## Commands
 
 ```bash
+npm run demo         # local mode, installs what's missing first
 npm run dev          # website at http://localhost:3000
 npm run test:db      # engine tests
-npm run simulate     # 200-player simulation; --seed N, --overdue MINUTES
+npm run simulate     # 200-player simulation; --seed N, --players N, --courts N, --overdue MINUTES
 ```
 
 ## Screens

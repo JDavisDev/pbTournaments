@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "demo": "node scripts/demo.mjs",
     "dev": "npm --prefix web run dev",
     "build": "npm --prefix web run build",
     "test:db": "vitest run",

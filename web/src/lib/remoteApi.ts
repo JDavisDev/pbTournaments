@@ -47,10 +47,32 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-async function select<T>(query: PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T> {
+type Query = PromiseLike<{ data: unknown; error: { message: string } | null }>;
+
+async function select<T>(query: Query): Promise<T> {
   const { data, error } = await query;
   if (error) throw toError(error);
   return data as T;
+}
+
+// Supabase returns at most max_rows (1000) rows per request and silently drops
+// the rest. Lists that grow with the field (matches, players, the queue) read
+// page by page so a big tournament comes back whole. Keep this equal to
+// max_rows in supabase/config.toml and the hosted project's API settings.
+const PAGE_ROWS = 1000;
+
+async function selectAll<T>(page: (from: number, to: number) => Query): Promise<T[]> {
+  const all: T[] = [];
+  for (let from = 0; ; from += PAGE_ROWS) {
+    const rows = await select<T[]>(page(from, from + PAGE_ROWS - 1));
+    all.push(...rows);
+    if (rows.length < PAGE_ROWS) return all;
+  }
+}
+
+// Set-returning functions keep their own order (ORDER BY inside the function).
+function rpcAll<T>(fn: string, args: Record<string, unknown>): Promise<T[]> {
+  return selectAll<T>((from, to) => supabase().rpc(fn, args).range(from, to));
 }
 
 // Reads -----------------------------------------------------------------
@@ -62,23 +84,32 @@ export const getEvents = (tournamentId: string) =>
   select<TournamentEvent[]>(supabase().from('events').select('*').eq('tournament_id', tournamentId).order('sort_order'));
 
 export const getTeams = (tournamentId: string) =>
-  select<Team[]>(supabase().from('teams').select('*').eq('tournament_id', tournamentId).order('seed').order('name'));
+  selectAll<Team>((from, to) =>
+    supabase().from('teams').select('*').eq('tournament_id', tournamentId).order('seed').order('name').order('id').range(from, to),
+  );
 
 export const getCourtBoard = (tournamentId: string) =>
   select<CourtBoardRow[]>(
     supabase().from('court_board').select('*').eq('tournament_id', tournamentId).order('sort_order').order('court_name'),
   );
 
-export const getQueue = (tournamentId: string) => rpc<QueueRow[]>('up_next', { p_tournament: tournamentId });
+export const getQueue = (tournamentId: string) => rpcAll<QueueRow>('up_next', { p_tournament: tournamentId });
 
 export const getMatches = (tournamentId: string) =>
-  select<MatchDetails[]>(
-    supabase().from('match_details').select('*').eq('tournament_id', tournamentId).order('queue_seq'),
+  selectAll<MatchDetails>((from, to) =>
+    supabase().from('match_details').select('*').eq('tournament_id', tournamentId).order('queue_seq').order('id').range(from, to),
   );
 
 export const getStandings = (tournamentId: string) =>
-  select<StandingRow[]>(
-    supabase().from('standings').select('*').eq('tournament_id', tournamentId).order('pool').order('pool_rank'),
+  selectAll<StandingRow>((from, to) =>
+    supabase()
+      .from('standings')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('pool')
+      .order('pool_rank')
+      .order('team_id')
+      .range(from, to),
   );
 
 export const isStaff = (tournamentId: string) => rpc<boolean>('is_tournament_staff', { p_tournament: tournamentId });
@@ -229,12 +260,14 @@ export const startRegistration = (tournamentId: string, f: RegistrationForm) =>
 export const getRegistration = (id: string) => rpc<RegistrationView | null>('get_registration', { p_registration: id });
 
 export const getRegistrations = (tournamentId: string) =>
-  select<RegistrationRow[]>(
+  selectAll<RegistrationRow>((from, to) =>
     supabase()
       .from('registration_details')
       .select('*')
       .eq('tournament_id', tournamentId)
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .order('registration_id')
+      .range(from, to),
   );
 
 export const pairRegistrations = (eventId: string, a: string, b: string) =>
@@ -307,16 +340,31 @@ export const getTextLog = (tournamentId: string) =>
 // Check-in desk, rosters, swaps and messages ---------------------------------
 
 export const getCheckinRoster = (tournamentId: string) =>
-  select<CheckinPlayer[]>(
-    supabase().from('checkin_roster').select('*').eq('tournament_id', tournamentId).order('last_name').order('first_name'),
+  selectAll<CheckinPlayer>((from, to) =>
+    supabase()
+      .from('checkin_roster')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('last_name')
+      .order('first_name')
+      .order('player_id')
+      .range(from, to),
   );
 
 export const getDivisionCheckin = (tournamentId: string) =>
   select<DivisionCheckin[]>(supabase().from('division_checkin').select('*').eq('tournament_id', tournamentId).order('sort_order'));
 
 export const getTeamRoster = (tournamentId: string) =>
-  select<TeamRosterRow[]>(
-    supabase().from('team_roster').select('*').eq('tournament_id', tournamentId).order('event_sort_order').order('seed').order('name'),
+  selectAll<TeamRosterRow>((from, to) =>
+    supabase()
+      .from('team_roster')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('event_sort_order')
+      .order('seed')
+      .order('name')
+      .order('team_id')
+      .range(from, to),
   );
 
 export const checkInPlayer = (tournamentId: string, playerId: string, checkedIn = true) =>
@@ -370,11 +418,11 @@ export const getDemoInbox = (teamId: string) => rpc<DemoText[]>('demo_inbox', { 
 // DUPR -----------------------------------------------------------------------
 
 export const getDivisionEligibility = (tournamentId: string) =>
-  rpc<EligibilityRow[]>('division_eligibility', { p_tournament: tournamentId });
+  rpcAll<EligibilityRow>('division_eligibility', { p_tournament: tournamentId });
 /** Confirmed ratings from a pasted list, matched by DUPR ID. */
 export const importDuprRatings = (tournamentId: string, list: { dupr_id: string; doubles?: number; singles?: number }[]) =>
   rpc<{ updated: number; unknown: string[] }>('import_dupr_ratings', { p_tournament: tournamentId, p_rows: list });
-export const getDuprResults = (tournamentId: string) => rpc<DuprResultRow[]>('dupr_results', { p_tournament: tournamentId });
+export const getDuprResults = (tournamentId: string) => rpcAll<DuprResultRow>('dupr_results', { p_tournament: tournamentId });
 export const markDuprExported = (tournamentId: string, matchIds: string[], exported = true) =>
   rpc<number>('mark_dupr_exported', { p_tournament: tournamentId, p_matches: matchIds, p_exported: exported });
 

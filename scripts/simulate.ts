@@ -3,6 +3,7 @@
 //
 //   npm run simulate              (default seed)
 //   npm run simulate -- --seed 7  (a different random tournament)
+//   npm run simulate -- --players 600 --courts 30  (a bigger day)
 //
 // Everything goes through the same database functions the website will call:
 // check_in_team, report_score, plus the 30-second cron tick. A match called to
@@ -23,9 +24,14 @@ import {
   tick,
 } from '../tests/db/harness';
 
+function flag(name: string, fallback: number) {
+  const i = process.argv.indexOf(`--${name}`);
+  return i > 0 ? Number(process.argv[i + 1]) : fallback;
+}
+
 const CONFIG = {
-  players: 200,
-  courts: 11,
+  players: flag('players', 200),
+  courts: flag('courts', 11),
   minRestMinutes: 10,
   noShowMinutes: 10,
   dayStart: new Date('2026-11-07T12:30:00Z'), // 7:30 am Eastern: doors open
@@ -36,10 +42,6 @@ const CONFIG = {
   smsCostPerText: 0.011,
 };
 
-function flag(name: string, fallback: number) {
-  const i = process.argv.indexOf(`--${name}`);
-  return i > 0 ? Number(process.argv[i + 1]) : fallback;
-}
 const SEED = flag('seed', 42);
 // Overrides the tournament's overdue_after_minutes when given.
 const OVERDUE_AFTER = process.argv.includes('--overdue') ? flag('overdue', 0) : null;
