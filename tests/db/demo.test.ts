@@ -23,6 +23,24 @@ const statusCounts = async (tournamentId: string) =>
   );
 
 describe('demo tournaments', () => {
+  it('moves when a match became ready along with the rest of the demo clock', async () => {
+    const { id } = await demo();
+    const before = await one(db, `select id, ready_since from public.matches where tournament_id = $1 and status = 'queued' limit 1`, [id]);
+    await db.query('select private.shift_demo_clock($1, 30)', [id]);
+    const after = await one(db, 'select ready_since from public.matches where id = $1', [before.id]);
+    expect(new Date(before.ready_since).getTime() - new Date(after.ready_since).getTime()).toBe(30 * 60_000);
+  });
+
+  it('tags queued matches with their stage and round', async () => {
+    const { id } = await demo();
+    const queue = await rows(db, 'select stage, round_key from public.up_next($1)', [id]);
+    expect(queue.length).toBeGreaterThan(0);
+    expect(queue.every((q) => q.stage && q.round_key)).toBe(true);
+    const board = await rows(db, 'select stage, round_key from public.court_board where tournament_id = $1 and match_id is not null', [id]);
+    expect(board.every((c) => c.stage === 'pool' || c.stage === 'bracket')).toBe(true);
+    expect(board.every((c) => c.round_key)).toBe(true);
+  });
+
   it('builds a live demo with four divisions and fills the courts', async () => {
     const { id } = await demo();
     const t = await one(db, 'select status, is_demo from public.tournaments where id = $1', [id]);

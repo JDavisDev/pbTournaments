@@ -1,4 +1,4 @@
-import type { BracketType, ChampionshipMode, EventFormat, MatchDetails } from './types';
+import type { BracketType, ChampionshipMode, EventFormat, MatchDetails, RoundKey } from './types';
 
 export function formatTime(iso: string | null | undefined, timeZone?: string) {
   if (!iso) return '';
@@ -89,6 +89,15 @@ export function courtsLabel(names: string[]) {
   const consecutive = numbers.every((n, i) => n > 0 && (i === 0 || n === numbers[i - 1] + 1));
   if (names.length > 1 && consecutive) return `Courts ${numbers[0]}–${numbers.at(-1)}`;
   return names.join(', ');
+}
+
+/** A match's type at a glance: RR (pool play), Bracket, Gold (the final) or Bronze. */
+export function matchType(stage: 'pool' | 'bracket' | null, roundKey: RoundKey | null): 'RR' | 'Bracket' | 'Gold' | 'Bronze' | null {
+  if (stage === 'pool') return 'RR';
+  if (stage !== 'bracket') return null;
+  if (roundKey === 'final' || roundKey === 'grand_final') return 'Gold';
+  if (roundKey === 'bronze') return 'Bronze';
+  return 'Bracket';
 }
 
 /** A championship court's rank: "Main", "2nd", "3rd", "4th", ... */

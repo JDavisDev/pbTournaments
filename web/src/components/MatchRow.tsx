@@ -1,6 +1,7 @@
 import { formatScore, formatTime } from '@/lib/format';
 import type { MatchDetails, QueueRow } from '@/lib/types';
 import { QueueStatus } from './desk/QueuePanel';
+import { MatchTags } from './MatchTag';
 import { Badge } from './ui';
 
 /** One match with whatever matters for its state: score, court, or place in line. */
@@ -21,10 +22,13 @@ export function MatchRow({
   return (
     <div className="flex items-start justify-between gap-3 px-3 py-2.5">
       <div className="min-w-0">
-        <p className="truncate text-xs text-muted">
-          {showEvent ? `${m.event_name} · ` : ''}
-          {m.label}
-        </p>
+        <div className="flex items-center gap-1.5 text-xs">
+          <MatchTags stage={m.stage} roundKey={m.round_key} championship={queueRow?.championship} />
+          <p className="truncate text-muted">
+            {showEvent ? `${m.event_name} · ` : ''}
+            {m.label}
+          </p>
+        </div>
         <p className="text-sm">
           <span className={m.winner_team_id === m.team1_id ? 'font-semibold' : ''}>{m.team1_name}</span>
           <span className="text-muted"> v </span>

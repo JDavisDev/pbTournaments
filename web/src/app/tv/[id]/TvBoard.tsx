@@ -3,6 +3,7 @@
 import { use, useLayoutEffect, useRef } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { courtState, type CourtState } from '@/components/desk/CourtCard';
+import { MatchTags } from '@/components/MatchTag';
 import { LiveDot } from '@/components/StreamEmbed';
 import { getCourtBoard, getMatches, getQueue, getTournament } from '@/lib/api';
 import { formatScore, formatTime, minutesSince } from '@/lib/format';
@@ -147,10 +148,13 @@ export function TvBoard({ params }: { params: Promise<{ id: string }> }) {
                     <p className="font-display text-[1.875em] leading-tight font-bold whitespace-nowrap uppercase">{c.team1_name}</p>
                     <p className="text-[0.75em] text-muted">vs</p>
                     <p className="font-display text-[1.875em] leading-tight font-bold whitespace-nowrap uppercase">{c.team2_name}</p>
-                    <p className="mt-1 truncate text-[0.75em] text-muted">
-                      {c.event_name} · {c.label}
-                      {c.format_text ? ` · ${c.format_text}` : ''}
-                    </p>
+                    <div className="mt-1 flex items-center gap-1.5 text-[0.75em]">
+                      <MatchTags stage={c.stage} roundKey={c.round_key} />
+                      <p className="truncate text-muted">
+                        {c.event_name} · {c.label}
+                        {c.format_text ? ` · ${c.format_text}` : ''}
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -169,6 +173,9 @@ export function TvBoard({ params }: { params: Promise<{ id: string }> }) {
                 >
                   <div className="flex items-baseline gap-2">
                     <span className="tnum font-display text-xl font-bold text-muted">{q.queue_rank}</span>
+                    <span className="flex shrink-0 gap-1 text-xs">
+                      <MatchTags stage={q.stage} roundKey={q.round_key} championship={q.championship} />
+                    </span>
                     <span className="truncate text-xs text-muted">
                       {q.event_name} · {q.label}
                     </span>

@@ -5,6 +5,7 @@ import { assignMatchToCourt, setCourtPaused } from '@/lib/api';
 import { championshipRankLabel, minutesSince, shortFormat } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
 import type { CourtBoardRow, QueueRow } from '@/lib/types';
+import { MatchTags } from '../MatchTag';
 import { Badge, Button, ErrorText, Select } from '../ui';
 
 // A match called to a court is playing: players head over and report the
@@ -70,9 +71,12 @@ export function CourtCard({
 
       {court.match_id ? (
         <div className="mt-2 flex-1">
-          <p className="truncate text-xs text-muted">
-            {court.event_name} · {court.label}
-          </p>
+          <div className="flex items-center gap-1.5 text-xs">
+            <MatchTags stage={court.stage} roundKey={court.round_key} />
+            <p className="truncate text-muted">
+              {court.event_name} · {court.label}
+            </p>
+          </div>
           {court.best_of && court.games_to && (
             <p className="truncate text-xs text-muted">{shortFormat({ games_to: court.games_to, best_of: court.best_of, point_cap: court.point_cap })}</p>
           )}

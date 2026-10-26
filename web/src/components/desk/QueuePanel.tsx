@@ -5,6 +5,7 @@ import { holdMatch, moveInQueue } from '@/lib/api';
 import { courtsLabel, minutesSince } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
 import type { QueueRow } from '@/lib/types';
+import { MatchTags } from '../MatchTag';
 import { Badge, Empty, ErrorText } from '../ui';
 
 /**
@@ -16,7 +17,11 @@ import { Badge, Empty, ErrorText } from '../ui';
 export function QueueStatus({ row, staff = false }: { row: QueueRow; staff?: boolean }) {
   if (!row.blocked_reason) return <Badge tone="live">Next up</Badge>;
   if (row.blocked_reason === 'waiting_for_championship_court') {
-    return <Badge tone="called">Waiting for {row.waiting_for_court ?? 'a championship court'}</Badge>;
+    return (
+      <Badge tone="called">
+        {row.waiting_for_court ? `Waiting for Main court (${row.waiting_for_court})` : 'Waiting for championship court'}
+      </Badge>
+    );
   }
   if (staff && row.blocked_reason === 'on_hold') return <Badge tone="called">On hold</Badge>;
   if (staff && row.blocked_reason === 'not_checked_in') return <Badge tone="late">Not checked in</Badge>;
@@ -50,6 +55,7 @@ export function QueuePanel({
               <div className="flex flex-wrap items-center gap-1.5">
                 <QueueStatus row={row} staff={staff} />
                 {row.overdue && <Badge tone="late">Overdue</Badge>}
+                <MatchTags stage={row.stage} roundKey={row.round_key} championship={row.championship} />
                 <span className="truncate text-xs text-muted">
                   {row.event_name} · {row.label}
                   {row.court_names.length > 0 && ` · ${courtsLabel(row.court_names)}`}

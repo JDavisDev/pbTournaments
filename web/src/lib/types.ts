@@ -409,6 +409,7 @@ export interface CourtBoardRow {
   format_text: string | null;
   /** 1 = the Main championship court, 2 = the next, ...; null = an ordinary court. */
   championship_rank: number | null;
+  round_key: RoundKey | null;
 }
 
 export interface QueueRow {
@@ -432,6 +433,8 @@ export interface QueueRow {
   waiting_for_court: string | null;
   /** With waiting_for_championship_court: when it stops waiting and takes any court (null = never). */
   wait_until: string | null;
+  stage: 'pool' | 'bracket';
+  round_key: RoundKey;
 }
 
 /** A free championship court kept for a championship match about to be ready. */
