@@ -9,6 +9,7 @@ import { auth } from '@/lib/auth';
 import { setViewMode } from '@/lib/viewMode';
 import { formatTime } from '@/lib/format';
 import { useAction, useLiveTournament } from '@/lib/hooks';
+import { Expandable } from './Expandable';
 import { Icon } from './Icon';
 import { Button, Card, ErrorText } from './ui';
 
@@ -96,8 +97,7 @@ export function DemoInbox({ tournamentId, teamId, timeZone }: { tournamentId: st
   const { data } = useLiveTournament(tournamentId, () => getDemoInbox(teamId));
   if (!data || data.length === 0) return null;
   return (
-    <section className="rounded-2xl border-2 border-dashed border-called/50 p-4">
-      <h3 className="text-2xl">Texts this team got</h3>
+    <Expandable id="demo-texts" title="Texts this team got" summary={`${data.length} text${data.length === 1 ? '' : 's'} · practice tournament`}>
       <p className="mb-3 text-sm text-muted">Practice tournament: shown here instead of sent. Tap a link to play the part of this team.</p>
       <ul className="flex flex-col gap-2">
         {data.slice(0, 6).map((t) => (
@@ -119,6 +119,6 @@ export function DemoInbox({ tournamentId, teamId, timeZone }: { tournamentId: st
           </li>
         ))}
       </ul>
-    </section>
+    </Expandable>
   );
 }

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { CourtStatus } from '@/components/desk/CourtCard';
+import { Expandable } from '@/components/Expandable';
 import { Icon } from '@/components/Icon';
 import { useMyTeam } from '@/components/MatchDay';
 import { Button, Card, Empty, Input, Select, Spinner } from '@/components/ui';
@@ -152,8 +153,7 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
           {search.length >= 2 && found.length === 0 && <p className="mt-3 text-sm text-muted">No teams match.</p>}
         </Card>
 
-        <section>
-          <h2 className="mb-3 text-3xl">Events</h2>
+        <Expandable id="all-divisions" title="All divisions" summary={`${events.length} division${events.length === 1 ? '' : 's'}`}>
           {events.length === 0 ? (
             <Empty>No events yet.</Empty>
           ) : (
@@ -182,34 +182,39 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
               })}
             </div>
           )}
-        </section>
+        </Expandable>
       </div>
 
       <aside>
-        <h2 className="mb-3 text-3xl">On court now</h2>
-        {activeCourts.length === 0 ? (
-          <Empty>Nothing on court right now.</Empty>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {activeCourts.map((c) => (
-              <Card key={c.court_id} className="p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold">{c.court_name}</span>
-                  <span className="flex items-center gap-1.5">
-                    {c.stream_url && <WatchChip url={c.stream_url} />}
-                    <CourtStatus court={c} now={now} />
-                  </span>
-                </div>
-                <p className="mt-1 text-sm">
-                  {c.team1_name} <span className="text-muted">v</span> {c.team2_name}
-                </p>
-                <p className="text-xs text-muted">
-                  {c.event_name} · {c.label}
-                </p>
-              </Card>
-            ))}
-          </ul>
-        )}
+        <Expandable
+          id="on-court-now"
+          title="On court now"
+          summary={activeCourts.length ? `${activeCourts.length} match${activeCourts.length === 1 ? '' : 'es'} on court` : 'Nothing on court'}
+        >
+          {activeCourts.length === 0 ? (
+            <Empty>Nothing on court right now.</Empty>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {activeCourts.map((c) => (
+                <Card key={c.court_id} className="p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">{c.court_name}</span>
+                    <span className="flex items-center gap-1.5">
+                      {c.stream_url && <WatchChip url={c.stream_url} />}
+                      <CourtStatus court={c} now={now} />
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm">
+                    {c.team1_name} <span className="text-muted">v</span> {c.team2_name}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {c.event_name} · {c.label}
+                  </p>
+                </Card>
+              ))}
+            </ul>
+          )}
+        </Expandable>
       </aside>
     </div>
   );

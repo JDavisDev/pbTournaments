@@ -16,6 +16,7 @@ const paths = {
   whistle: 'M4 12a5 5 0 1 0 10 0 5 5 0 0 0-10 0zM9 7h12v4h-7',
   text: 'M4 7V5h10v2M9 5v14M7 19h4M14 12v-1h6v1M17 11v8M15.5 19h3',
   arrow: 'M5 12h14M13 6l6 6-6 6',
+  chevron: 'M6 9l6 6 6-6',
 } as const;
 
 export type IconName = keyof typeof paths;

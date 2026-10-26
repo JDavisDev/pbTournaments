@@ -5,6 +5,7 @@ import { use } from 'react';
 import { Bracket } from '@/components/Bracket';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { DemoInbox } from '@/components/DemoTools';
+import { Expandable } from '@/components/Expandable';
 import { QueueStatus } from '@/components/desk/QueuePanel';
 import { MatchRow } from '@/components/MatchRow';
 import { StandingsTable } from '@/components/StandingsTable';
@@ -80,7 +81,10 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
   const standings = data.standings.filter((s) => s.event_id === event.id && s.pool === team.pool);
   const myStanding = standings.find((s) => s.team_id === teamId);
   const bracket = data.matches.filter((m) => m.event_id === event.id && m.stage === 'bracket');
-  const inBracket = bracket.some((m) => m.team1_id === teamId || m.team2_id === teamId);
+  const myBracket = bracket.filter((m) => m.team1_id === teamId || m.team2_id === teamId);
+  const inBracket = myBracket.length > 0;
+  const nextBracket = myBracket.find((m) => m.status !== 'completed' && m.status !== 'cancelled');
+  const played = mine.filter((m) => m.status === 'completed').length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -97,46 +101,54 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
       </div>
 
       <MatchDayPanel tournamentId={id} team={team} mine={mine} onCourt={onCourt} next={next} nextQueue={nextQueue} now={now} />
-      {data.tournament.is_demo && <DemoInbox tournamentId={id} teamId={teamId} timeZone={tz} />}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section>
-          <h3 className="mb-3 text-3xl">Schedule</h3>
-          {byes.length > 0 && (
-            <p className="mb-2 text-sm text-muted">
-              Bye in round{byes.length > 1 ? 's' : ''} {byes.join(', ')}.
-            </p>
-          )}
-          {mine.length === 0 ? (
-            <Empty>No matches yet.</Empty>
-          ) : (
-            <div className="divide-y divide-border rounded-xl border border-border bg-surface">
-              {mine.map((m) => (
-                <MatchRow key={m.id} match={m} queueRow={queueById.get(m.id)} timeZone={tz} perspectiveTeamId={teamId} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {standings.length > 0 && (
-          <section>
-            <h3 className="mb-3 text-3xl">{poolName(team.pool)} standings</h3>
-            <StandingsTable
-              rows={standings}
-              tournamentId={id}
-              advance={event.format === 'pools_to_bracket' ? event.advance_per_pool : 0}
-              highlightTeamId={teamId}
-            />
-          </section>
+      <Expandable
+        id="my-schedule"
+        title="Your schedule"
+        summary={mine.length ? `${played} of ${mine.length} played` : 'No matches yet'}
+        defaultOpen
+      >
+        {byes.length > 0 && (
+          <p className="mb-2 text-sm text-muted">
+            Bye in round{byes.length > 1 ? 's' : ''} {byes.join(', ')}.
+          </p>
         )}
-      </div>
+        {mine.length === 0 ? (
+          <Empty>No matches yet.</Empty>
+        ) : (
+          <div className="-mx-1 divide-y divide-border">
+            {mine.map((m) => (
+              <MatchRow key={m.id} match={m} queueRow={queueById.get(m.id)} timeZone={tz} perspectiveTeamId={teamId} />
+            ))}
+          </div>
+        )}
+      </Expandable>
+
+      {standings.length > 0 && (
+        <Expandable
+          id="pool-standings"
+          title={`${poolName(team.pool) || 'Pool'} standings`}
+          summary={myStanding ? `You’re ${ordinal(myStanding.pool_rank)} of ${standings.length}` : `${standings.length} teams`}
+        >
+          <StandingsTable
+            rows={standings}
+            tournamentId={id}
+            advance={event.format === 'pools_to_bracket' ? event.advance_per_pool : 0}
+            highlightTeamId={teamId}
+          />
+        </Expandable>
+      )}
 
       {bracket.length > 0 && (inBracket || event.format === 'single_elim') && (
-        <section>
-          <h3 className="mb-3 text-3xl">Bracket</h3>
+        <Expandable
+          id="bracket"
+          title="Bracket"
+          summary={nextBracket ? `Your next: ${nextBracket.label}` : inBracket ? 'Your bracket matches are done' : 'The full draw'}
+        >
           <Bracket matches={bracket} highlightTeamId={teamId} />
-        </section>
+        </Expandable>
       )}
+      {data.tournament.is_demo && <DemoInbox tournamentId={id} teamId={teamId} timeZone={tz} />}
     </div>
   );
 }
