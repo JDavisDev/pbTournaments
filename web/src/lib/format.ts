@@ -1,4 +1,4 @@
-import type { BracketType, ChampionshipMode, EventFormat, MatchDetails, RoundKey } from './types';
+import type { BracketType, ChampionshipMode, EventFormat, MatchDetails, RoundFormat, RoundKey } from './types';
 
 export function formatTime(iso: string | null | undefined, timeZone?: string) {
   if (!iso) return '';
@@ -90,6 +90,13 @@ export function courtsLabel(names: string[]) {
   if (names.length > 1 && consecutive) return `Courts ${numbers[0]}–${numbers.at(-1)}`;
   return names.join(', ');
 }
+
+/** A new division's medal matches: Gold best of 3 to 11, Bronze one game to 15, win by 2 (as the database defaults). */
+export const defaultRoundFormats: RoundFormat[] = [
+  { key: 'final', games_to: 11, best_of: 3, point_cap: null },
+  { key: 'grand_final', games_to: 11, best_of: 3, point_cap: null },
+  { key: 'bronze', games_to: 15, best_of: 1, point_cap: null },
+];
 
 /** A match's type at a glance: RR (pool play), Bracket, Gold (the final) or Bronze. */
 export function matchType(stage: 'pool' | 'bracket' | null, roundKey: RoundKey | null): 'RR' | 'Bracket' | 'Gold' | 'Bronze' | null {

@@ -118,8 +118,9 @@ export interface EventOptions {
 export async function addEvent(db: Db, tournamentId: string, name: string, opts: EventOptions = {}): Promise<string> {
   const e = await one(
     db,
-    `insert into public.events (tournament_id, name, format, pool_count, advance_per_pool, games_to, best_of, not_before)
-     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+    `insert into public.events (tournament_id, name, format, pool_count, advance_per_pool, games_to, best_of, not_before,
+                                third_place_match, round_formats)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, false, '[]') returning id`,
     [
       tournamentId,
       name,

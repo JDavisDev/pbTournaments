@@ -38,10 +38,10 @@ Pools and brackets:
 
 - `max_rounds`: round robin stops after this many rounds (an 8-team pool can play 6 rounds instead of 7). Null = everyone plays everyone.
 - `bracket_type`: `single` or `double` elimination.
-- `third_place_match`: single elimination; the semifinal losers play for bronze.
+- `third_place_match`: single elimination; the semifinal losers play for bronze. On by default.
 - `grand_final_reset`: double elimination; if the losers-bracket team wins the grand final, a second final ("Grand Final (if needed)") decides it. If the winners-bracket team wins, that match is `cancelled`.
 - `confirm_seeds`: the bracket is held (`on_hold`) after seeding so the director can review and swap seeds, then `start_bracket`.
-- `round_formats`: a game format per bracket round, overriding the playoff format: `[{"key": "final", "games_to": 15, "best_of": 3, "point_cap": null}]`. Keys (`matches.round_key`): `final`, `semifinal`, `quarterfinal`, `earlier`, `bronze` (single elimination); `winners`, `losers`, `grand_final` (double elimination).
+- `round_formats`: a game format per bracket round, overriding the playoff format: `[{"key": "final", "games_to": 15, "best_of": 3, "point_cap": null}]`. Keys (`matches.round_key`): `final`, `semifinal`, `quarterfinal`, `earlier`, `bronze` (single elimination); `winners`, `losers`, `grand_final` (double elimination). A new event defaults to gold (`final`, `grand_final`) best of 3 games to 11 and bronze one game to 15, all win by 2.
 
 Each match has `side` (`main`: pools, single elimination and the winners bracket; `losers`; `final`: grand final and bronze), `round_key`, and `loser_to_match_id`/`loser_to_slot` (double elimination, bronze). Brackets of any size work: empty seeds are byes (`team1_bye`/`team2_bye`), and a match against a bye completes by itself with `is_bye = true`; screens don't count it as played. `match_details` gives every match its effective `games_to`, `best_of`, `point_cap` and `format_text` ("one game to 15, win by 2").
 

@@ -276,3 +276,39 @@ describe('seeding', () => {
     ).rejects.toThrow(/already played/);
   });
 });
+
+describe('medal match defaults', () => {
+  it('gives a new division a bronze match to 15 and a best-of-3 gold match to 11', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START });
+    // Only what a director must choose; everything else is the default.
+    const { id: eventId } = await one(
+      db,
+      `insert into public.events (tournament_id, name, format) values ($1, 'Open', 'single_elim') returning id`,
+      [tournamentId],
+    );
+    for (let i = 1; i <= 4; i++) await checkIn(db, await addPair(db, eventId, [`D${i}a`, `D${i}b`], i));
+    await generate(db, eventId);
+
+    const formats = Object.fromEntries(
+      (await rows(db, `select round_key, format_text from public.match_details where event_id = $1`, [eventId])).map((m) => [
+        m.round_key,
+        m.format_text,
+      ]),
+    );
+    expect(formats.final).toBe('best of 3 games to 11, win by 2');
+    expect(formats.bronze).toBe('one game to 15, win by 2');
+  });
+
+  it('gives a double-elimination grand final the gold format', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START });
+    const { id: eventId } = await one(
+      db,
+      `insert into public.events (tournament_id, name, format, bracket_type) values ($1, 'Open', 'single_elim', 'double') returning id`,
+      [tournamentId],
+    );
+    for (let i = 1; i <= 4; i++) await checkIn(db, await addPair(db, eventId, [`G${i}a`, `G${i}b`], i));
+    await generate(db, eventId);
+    const grandFinal = await one(db, `select format_text from public.match_details where event_id = $1 and round_key = 'grand_final' limit 1`, [eventId]);
+    expect(grandFinal.format_text).toBe('best of 3 games to 11, win by 2');
+  });
+});
