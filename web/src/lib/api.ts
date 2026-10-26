@@ -12,6 +12,7 @@ export const {
   getTeams,
   getCourtBoard,
   getQueue,
+  getChampionshipHolds,
   getMatches,
   getStandings,
   isStaff,

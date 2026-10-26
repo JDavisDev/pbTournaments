@@ -434,6 +434,15 @@ export interface QueueRow {
   wait_until: string | null;
 }
 
+/** A free championship court kept for a championship match about to be ready. */
+export interface ChampionshipHold {
+  court_id: string;
+  court_name: string;
+  match_id: string;
+  event_name: string;
+  label: string;
+}
+
 export interface MatchDetails {
   id: string;
   tournament_id: string;

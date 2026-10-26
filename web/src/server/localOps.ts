@@ -103,6 +103,7 @@ const ops: Record<string, Op> = {
   getCourtBoard: (tx, id: string) =>
     all(tx, 'select * from public.court_board where tournament_id = $1 order by sort_order, court_name', [id]),
   getQueue: (tx, id: string) => all(tx, 'select * from public.up_next($1)', [id]),
+  getChampionshipHolds: (tx, id: string) => all(tx, 'select * from public.championship_holds($1)', [id]),
   getMatches: (tx, id: string) =>
     all(tx, 'select * from public.match_details where tournament_id = $1 order by queue_seq', [id]),
   getStandings: (tx, id: string) =>

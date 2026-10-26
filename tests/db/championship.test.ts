@@ -294,4 +294,41 @@ describe('championship courts', () => {
     const queue = await upNext(db, tournamentId);
     expect(queue.some((q) => q.blocked_reason === 'waiting_for_championship_court')).toBe(false);
   });
+
+  it('starts the wait clock when a match can really be played, not when its teams were known', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 2, start: START });
+    await rank(tournamentId, 'Court 1', 1);
+    const pool = await eventWithTeams(tournamentId, 'P', 8);
+    const open = await eventWithTeams(tournamentId, 'O', 4, { format: 'single_elim', notBefore: addMinutes(START, 60) });
+    await generate(db, pool.eventId);
+    await generate(db, open.eventId);
+
+    // An hour later the semis can play, but they've only just become ready: they wait.
+    await setClock(db, addMinutes(START, 62));
+    await reportScore(db, (await liveOn(tournamentId, 'Court 2'))!.id, [[11, 5]]);
+    expect(await onCourt(tournamentId, open.eventId)).toEqual([]);
+    const semi = (await upNext(db, tournamentId)).find((q) => q.event_id === open.eventId)!;
+    expect(semi.blocked_reason).toBe('waiting_for_championship_court');
+    expect(new Date(semi.wait_until).toISOString()).toBe(addMinutes(START, 75).toISOString());
+  });
+
+  it('lists championship matches that go ahead of the queue at the top', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 2, start: START });
+    await rank(tournamentId, 'Court 1', 1);
+    await mode(tournamentId, 'first_available');
+    const pool = await eventWithTeams(tournamentId, 'P', 8);
+    const open = await eventWithTeams(tournamentId, 'O', 2, { format: 'single_elim' });
+    await generate(db, pool.eventId);
+    await generate(db, open.eventId);
+    const [top] = await upNext(db, tournamentId);
+    expect([top.label, top.blocked_reason, top.queue_rank]).toEqual(['Final', null, 1]);
+  });
+
+  it('says which court is held and for which match', async () => {
+    const { tournamentId, semiOn } = await bracketAndPool();
+    await setClock(db, addMinutes(START, 10));
+    await reportScore(db, (await semiOn('Court 1')).id, [[11, 5]]);
+    const holds = await rows(db, 'select * from public.championship_holds($1)', [tournamentId]);
+    expect(holds.map((h) => [h.court_name, h.event_name, h.label])).toEqual([['Court 1', 'O', 'Final']]);
+  });
 });

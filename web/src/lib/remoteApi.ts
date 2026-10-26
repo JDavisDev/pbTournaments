@@ -5,6 +5,7 @@
 import { supabase } from './supabase';
 import { parseTeams, teamName } from './teamText';
 import type {
+  ChampionshipHold,
   CheckinPlayer,
   CodeMatch,
   CourtBoardRow,
@@ -94,6 +95,8 @@ export const getCourtBoard = (tournamentId: string) =>
   );
 
 export const getQueue = (tournamentId: string) => rpcAll<QueueRow>('up_next', { p_tournament: tournamentId });
+export const getChampionshipHolds = (tournamentId: string) =>
+  rpcAll<ChampionshipHold>('championship_holds', { p_tournament: tournamentId });
 
 export const getMatches = (tournamentId: string) =>
   selectAll<MatchDetails>((from, to) =>
