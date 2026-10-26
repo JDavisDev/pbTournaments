@@ -1,5 +1,5 @@
 // Director sign-in: Supabase Auth in production, a local account in local mode.
-import { isLocalMode } from './config';
+import { demoGuest, isLocalMode } from './config';
 import { getLocalUser, localCall, setLocalUser, type LocalUser } from './localClient';
 import { supabase } from './supabase';
 
@@ -13,7 +13,7 @@ interface Auth {
   signIn(email: string, password: string): Promise<void>;
   /** 'confirm-email' when Supabase needs the address confirmed first. */
   signUp(email: string, password: string): Promise<'signed-in' | 'confirm-email'>;
-  /** Demo sites: a session without an email (Supabase anonymous sign-in). */
+  /** Demo sites: the shared guest account (Supabase), or a local guest without an email. */
   signInAsGuest(): Promise<void>;
   /** Supabase only: a one-time sign-in link by email. */
   emailLink?(email: string): Promise<void>;
@@ -46,14 +46,12 @@ const remoteAuth: Auth = {
     return data.session ? 'signed-in' : 'confirm-email';
   },
   async signInAsGuest() {
-    const { error } = await supabase().auth.signInAnonymously();
-    if (error) {
-      throw new Error(
-        /anonymous/i.test(error.message)
-          ? 'Guest access is off. Turn on anonymous sign-ins in Supabase (Authentication → Sign In / Providers).'
-          : error.message,
-      );
+    const { email, password } = demoGuest;
+    if (!email || !password) {
+      throw new Error('Guest access isn’t set up: set NEXT_PUBLIC_DEMO_GUEST_EMAIL and NEXT_PUBLIC_DEMO_GUEST_PASSWORD.');
     }
+    const { error } = await supabase().auth.signInWithPassword({ email, password });
+    if (error) throw new Error(`Guest sign-in failed: ${error.message}`);
   },
   async emailLink(email) {
     const { error } = await supabase().auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
@@ -107,3 +105,6 @@ const localAuth: Auth = {
 };
 
 export const auth: Auth = isLocalMode ? localAuth : remoteAuth;
+
+/** A demo guest: the shared guest account, or a local guest (no email). */
+export const isGuest = (user: AuthUser) => !user.email || user.email.toLowerCase() === demoGuest.email;

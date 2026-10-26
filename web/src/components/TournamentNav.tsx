@@ -58,8 +58,8 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
       : []),
   ];
 
-  // Admin view needs a session: on a practice tournament anyone signed in (a
-  // guest too) is a director.
+  // Director view needs a session: on a practice tournament anyone signed in
+  // (a guest too, which demo sites make automatically) is a director.
   const view: ViewMode = staff.data ? 'admin' : 'player';
   const switchTo = (mode: ViewMode) =>
     switching.run(async () => {
@@ -82,7 +82,7 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
           <div className="flex gap-1 rounded-full bg-surface-2 p-1" role="radiogroup" aria-label="View as">
             {(
               [
-                ['admin', 'View as admin'],
+                ['admin', 'View as director'],
                 ['player', 'View as player'],
               ] as const
             ).map(([mode, label]) => (

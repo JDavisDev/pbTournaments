@@ -14,3 +14,13 @@ export const isBackendConfigured = isLocalMode || isSupabaseConfigured;
  * the test checkout and texts go to the log, whatever keys are set.
  */
 export const isDemoMode = isLocalMode || process.env.NEXT_PUBLIC_DEMO_MODE === '1';
+
+/**
+ * Hosted demo (private, not public): every visitor signs in to this one
+ * Supabase account, so trying the demo doesn't make a user per visitor. The
+ * password ships to the browser; only use it for a demo-only account.
+ */
+export const demoGuest = {
+  email: process.env.NEXT_PUBLIC_DEMO_GUEST_EMAIL?.trim().toLowerCase() || null,
+  password: process.env.NEXT_PUBLIC_DEMO_GUEST_PASSWORD || null,
+};

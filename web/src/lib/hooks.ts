@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import { claimStaffInvites, getMyRole } from './api';
-import { auth, type AuthUser } from './auth';
+import { auth, isGuest, type AuthUser } from './auth';
 import { isBackendConfigured, isLocalMode } from './config';
 import { localCall } from './localClient';
 import { supabase } from './supabase';
@@ -123,7 +123,7 @@ export function useStaffAccess(tournamentId: string) {
   const session = useSession();
   const role = useLoad(async () => {
     if (!session) return null;
-    if (session.email) await claimStaffInvites().catch(() => 0);
+    if (!isGuest(session)) await claimStaffInvites().catch(() => 0);
     return getMyRole(tournamentId);
   }, [tournamentId, session?.id]);
   const view = useViewMode();

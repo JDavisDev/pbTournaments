@@ -1,12 +1,12 @@
 # The demo site
 
-A hosted copy of Courtside for real people to try before we run live tournaments. No account needed: visitors are signed in as a guest the moment they start a practice tournament or press **View as admin**, and anyone signed in (a guest too) is a director of every practice tournament. Real tournaments keep their organization's directors only. No payments are taken and no texts are sent, whatever keys are set.
+A hosted copy of Courtside for real people to try before we run live tournaments. No account needed: **Sign in** (or starting a practice tournament) signs a visitor in to one shared guest account in a click, and anyone signed in is a director of every practice tournament. Organizations are hidden; practice tournaments start from the home page. Real tournaments keep their organization's directors only. No payments are taken and no texts are sent, whatever keys are set.
 
 What testers can do:
 
 - **Directors:** "Start one in play" or "Start at check-in" on the home page builds an 11-court tournament with four divisions (pools to a bracket with bronze, a round robin capped at 6 rounds, pools to a bracket held for seed review, and a 6-team double elimination), each with its own start time. Run the court desk, check-in, messages, Setup, the Planner, DUPR, and the TV board. **Fast-forward** (+5 min, +15 min, +1 hr) on the court desk plays the day forward: players arrive, called teams reach their courts, matches finish with made-up scores, and courts refill.
 - **Players:** open a team's page (Overview → Find your matches). On a practice tournament, the team page shows **Texts this team got** with the real score link, so a tester can play the part of a team: see the court, then enter the score, which frees the court. Registration works too, with the test checkout.
-- **View as admin / View as player:** directors get a switch at the top of every tournament page. Player view hides every director tab and tool and shows only what a player has: the overview, **My matches** (their team's match day) and the TV board. Pick the team on the Overview ("Play as a team"). Fast-forward sits in the demo bar, so you can watch your match get called. The choice is remembered on the device; live (non-demo) sites don't show the switch.
+- **View as director / View as player:** a switch at the top of every practice tournament page, director by default. Player view hides every director tab and tool and shows only what a player has: the overview, **My matches** (their team's match day) and the TV board. Pick the team on the Overview ("Play as a team"). Fast-forward sits in the demo bar, so you can watch your match get called. The choice is remembered on the device; live (non-demo) sites don't show the switch.
 - Things also move in real time: courts refill every 30 seconds on their own.
 
 Practice tournaments are deleted after two weeks.
@@ -39,7 +39,8 @@ update private.site set demo = true;
 
 In the Supabase dashboard:
 
-- **Authentication → Sign In / Providers:** turn on **Allow anonymous sign-ins** (guests, no email). Also under **Email**, turn off **Confirm email**, for testers who do make an account. Supabase's built-in email only sends a few messages an hour.
+- **Authentication → Users → Add user → Create new user:** the shared guest account every visitor signs in to, e.g. `guest@courtside.demo` with a long random password, **Auto Confirm User** on. One account for everyone keeps Supabase from collecting a user per visitor. Its password goes into the website's settings (step 2) and so reaches the browser: fine while the demo is private, but use this account for nothing else. Anonymous sign-ins can stay off.
+- **Authentication → Sign In / Providers → Email:** turn off **Confirm email**, for testers who do make their own account. Supabase's built-in email only sends a few messages an hour.
 - **Authentication → URL Configuration:** set **Site URL** to the demo address (step 2), and add it under **Redirect URLs**.
 - **Database → Extensions:** check that `pg_cron` is on (the reset turns it on). The jobs are `assign-live-tournaments`, `log-demo-texts` and `clean-up-demo-tournaments`.
 
@@ -59,6 +60,8 @@ Sign in when it asks. Accept the detected Next.js settings. Then, in the Vercel 
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The publishable key (Supabase → Project Settings → API Keys) |
 | `SUPABASE_SECRET_KEY` | The secret key, same page. Server only; lets the test checkout confirm registrations |
 | `NEXT_PUBLIC_DEMO_MODE` | `1` |
+| `NEXT_PUBLIC_DEMO_GUEST_EMAIL` | The shared guest account's email (step 1) |
+| `NEXT_PUBLIC_DEMO_GUEST_PASSWORD` | Its password |
 | `NEXT_PUBLIC_APP_URL` | The site's address, e.g. `https://courtside-demo.vercel.app` |
 
 Leave out `NEXT_PUBLIC_DATA_MODE`, and all Stripe and Twilio keys. Then deploy again so the settings take effect:

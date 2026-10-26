@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { auth } from '@/lib/auth';
+import { auth, isGuest } from '@/lib/auth';
 import { BRAND } from '@/lib/brand';
 import { isDemoMode, isLocalMode } from '@/lib/config';
-import { useSession } from '@/lib/hooks';
+import { useAction, useSession } from '@/lib/hooks';
 import { TextSizeButton } from './TextSizeButton';
 
 export function Wordmark({ className = '' }: { className?: string }) {
@@ -18,6 +18,7 @@ export function Wordmark({ className = '' }: { className?: string }) {
 
 export function AppHeader() {
   const user = useSession();
+  const guest = useAction();
   return (
     <header className="border-t-4 border-brand bg-surface">
       {isDemoMode && (
@@ -38,9 +39,21 @@ export function AppHeader() {
           <TextSizeButton />
           {user === undefined ? null : user ? (
             <>
-              <span className="hidden text-muted md:inline">{user.email ?? 'Guest'}</span>
+              <span className="hidden text-muted md:inline">{isGuest(user) ? 'Guest' : user.email}</span>
               <button className="h-11 rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2" onClick={() => auth.signOut()}>
                 Sign out
+              </button>
+            </>
+          ) : isDemoMode ? (
+            /* Demo sites: one click signs in to the shared guest account, a director of every practice tournament. */
+            <>
+              {guest.error && <span className="max-w-xs text-xs text-late">{guest.error}</span>}
+              <button
+                className="h-11 rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2"
+                disabled={guest.busy}
+                onClick={() => guest.run(() => auth.signInAsGuest())}
+              >
+                {guest.busy ? 'Signing in…' : 'Sign in'}
               </button>
             </>
           ) : (

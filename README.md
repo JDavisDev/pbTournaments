@@ -16,7 +16,7 @@ Needs [Node.js](https://nodejs.org) 20 or newer.
 npm run demo                # → http://localhost:3000
 ```
 
-This installs the website's packages on the first run and starts it with its own database on your computer: no accounts, keys or internet services. Create any account (it only exists locally), then **Start one in play** on the home page. On the court desk, **fast-forward** plays the day forward; texts appear on the tournament's Texts page and on each team's page instead of being sent.
+This installs the website's packages on the first run and starts it with its own database on your computer: no accounts, keys or internet services. No account needed: press **Start one in play** on the home page (or **Sign in**, which signs you in as the shared guest). **View as director / View as player** at the top of a tournament switches between the director's tools and what a player sees. On the court desk, **fast-forward** plays the day forward; texts appear on the tournament's Texts page and on each team's page instead of being sent.
 
 ## Setup
 
@@ -32,7 +32,7 @@ cp web/.env.example web/.env.local
 
 With `NEXT_PUBLIC_DATA_MODE=local`, the dev server runs its own Postgres (PGlite) with the same migrations, engine and access rules as Supabase. Data is kept in `web/.local-db/`. It's rebuilt from scratch whenever a migration file changes, so delete that folder any time you want a clean start.
 
-Sign in by creating any account (it only exists locally), then use **Start one in play** or **Start at check-in** on the home page. On the court desk, **fast-forward** (+5 min, +15 min, +1 hr) plays the tournament forward: players arrive, matches finish and scores go in.
+Local mode is always a demo: **Sign in** signs you in as the shared guest in one click, or use **Start one in play** or **Start at check-in** on the home page. On the court desk, **fast-forward** (+5 min, +15 min, +1 hr) plays the tournament forward: players arrive, matches finish and scores go in.
 
 ### Payments and texts (test mode by default)
 
@@ -50,7 +50,7 @@ Local mode sends queued texts automatically every few seconds.
 
 ### Demo site
 
-`NEXT_PUBLIC_DEMO_MODE=1` makes a hosted copy anyone can try: free test accounts, one-click practice tournaments, fast-forward, team pages that show the texts their players got, test checkout and text log only. Setup and what testers can do: [docs/demo-site.md](docs/demo-site.md).
+`NEXT_PUBLIC_DEMO_MODE=1` makes a hosted copy anyone can try with one shared guest account: one-click practice tournaments, a director/player view switch, fast-forward, team pages that show the texts their players got, test checkout and text log only. Setup and what testers can do: [docs/demo-site.md](docs/demo-site.md).
 
 ### Supabase
 
@@ -75,7 +75,7 @@ npm run simulate     # 200-player simulation; --seed N, --players N, --courts N,
 
 | Path | Who | What |
 |---|---|---|
-| `/` | Everyone | Live tournaments; your organizations |
+| `/` | Everyone | Live tournaments; your organizations (demo sites: practice tournaments instead) |
 | `/o/<slug>` | Directors | Organization's tournaments, new tournament, add directors |
 | `/t/<id>` | Everyone | Events and progress, who's on court, find your team |
 | `/t/<id>/events/<event>` | Everyone | Division dashboard: stage, stats, standings, bracket (single/double, bronze), medals. Directors: end pool play, arrange seeds, start the bracket, division queue |

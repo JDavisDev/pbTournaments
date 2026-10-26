@@ -330,9 +330,11 @@ const authOps: Record<string, Op> = {
     }
     return { id: user.id, email: user.email };
   },
-  // Demo sites: a session with no email or password (like Supabase's anonymous sign-in).
+  // Demo sites: a session with no email or password. Every visitor shares one
+  // guest, like the hosted demo's shared guest account.
   signInGuest: async (tx) =>
-    one<{ id: string; email: string | null }>(tx, 'insert into auth.users (email) values (null) returning id, email'),
+    (await all<{ id: string; email: null }>(tx, 'select id, email from auth.users where email is null limit 1'))[0] ??
+    one<{ id: string; email: null }>(tx, 'insert into auth.users (email) values (null) returning id, email'),
   // A saved session can outlive the local database (it's rebuilt when migrations change).
   currentUser: async (tx, id: string) => (await all(tx, 'select id, email from auth.users where id = $1', [id]))[0] ?? null,
   // The screens poll this instead of a Realtime subscription.

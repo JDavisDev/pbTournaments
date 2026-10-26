@@ -30,7 +30,8 @@ export default function Home() {
           out the moment a score comes in.
         </p>
         <div className="mt-7 flex flex-wrap gap-3">
-          {session ? (
+          {/* Demo sites skip organizations: practice tournaments start from the card below. */}
+          {isDemoMode ? null : session ? (
             <LinkButton variant="primary" href="/orgs/new">
               Start a tournament
             </LinkButton>
@@ -45,7 +46,7 @@ export default function Home() {
       {isDemoMode && session !== undefined && <DemoCard signedIn={!!session} />}
       <PricingBlock />
 
-      {session && (
+      {session && !isDemoMode && (
         <section className="mb-10">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-3xl">Your organizations</h2>
