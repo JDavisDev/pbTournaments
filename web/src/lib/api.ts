@@ -51,6 +51,7 @@ export const {
   assignCourtsNow,
   renameCourt,
   setCourtStream,
+  setCourtChampionshipRank,
   startRegistration,
   getRegistration,
   getRegistrations,

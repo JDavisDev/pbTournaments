@@ -154,6 +154,10 @@ const ops: Record<string, Op> = {
       'image_data',
       'times_published_at',
       'texts_enabled',
+      'championship_mode',
+      'championship_rounds',
+      'championship_wait_minutes',
+      'final_wait_minutes',
     ]).then(() => null),
 
   saveEvent: async (tx, event: Row) => {
@@ -195,6 +199,8 @@ const ops: Record<string, Op> = {
     tx.query('update public.courts set name = $2 where id = $1', [id, name]).then(() => null),
   setCourtStream: (tx, id: string, url: string | null) =>
     tx.query('update public.courts set stream_url = $2 where id = $1', [id, url || null]).then(() => null),
+  setCourtChampionshipRank: (tx, id: string, rank: number | null) =>
+    tx.query('update public.courts set championship_rank = $2 where id = $1', [id, rank]).then(() => null),
 
   startRegistration: async (tx, tournamentId: string, f: RegistrationForm) =>
     (

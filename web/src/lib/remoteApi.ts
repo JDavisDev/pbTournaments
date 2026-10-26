@@ -450,3 +450,8 @@ export async function renameCourt(courtId: string, name: string) {
 export async function setCourtStream(courtId: string, url: string | null) {
   await select(supabase().from('courts').update({ stream_url: url || null }).eq('id', courtId).select('id'));
 }
+
+/** 1 = the Main championship court, 2 = the next, ...; null = an ordinary court. */
+export async function setCourtChampionshipRank(courtId: string, rank: number | null) {
+  await select(supabase().from('courts').update({ championship_rank: rank }).eq('id', courtId).select('id'));
+}

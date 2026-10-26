@@ -70,13 +70,21 @@ There are no rest periods: a player is on court, in the queue or on a bye, and c
 
 **Court sections** (`events.court_ids`): a sectioned event's matches go only on its courts, and while it has matches left to play those courts are its own; events without a section use the other courts. Once a sectioned event is done its courts go back to everyone. Events can share a section. Each playable match, top of the queue first, takes the first free court it may use; one whose courts are all busy keeps its place. Directors sending a match to a court by hand aren't limited by sections.
 
+**Championship courts** (`courts.championship_rank`: 1 = Main, 2 = the next, ...; null = ordinary): featured courts that play ordinary matches until the big rounds, then get those first. A championship match is a bracket match whose `round_key` is in `tournaments.championship_rounds` (default `semifinal`, `final`, `bronze`, `grand_final`; `quarterfinal` can be added). When a championship court is free, playable championship matches go first, ahead of the queue: the bigger round first and onto the better court (final and grand final, then bronze, semifinal, quarterfinal; equal rounds in the order they became ready). `tournaments.championship_mode` says what happens when they're all busy:
+
+- `wait` (default): the match waits for a championship court, and a final for the Main court. After `championship_wait_minutes` (default 15; `final_wait_minutes`, default 30, for finals; null = no limit) from when it became ready, it takes the first free court its event may use, ahead of the queue. While a championship match is about to be ready (every match feeding it is on court or done), a free championship court is kept for it (the Main court for a final) instead of starting an ordinary match.
+- `first_available`: it takes the best free championship court, otherwise the first free court its event may use, ahead of the queue.
+- `off`: championship courts are ordinary courts.
+
+Championship matches may leave their event's court section. Ordinary matches take championship courts last. When no championship court can be used (all paused or removed), everything plays as if the mode were `off`. Directors sending a match to a court by hand aren't limited by any of this. Staff edit these columns directly.
+
 Matches that aren't playable keep their place and are skipped. **Overdue holds**: once a team's next match has been ready in its event for `overdue_after_minutes`, it holds its players, so matches further down can't take them.
 
 Assignment runs after every score, check-in, queue or court change in a live, unpaused tournament, and every 30 seconds via pg_cron, which catches event start times passing.
 
 | Function | Who | What it does |
 |---|---|---|
-| `up_next(p_tournament)` → rows | Anyone (staff for drafts) | The queue: matches that go on the next free court first (in the order they'll be called), then the rest in queue order. `queue_rank` is the place in that list; also `blocked_reason`, `overdue` and `court_names` (the event's section) |
+| `up_next(p_tournament)` → rows | Anyone (staff for drafts) | The queue: matches that go on the next free court first (in the order they'll be called), then the rest in queue order. `queue_rank` is the place in that list; also `blocked_reason`, `overdue`, `court_names` (the event's section), `championship` (a championship match) and, for a playable championship match whose courts are busy in Wait mode, `blocked_reason = 'waiting_for_championship_court'` with `waiting_for_court` (the Main court's name for a final, null = any championship court) and `wait_until` (null = no limit) |
 | `move_in_queue(p_match, p_before_match = null)` | Staff | Put a match just above another one, or at the bottom |
 | `hold_match(p_match, p_hold)` | Staff | Hold: keeps its place but is skipped |
 | `rebuild_queue(p_tournament)` | Staff | Undo manual moves; back to schedule order |
