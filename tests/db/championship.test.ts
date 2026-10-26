@@ -206,4 +206,92 @@ describe('championship courts', () => {
     const t = await one(db, 'select * from public.tournaments where id = $1', [tournamentId]);
     expect([t.championship_mode, t.championship_wait_minutes, t.final_wait_minutes]).toEqual(['first_available', 10, null]);
   });
+
+  /**
+   * 4 courts, Court 1 Main, Court 2 2nd. A 4-team bracket starts first (semis on
+   * Courts 1 and 2), then an 8-team round robin (Courts 3-4, two more ready).
+   */
+  async function bracketAndPool(championshipMode: 'wait' | 'first_available' = 'wait') {
+    const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START });
+    await rank(tournamentId, 'Court 1', 1);
+    await rank(tournamentId, 'Court 2', 2);
+    await mode(tournamentId, championshipMode);
+    const open = await eventWithTeams(tournamentId, 'O', 4, { format: 'single_elim' });
+    const pool = await eventWithTeams(tournamentId, 'P', 8);
+    await generate(db, open.eventId);
+    await generate(db, pool.eventId);
+    expect((await onCourt(tournamentId, open.eventId)).map((m) => m.split('@')[1]).sort()).toEqual(['Court 1', 'Court 2']);
+    const semiOn = async (court: string) => (await liveOn(tournamentId, court))!;
+    return { tournamentId, open, pool, semiOn };
+  }
+
+  it('holds the Main court for a final that is about to be ready', async () => {
+    const { tournamentId, open, pool, semiOn } = await bracketAndPool();
+    await setClock(db, addMinutes(START, 10));
+    await reportScore(db, (await semiOn('Court 1')).id, [[11, 5]]);
+    expect(await liveOn(tournamentId, 'Court 1')).toBeUndefined();
+    const [top] = await upNext(db, tournamentId);
+    expect([top.event_id, top.blocked_reason]).toEqual([pool.eventId, null]);
+
+    await reportScore(db, (await semiOn('Court 2')).id, [[11, 5]]);
+    expect(await onCourt(tournamentId, open.eventId)).toEqual(['Final@Court 1']);
+    expect((await liveOn(tournamentId, 'Court 2'))!.event_id).toBe(pool.eventId);
+  });
+
+  it('keeps championship courts busy when nothing is coming', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 3, start: START });
+    await rank(tournamentId, 'Court 1', 1);
+    const pool = await eventWithTeams(tournamentId, 'P', 8);
+    await generate(db, pool.eventId);
+    expect((await liveOn(tournamentId, 'Court 1'))!.event_id).toBe(pool.eventId);
+  });
+
+  /** The Main court is taken by hand, then the final becomes ready at START + 12. */
+  async function finalWaitingForMain(championshipMode: 'wait' | 'first_available' = 'wait') {
+    const setup = await bracketAndPool(championshipMode);
+    const { tournamentId, pool, semiOn } = setup;
+    await setClock(db, addMinutes(START, 10));
+    await reportScore(db, (await semiOn('Court 1')).id, [[11, 5]]);
+    if (championshipMode === 'wait') {
+      const ready = (await upNext(db, tournamentId)).find((q) => q.event_id === pool.eventId && !q.blocked_reason)!;
+      await db.query('select public.assign_match_to_court($1, $2)', [ready.match_id, await courtId(tournamentId, 'Court 1')]);
+    }
+    await setClock(db, addMinutes(START, 12));
+    await reportScore(db, (await semiOn('Court 2')).id, [[11, 5]]);
+    return setup;
+  }
+
+  it('makes a final wait for Main, shows why, then gives up after the limit', async () => {
+    const { tournamentId, open, pool } = await finalWaitingForMain();
+    expect(await onCourt(tournamentId, open.eventId)).toEqual([]);
+    expect((await liveOn(tournamentId, 'Court 2'))!.event_id).toBe(pool.eventId);
+    const final = (await upNext(db, tournamentId)).find((q) => q.event_id === open.eventId)!;
+    expect(final).toMatchObject({
+      label: 'Final',
+      championship: true,
+      blocked_reason: 'waiting_for_championship_court',
+      waiting_for_court: 'Court 1',
+    });
+    expect(new Date(final.wait_until).toISOString()).toBe(addMinutes(START, 42).toISOString());
+
+    await setClock(db, addMinutes(START, 43));
+    await reportScore(db, (await liveOn(tournamentId, 'Court 3'))!.id, [[11, 5]]);
+    expect(await onCourt(tournamentId, open.eventId)).toEqual(['Final@Court 3']);
+  });
+
+  it('sends a final to the first free court in First-available mode', async () => {
+    const { tournamentId, open, pool } = await finalWaitingForMain('first_available');
+    expect((await liveOn(tournamentId, 'Court 1'))!.event_id).toBe(pool.eventId);
+    expect(await onCourt(tournamentId, open.eventId)).toEqual(['Final@Court 2']);
+  });
+
+  it('picks up a mode change at the next assignment', async () => {
+    const { tournamentId, open } = await finalWaitingForMain();
+    await mode(tournamentId, 'first_available');
+    await setClock(db, addMinutes(START, 20));
+    await reportScore(db, (await liveOn(tournamentId, 'Court 3'))!.id, [[11, 5]]);
+    expect(await onCourt(tournamentId, open.eventId)).toEqual(['Final@Court 3']);
+    const queue = await upNext(db, tournamentId);
+    expect(queue.some((q) => q.blocked_reason === 'waiting_for_championship_court')).toBe(false);
+  });
 });

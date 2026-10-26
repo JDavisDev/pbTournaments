@@ -122,6 +122,35 @@ language sql stable set search_path = '' as $$
   order by 3 desc, m.queued_at, q.queue_rank
 $$;
 
+-- Championship matches that will be ready soon: every match feeding them is
+-- on court or done. Wait mode keeps a championship court free for each (the
+-- Main court for a final) instead of starting an ordinary match there.
+create function private.championship_coming(p_tournament uuid, p_now timestamptz)
+returns table (match_id uuid, is_final boolean)
+language sql stable set search_path = '' as $$
+  with ready as (select r.match_id from private.championship_ready(p_tournament, p_now) r)
+  select m.id, m.round_key in ('final', 'grand_final')
+  from public.matches m
+  join public.tournaments t on t.id = m.tournament_id
+  where m.tournament_id = p_tournament
+    and t.championship_mode = 'wait'
+    and cardinality(private.championship_courts(p_tournament)) > 0
+    and m.stage = 'bracket'
+    and not m.on_hold
+    and m.status in ('waiting', 'queued')
+    and m.round_key = any (t.championship_rounds)
+    and private.championship_weight(m.round_key) > 0
+    and m.id not in (select ready.match_id from ready)
+    and exists (
+      select 1 from public.matches f
+      where f.winner_to_match_id = m.id or f.loser_to_match_id = m.id
+    )
+    and not exists (
+      select 1 from public.matches f
+      where (f.winner_to_match_id = m.id or f.loser_to_match_id = m.id) and f.status in ('waiting', 'queued')
+    )
+$$;
+
 -- The first of the free courts a division may use: one in its section, or
 -- (no section) one outside every section in use. Courts in p_last are only
 -- taken when nothing else fits.
@@ -139,7 +168,8 @@ $$;
 -- Sends the top playable matches to free courts. Championship matches go
 -- first (see the top of this file), then everything else in queue order,
 -- each taking the first free court it may use. Ordinary matches take
--- championship courts last, so those are more often free for the big rounds.
+-- championship courts last, so those are more often free for the big rounds,
+-- and never one held for a championship match that's about to be ready.
 create or replace function private.run_assignment(p_tournament uuid) returns int
 language plpgsql set search_path = '' as $$
 declare
@@ -149,6 +179,7 @@ declare
   v_champ uuid[];
   v_mode text;
   v_seen uuid[] := '{}';
+  v_held uuid[] := '{}';
   v_court uuid;
   c record;
   v_assigned int := 0;
@@ -199,6 +230,32 @@ begin
   end loop;
 
   for c in
+    select k.is_final from private.championship_coming(p_tournament, v_now) k
+    order by k.is_final desc
+  loop
+    v_court := null;
+    if c.is_final then
+      if v_champ[1] = any (v_courts) and not (v_champ[1] = any (v_held)) then
+        v_court := v_champ[1];
+      end if;
+    else
+      select ch.id into v_court
+      from unnest(v_champ) with ordinality as ch(id, n)
+      where ch.id = any (v_courts) and not (ch.id = any (v_held))
+      order by ch.n
+      limit 1;
+    end if;
+    if v_court is not null then
+      v_held := v_held || v_court;
+    end if;
+  end loop;
+  v_courts := array(
+    select f.id from unnest(v_courts) with ordinality as f(id, n)
+    where not (f.id = any (v_held))
+    order by f.n
+  );
+
+  for c in
     select q.match_id, e.court_ids
     from private.plan_queue(p_tournament, v_now) q
     join public.matches m on m.id = q.match_id
@@ -219,4 +276,85 @@ begin
     v_assigned := v_assigned + 1;
   end loop;
   return v_assigned;
+end $$;
+
+-- The queue, as before, plus championship matches: championship says the
+-- match is one, and a ready one whose courts are all busy in Wait mode says
+-- waiting_for_championship_court, which court it waits for
+-- (waiting_for_court; null = any championship court) and until when
+-- (wait_until; null = no limit).
+drop function public.up_next(uuid);
+create function public.up_next(p_tournament uuid)
+returns table (
+  queue_rank int,
+  match_id uuid,
+  event_id uuid,
+  event_name text,
+  label text,
+  team1_id uuid,
+  team1_name text,
+  team2_id uuid,
+  team2_name text,
+  blocked_reason text,
+  overdue boolean,
+  waiting_since timestamptz,
+  court_names text[],
+  championship boolean,
+  waiting_for_court text,
+  wait_until timestamptz
+)
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_now timestamptz := private.clock();
+  v_free uuid[];
+  v_champ uuid[];
+  v_main text;
+begin
+  if not exists (
+    select 1 from public.tournaments t
+    where t.id = p_tournament and (t.status <> 'draft' or public.is_tournament_staff(t.id))
+  ) then
+    raise exception 'Tournament not found' using errcode = 'P0002';
+  end if;
+  v_free := private.free_courts(p_tournament);
+  v_champ := private.championship_courts(p_tournament);
+  select c.name into v_main from public.courts c where c.id = v_champ[1];
+
+  return query
+  with waiting as (
+    select r.match_id, r.is_final, r.wait_until
+    from private.championship_ready(p_tournament, v_now) r
+    join public.tournaments tn on tn.id = p_tournament
+    where tn.championship_mode = 'wait'
+      and not r.expired
+      and case when r.is_final then not (v_champ[1] = any (v_free))
+               else not (v_champ && v_free) end
+  ),
+  rows as (
+    select q.queue_rank as rank, m.id, e.id as event_id, e.name, m.label, t1.id as t1, t1.name as t1_name,
+           t2.id as t2, t2.name as t2_name,
+           case when w.match_id is not null then 'waiting_for_championship_court' else q.blocked_reason end as reason,
+           q.overdue, q.waiting_since,
+           array(
+             select c.name from public.courts c
+             where c.id = any (e.court_ids) and c.retired_at is null
+             order by c.sort_order, c.name
+           ) as court_names,
+           cardinality(v_champ) > 0 and m.stage = 'bracket' and m.round_key = any (tn.championship_rounds)
+             and private.championship_weight(m.round_key) > 0 as championship,
+           case when w.is_final then v_main end as waiting_for_court,
+           w.wait_until
+    from private.plan_queue(p_tournament, v_now) q
+    join public.matches m on m.id = q.match_id
+    join public.events e on e.id = m.event_id
+    join public.tournaments tn on tn.id = m.tournament_id
+    join public.teams t1 on t1.id = m.team1_id
+    join public.teams t2 on t2.id = m.team2_id
+    left join waiting w on w.match_id = m.id
+  )
+  select (row_number() over (order by r.reason is not null, r.rank))::int,
+         r.id, r.event_id, r.name, r.label, r.t1, r.t1_name, r.t2, r.t2_name,
+         r.reason, r.overdue, r.waiting_since, r.court_names, r.championship, r.waiting_for_court, r.wait_until
+  from rows r
+  order by 1;
 end $$;
