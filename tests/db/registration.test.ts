@@ -238,13 +238,14 @@ describe('division rules', () => {
     ).rejects.toThrow(/needs your DUPR rating/);
   });
 
-  it('closes an event when it fills up', async () => {
+  it('waitlists entries once an event fills up', async () => {
     const { tournamentId, eventId } = await division({ max_teams: 1 });
     await register(tournamentId, { first: 'A', last: 'B', email: 'a@x.test' }, partner(eventId));
     await register(tournamentId, { first: 'C', last: 'D', email: 'c@x.test' }, partner(eventId));
-    await expect(register(tournamentId, { first: 'E', last: 'F', email: 'e@x.test' }, partner(eventId))).rejects.toThrow(
-      /is full/,
-    );
+    await expect(register(tournamentId, { first: 'E', last: 'F', email: 'e@x.test' }, partner(eventId))).resolves.toMatchObject({
+      status: 'waitlisted',
+      amount_cents: 0,
+    });
   });
 
   it('lets players register without a partner when allowed', async () => {
