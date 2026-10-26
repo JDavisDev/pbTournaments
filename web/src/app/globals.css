@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Screens big enough to show the TV board as one full screen: TVs, laptops, tablets
+   on their side (not phones held sideways). */
+@custom-variant tv (@media (orientation: landscape) and (min-height: 500px));
+
 /* Design tokens. Black and white, with one medium-dark green for "live".
    "accent" is ink: the color of primary actions (black on light, white on
    dark). Status colors are what directors read across the room:

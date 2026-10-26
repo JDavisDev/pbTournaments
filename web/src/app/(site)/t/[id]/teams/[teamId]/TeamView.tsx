@@ -10,11 +10,13 @@ import { MatchRow } from '@/components/MatchRow';
 import { StandingsTable } from '@/components/StandingsTable';
 import { Icon } from '@/components/Icon';
 import { CourtSign, FormatLine, MatchSteps, useMyTeam, useScoreCode } from '@/components/MatchDay';
+import { ScoreEntry } from '@/components/ScoreEntry';
 import { StreamEmbed } from '@/components/StreamEmbed';
-import { Button, Card, Empty, LinkButton, Spinner } from '@/components/ui';
-import { getEvents, getMatches, getQueue, getStandings, getTeams, getTournament } from '@/lib/api';
+import { Button, Card, Empty, Spinner } from '@/components/ui';
+import { getEvents, getMatches, getQueue, getStandings, getTeams, getTournament, reportScore, reportScoreByCode } from '@/lib/api';
 import { isPlayable, minutesSince, ordinal, poolName } from '@/lib/format';
-import { useLiveTournament, useNow } from '@/lib/hooks';
+import { useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
+import { rulesOf } from '@/lib/scoring';
 import type { MatchDetails, QueueRow, Team } from '@/lib/types';
 
 async function load(id: string) {
@@ -159,6 +161,15 @@ function MatchDayPanel({
 }) {
   const [myTeam, setMyTeam] = useMyTeam(tournamentId);
   const scoreCode = useScoreCode(onCourt?.id);
+  const staff = useStaffAccess(tournamentId);
+  // Scores go in right here: with the code from the player's text link (it
+  // proves they're in the match), or as tournament staff.
+  const enterScore =
+    onCourt && scoreCode
+      ? (games: [number, number][]) => reportScoreByCode(scoreCode, games)
+      : onCourt && staff.role
+        ? (games: [number, number][]) => reportScore(onCourt.id, games)
+        : null;
   const allDone = mine.length > 0 && mine.every((m) => m.status === 'completed');
   const step = allDone ? 4 : onCourt ? 2 : !team.checked_in_at ? 0 : 1;
   const capitalized = (text: string) => text.replace(/^./, (c) => c.toUpperCase());
@@ -199,12 +210,21 @@ function MatchDayPanel({
           </p>
           <FormatLine text={onCourt.format_text} />
           <p className="text-called">
-            Called {minutesSince(onCourt.assigned_at, now)} min ago. Head to the court and start; enter the score when you finish.
+            Called {minutesSince(onCourt.assigned_at, now)} min ago. Head to the court and start; enter the score
+            {enterScore ? ' below' : ''} when you finish.
           </p>
-          {scoreCode ? (
-            <LinkButton variant="primary" href={`/s/${scoreCode}`} className="h-14 text-lg">
-              Enter the score <Icon name="arrow" />
-            </LinkButton>
+          {enterScore ? (
+            <div className="border-t border-border pt-4 text-left">
+              <h4 className="text-2xl">Enter the score</h4>
+              <p className="mb-3 text-muted">When you finish. Only one player needs to do this.</p>
+              <ScoreEntry
+                key={onCourt.id}
+                team1={onCourt.team1_name ?? ''}
+                team2={onCourt.team2_name ?? ''}
+                rules={rulesOf(onCourt)}
+                onSubmit={enterScore}
+              />
+            </div>
           ) : (
             <p className="rounded-xl bg-surface-2 px-4 py-3 text-left">
               <b>To enter the score:</b> tap the link in the text we sent you, or tell the front desk.
