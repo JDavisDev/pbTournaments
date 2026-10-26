@@ -3,8 +3,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
-import { Button, Card, Empty, ErrorText, Field, Input, Select, Spinner } from '@/components/ui';
-import { getEvents, getTournament, startRegistration } from '@/lib/api';
+import { Badge, Button, Card, Empty, ErrorText, Field, Input, Select, Spinner } from '@/components/ui';
+import { checkDiscountCode, getEvents, getRegistrationAvailability, getTournament, startRegistration } from '@/lib/api';
 import { describeDivision, entryProblem, type PlayerFacts } from '@/lib/eligibility';
 import { formatMoney, formatTime, registrationPrice } from '@/lib/format';
 import { useAction, useLoad, useNow } from '@/lib/hooks';
@@ -24,8 +24,12 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   // A division's sign-up link (?event=) opens with that division picked.
   const linkedEvent = searchParams.get('event');
   const data = useLoad(async () => {
-    const [tournament, events] = await Promise.all([getTournament(id), getEvents(id)]);
-    return { tournament, events };
+    const [tournament, events, availability] = await Promise.all([
+      getTournament(id),
+      getEvents(id),
+      getRegistrationAvailability(id),
+    ]);
+    return { tournament, events, availability };
   }, [id]);
   const [me, setMe] = useState({ first_name: '', last_name: '', email: '', phone: '', sms_opt_in: true });
   const [facts, setFacts] = useState<PlayerFacts>({
@@ -41,12 +45,22 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   );
   const submit = useAction();
   const now = useNow(60_000);
+  const [code, setCode] = useState('');
+  const [discount, setDiscount] = useState<{ code: string; cents: number } | null>(null);
+  const codeCheck = useAction();
+  const [waiverOk, setWaiverOk] = useState(false);
 
   if (data.error === 'not-configured') return <ConnectNotice />;
   if (data.error) return <Empty>{data.error}</Empty>;
   if (!data.data) return <Spinner />;
-  const { tournament: t, events } = data.data;
+  const { tournament: t, events, availability } = data.data;
+  const full = new Set(availability.filter((a) => a.full).map((a) => a.event_id));
+  const spotsLeft = new Map(availability.map((a) => [a.event_id, a.spots_left]));
+  const closesAt = t.registration_closes_at ? new Date(t.registration_closes_at).getTime() : null;
 
+  if (t.status === 'registration' && closesAt !== null && closesAt < now) {
+    return <Empty>Registration closed on {new Date(closesAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.</Empty>;
+  }
   if (t.status !== 'registration') {
     return (
       <Empty>
@@ -59,8 +73,13 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
 
   // Ignore a linked division that isn't in this tournament.
   const picks = Object.entries(chosen).filter(([eventId]) => events.some((e) => e.id === eventId));
-  const count = picks.length;
-  const total = registrationPrice(t, count, now);
+  // Full divisions go on the waitlist and cost nothing until a spot opens.
+  const paidPicks = picks.filter(([eventId]) => !full.has(eventId));
+  const waitlistPicks = picks.filter(([eventId]) => full.has(eventId));
+  const count = paidPicks.length;
+  const price = registrationPrice(t, count, now);
+  const total = Math.max(0, price - (discount?.cents ?? 0));
+  const needsWaiver = !!t.waiver_text?.trim();
   const early = t.early_until && new Date(t.early_until).getTime() > now;
   const firstPrice = early ? (t.early_entry_fee_cents ?? t.entry_fee_cents) : t.entry_fee_cents;
   const extraPrice = early ? (t.early_extra_event_fee_cents ?? t.extra_event_fee_cents) : t.extra_event_fee_cents;
@@ -96,10 +115,12 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
               dupr_singles: optionalNumber(facts.dupr_singles),
               self_rating: optionalNumber(facts.self_rating),
               dupr_id: facts.dupr_id.trim() || null,
+              discount_code: discount?.code ?? (code.trim() || null),
+              waiver_accepted: needsWaiver ? waiverOk : undefined,
             },
             entries: picks.map(([event_id, c]) => ({ event_id, ...c })),
           });
-          if (reg.status === 'paid') {
+          if (reg.status === 'paid' || reg.status === 'waitlisted') {
             router.push(`/t/${id}/register/done?r=${reg.registration_id}`);
             return;
           }
@@ -114,6 +135,10 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
         });
       }}
     >
+      {t.image_data && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={t.image_data} alt="" className="max-h-56 w-full rounded-2xl object-cover" />
+      )}
       <div>
         <h2 className="text-4xl">Register</h2>
         <p className="mt-1 text-muted">
@@ -121,7 +146,18 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
           {early && t.early_until ? ` (early price until ${new Date(t.early_until).toLocaleDateString()})` : ''}. One
           price, no added fees.
         </p>
+        {closesAt && (
+          <p className="mt-1 font-semibold">
+            Registration closes {new Date(closesAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.
+          </p>
+        )}
       </div>
+      {t.is_demo && (
+        <p className="rounded-lg bg-called-soft px-3 py-2 text-called">
+          Practice tournament: anyone trying the demo can see what you enter here. Use made-up names, phone numbers and
+          emails.
+        </p>
+      )}
       {cancelled && (
         <p className="rounded-lg bg-called-soft px-3 py-2 text-sm text-called">
           Payment was cancelled, so you’re not registered yet. You can try again.
@@ -276,7 +312,14 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
                   <span className="font-medium">{e.name}</span>
                   <span className="block text-sm text-muted">
                     {describeDivision(e)}
-                    {e.not_before ? ` · starts ${formatTime(e.not_before, t.time_zone)}` : ''}
+                    {e.not_before && t.times_published_at ? ` · starts ${formatTime(e.not_before, t.time_zone)}` : ''}
+                  </span>
+                  <span className="mt-1 flex flex-wrap gap-1.5">
+                    {full.has(e.id) ? (
+                      <Badge tone="called">Full: you’ll join the waitlist</Badge>
+                    ) : spotsLeft.get(e.id) != null && spotsLeft.get(e.id)! <= 6 ? (
+                      <Badge tone="info">{Math.ceil(spotsLeft.get(e.id)! / (e.kind === 'doubles' ? 2 : 1))} spots left</Badge>
+                    ) : null}
                   </span>
                   {problem && (
                     <span className={`block text-sm ${blocked ? 'text-late' : 'text-called'}`}>This event {problem}.</span>
@@ -310,16 +353,70 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
         })}
       </Card>
 
+      {count > 0 && (
+        <Card className="flex flex-col gap-2 p-5">
+          <Field label="Discount code" hint="Optional">
+            <div className="flex gap-2">
+              <Input
+                className="min-w-0 flex-1 font-mono uppercase"
+                value={code}
+                onChange={(e) => (setCode(e.target.value), setDiscount(null))}
+              />
+              <Button
+                type="button"
+                disabled={!code.trim() || codeCheck.busy}
+                onClick={() =>
+                  codeCheck.run(async () => {
+                    const r = await checkDiscountCode(id, code.trim(), price);
+                    if (r.problem) throw new Error(r.problem);
+                    setDiscount({ code: r.code!, cents: r.cents });
+                  })
+                }
+              >
+                Apply
+              </Button>
+            </div>
+          </Field>
+          {discount && <p className="text-live">{discount.code}: {formatMoney(discount.cents)} off.</p>}
+          <ErrorText>{codeCheck.error}</ErrorText>
+        </Card>
+      )}
+
+      {needsWaiver && (
+        <Card className="flex flex-col gap-3 p-5">
+          <h3 className="text-xl">Waiver</h3>
+          <div className="max-h-56 overflow-y-auto rounded-xl bg-surface p-3 text-sm whitespace-pre-wrap">{t.waiver_text}</div>
+          <label className="flex items-start gap-3">
+            <input type="checkbox" required className="mt-0.5 h-6 w-6 accent-[var(--accent)]" checked={waiverOk} onChange={(e) => setWaiverOk(e.target.checked)} />
+            <span className="font-medium">I have read and agree to the waiver.</span>
+          </label>
+        </Card>
+      )}
+
+      {waitlistPicks.length > 0 && (
+        <p className="rounded-lg bg-called-soft px-3 py-2 text-called">
+          You’ll join the waitlist for {waitlistPicks.map(([eventId]) => events.find((e) => e.id === eventId)?.name).join(', ')}.
+          Nothing is charged for it unless a spot opens; then we text and email you a link to pay.
+        </p>
+      )}
+
       <ErrorText>{submit.error}</ErrorText>
       <div className="sticky bottom-0 -mx-4 bg-bg/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0">
-        <Button variant="primary" type="submit" className="h-14 w-full text-base" disabled={submit.busy || count === 0}>
+        <Button
+          variant="primary"
+          type="submit"
+          className="h-14 w-full text-base"
+          disabled={submit.busy || picks.length === 0 || (needsWaiver && !waiverOk)}
+        >
           {submit.busy
             ? 'Starting checkout…'
-            : count === 0
+            : picks.length === 0
               ? 'Choose an event'
-              : total === 0
-                ? 'Register'
-                : `Continue to payment · ${formatMoney(total)}`}
+              : count === 0
+                ? 'Join the waitlist'
+                : total === 0
+                  ? 'Register'
+                  : `Continue to payment · ${formatMoney(total)}`}
         </Button>
       </div>
     </form>

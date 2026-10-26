@@ -24,6 +24,7 @@ import {
 import { describeDivision, suggestEventName } from '@/lib/eligibility';
 import { formatSummary, fromZonedInput, poolName, shortFormat, toZonedInput } from '@/lib/format';
 import { isYoutubeUrl } from '@/lib/youtube';
+import { DiscountCodesCard, FeesCard, RegistrationCard, SharingCard } from './SetupCards';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import type {
   BracketType,
@@ -93,6 +94,10 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
         <StatusCard tournament={data.tournament} onChanged={reload} />
         <SettingsCard key={data.tournament.id} tournament={data.tournament} onChanged={reload} />
         <PricesCard key={`prices-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
+        <FeesCard tournament={data.tournament} onChanged={reload} />
+        <SharingCard tournament={data.tournament} />
+        <RegistrationCard key={`reg-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
+        <DiscountCodesCard tournament={data.tournament} />
         <StreamsCard tournament={data.tournament} courts={data.courts} onChanged={reload} />
       </aside>
     </div>

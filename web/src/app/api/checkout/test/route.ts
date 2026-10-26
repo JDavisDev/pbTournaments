@@ -1,4 +1,4 @@
-import { confirmPayment, getRegistration, paymentsMode } from '@/server/payments';
+import { confirmPayment, confirmSetupPayment, getRegistration, getSetupFee, paymentsMode } from '@/server/payments';
 import { appUrl } from '@/server/serverRpc';
 
 /**
@@ -7,8 +7,18 @@ import { appUrl } from '@/server/serverRpc';
  */
 export async function POST(request: Request) {
   if (paymentsMode() !== 'test') return new Response('Not found', { status: 404 });
-  const { registrationId, outcome } = (await request.json()) as { registrationId?: string; outcome?: 'pay' | 'cancel' };
+  const { registrationId, setupTournamentId, outcome } = (await request.json()) as {
+    registrationId?: string;
+    setupTournamentId?: string;
+    outcome?: 'pay' | 'cancel';
+  };
   try {
+    if (setupTournamentId) {
+      const fee = await getSetupFee(setupTournamentId);
+      if (!fee) throw new Error('Tournament not found');
+      if (outcome === 'pay') await confirmSetupPayment(setupTournamentId, 'test', `test_setup_${setupTournamentId}`, fee.amount_cents);
+      return Response.json({ url: `${appUrl()}/t/${setupTournamentId}/setup${outcome === 'pay' ? '?setup=paid' : ''}` });
+    }
     const r = registrationId ? await getRegistration(registrationId) : null;
     if (!r) throw new Error('Registration not found');
     if (outcome === 'pay') {

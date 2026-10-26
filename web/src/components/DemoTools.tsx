@@ -5,6 +5,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { advanceDemo, createDemoTournament, getDemoInbox } from '@/lib/api';
+import { auth } from '@/lib/auth';
+import { setViewMode } from '@/lib/viewMode';
 import { formatTime } from '@/lib/format';
 import { useAction, useLiveTournament } from '@/lib/hooks';
 import { Icon } from './Icon';
@@ -22,39 +24,33 @@ export function DemoCard({ signedIn }: { signedIn: boolean }) {
           court desk, check players in, enter scores, and fast-forward the clock to watch the day play out. Nothing is
           charged and no real texts are sent.
         </p>
+        {!signedIn && <p className="mt-2 text-sm text-muted">No account needed: you’ll be signed in as a guest.</p>}
         <ErrorText>{error}</ErrorText>
       </div>
-      {signedIn ? (
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            [true, 'Start one in play', 'desk'],
+            [false, 'Start at check-in', 'checkin'],
+          ] as const
+        ).map(([arrived, label, page]) => (
           <Button
-            variant="primary"
+            key={page}
+            variant={arrived ? 'primary' : 'secondary'}
             disabled={busy}
             onClick={() =>
               run(async () => {
-                const id = await createDemoTournament(true);
-                router.push(`/t/${id}/desk`);
+                if (!signedIn) await auth.signInAsGuest();
+                setViewMode('admin');
+                const id = await createDemoTournament(arrived);
+                router.push(`/t/${id}/${page}`);
               })
             }
           >
-            {busy ? 'Building…' : 'Start one in play'}
+            {busy && arrived ? 'Building…' : label}
           </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              run(async () => {
-                const id = await createDemoTournament(false);
-                router.push(`/t/${id}/checkin`);
-              })
-            }
-          >
-            Start at check-in
-          </Button>
-        </div>
-      ) : (
-        <Link href="/login" className="inline-flex h-12 items-center rounded-full bg-accent px-6 font-medium text-accent-text">
-          Create a free test account
-        </Link>
-      )}
+        ))}
+      </div>
     </Card>
   );
 }
@@ -72,7 +68,11 @@ export function DemoClock({
   onChanged: () => void;
 }) {
   const { busy, error, run } = useAction();
-  const advance = (minutes: number) => run(() => advanceDemo(tournamentId, minutes), onChanged);
+  // Hosted databases stop a call after a few seconds, so go 10 minutes at a time.
+  const advance = (minutes: number) =>
+    run(async () => {
+      for (let left = minutes; left > 0; left -= 10) await advanceDemo(tournamentId, Math.min(10, left));
+    }, onChanged);
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border-2 border-dashed border-called/50 bg-called-soft/40 px-4 py-3">
       <Icon name="clock" className="h-6 w-6 text-called" />
@@ -92,7 +92,7 @@ export function DemoClock({
 }
 
 /** Demo tournaments only: the texts this team's players got, so a tester can play the team. */
-export function DemoInbox({ tournamentId, teamId }: { tournamentId: string; teamId: string }) {
+export function DemoInbox({ tournamentId, teamId, timeZone }: { tournamentId: string; teamId: string; timeZone: string }) {
   const { data } = useLiveTournament(tournamentId, () => getDemoInbox(teamId));
   if (!data || data.length === 0) return null;
   return (
@@ -103,7 +103,7 @@ export function DemoInbox({ tournamentId, teamId }: { tournamentId: string; team
         {data.slice(0, 6).map((t) => (
           <li key={t.id} className="rounded-2xl rounded-tl-sm bg-surface-2 px-4 py-3">
             <p className="text-xs text-muted">
-              To {t.player_name} · {formatTime(t.created_at)}
+              To {t.player_name} · {formatTime(t.created_at, timeZone)}
             </p>
             <p className="break-words">
               {t.body.split(/(\/s\/\w+)/).map((part, i) =>

@@ -3,7 +3,8 @@
 
 export interface LocalUser {
   id: string;
-  email: string;
+  /** Null for a guest (demo sites). */
+  email: string | null;
 }
 
 const SESSION_KEY = 'courtside-local-user';

@@ -60,6 +60,57 @@ export interface Tournament {
   dupr_score_type: 'SIDEOUT' | 'RALLY';
   /** A practice tournament: the demo clock works and its texts show on team pages. */
   is_demo: boolean;
+  /** Players across the tournament; more go on the waitlist. */
+  max_players: number | null;
+  registration_closes_at: string | null;
+  /** Players must agree to this to register. */
+  waiver_text: string | null;
+  /** One image (logo or banner) as a data URL. */
+  image_data: string | null;
+  /** Division start times show to players only once published. */
+  times_published_at: string | null;
+  /** Off: no texts (and no texting fee); emails still go out. */
+  texts_enabled: boolean;
+  /** The one-time setup fee; needed before registration opens or play starts. */
+  setup_paid_at: string | null;
+}
+
+export interface PlatformPricing {
+  setup_fee_cents: number;
+  per_player_cents: number;
+  texting_per_player_cents: number;
+}
+
+/** tournament_fees(): what the director owes the platform. */
+export interface TournamentFees extends PlatformPricing {
+  is_demo: boolean;
+  setup_due_cents: number;
+  setup_paid_at: string | null;
+  players: number;
+  texts_enabled: boolean;
+  player_fees_cents: number;
+}
+
+export type StaffRole = 'admin' | 'monitor';
+
+/** tournament_team(): who can run a tournament. */
+export interface StaffMember {
+  /** Null for a guest (demo sites). */
+  email: string | null;
+  role: StaffRole;
+  /** organization: always an admin; tournament: added here; invite: not signed up yet. */
+  source: 'organization' | 'tournament' | 'invite';
+  is_me: boolean;
+}
+
+export interface DiscountCode {
+  id: string;
+  tournament_id: string;
+  code: string;
+  percent_off: number | null;
+  amount_off_cents: number | null;
+  max_uses: number | null;
+  expires_at: string | null;
 }
 
 /** demo_inbox(): a text sent to a demo team's player; links are paths (/s/<code>). */
@@ -83,6 +134,8 @@ export interface RegistrationForm {
     dupr_singles: number | null;
     self_rating: number | null;
     dupr_id?: string | null;
+    discount_code?: string | null;
+    waiver_accepted?: boolean;
   };
   entries: { event_id: string; partner_name?: string; partner_email?: string }[];
 }
@@ -92,11 +145,20 @@ export interface RegistrationView {
   id: string;
   tournament_id: string;
   tournament_name: string;
-  status: 'pending' | 'paid' | 'cancelled' | 'refunded';
+  status: 'pending' | 'paid' | 'cancelled' | 'refunded' | 'waitlisted';
   amount_cents: number;
+  discount_cents?: number;
   player_name: string;
   email: string;
-  entries: { event_id: string; event_name: string; partner_name: string | null; team_id: string | null; team_name: string | null }[];
+  entries: {
+    event_id: string;
+    event_name: string;
+    partner_name: string | null;
+    team_id: string | null;
+    team_name: string | null;
+    waitlisted?: boolean;
+    offered?: boolean;
+  }[];
 }
 
 /** One row per registration entry (registration_details view), for directors. */
@@ -125,6 +187,11 @@ export interface RegistrationRow {
   partner_email: string | null;
   team_id: string | null;
   team_name: string | null;
+  waitlisted: boolean;
+  waitlisted_at: string | null;
+  offered_at: string | null;
+  discount_code: string | null;
+  discount_cents: number;
 }
 
 export interface TextLogRow {

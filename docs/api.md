@@ -132,6 +132,36 @@ Every court call queues one text per player in `notifications`, with the round's
 
 `matches.report_code` is never readable through the API; it only reaches players in their texts.
 
+## Platform fees
+
+Prices are one row in `private.platform_pricing` (default: $15 setup per tournament, $2 per player, $0.25 texting per player); change them with SQL, no code. `tournaments.texts_enabled` off means no texts are created at all (and no texting fee); emails still go. `set_tournament_status` refuses `registration` or `live` until the setup fee is paid (`setup_paid_at`), except for practice tournaments.
+
+| Function | Who | What it does |
+|---|---|---|
+| `platform_pricing()` → jsonb | Anyone | Current prices |
+| `tournament_fees(p_tournament)` → jsonb | Admin | Setup fee due or paid, players, per-player and texting fees so far |
+| `setup_fee_for_checkout`, `confirm_setup_payment` | Service role | The setup-fee checkout (`/api/checkout/setup`; Stripe webhook metadata `setup_tournament_id`) |
+
+Player and texting fees are tallied, not yet collected: collecting them automatically needs Stripe Connect (each director's own Stripe account, with the platform fee taken from each registration).
+
+## Sharing, registration controls and the waitlist
+
+**Roles.** Admins: organization members, people added to `tournament_staff` with role `admin`, and (practice tournaments) anyone signed in. Court monitors (`role = 'monitor'`): the court desk without admin controls, score entry, check-in, and sending a no-show back (`report_score`, `check_in_player`, `check_in_team`, `requeue_match`).
+
+| Function | Who | What it does |
+|---|---|---|
+| `my_tournament_role(p_tournament)` → text | Anyone | `admin`, `monitor` or null |
+| `add_tournament_staff(p_tournament, p_email, p_role)` → text | Admin | `added`, or `invited` when there's no account with that email yet |
+| `remove_tournament_staff(p_tournament, p_email)` | Admin | Removes access or the invite |
+| `tournament_team(p_tournament)` → rows | Admin | Everyone with access: organization members, people added here, open invites |
+| `claim_staff_invites()` → int | Signed in | Invites to your email become access (the screens call it after sign-in) |
+| `registration_availability(p_tournament)` → rows | Anyone | Per division: spots left and whether new entries join the waitlist |
+| `check_discount_code(p_tournament, p_code, p_amount_cents)` → jsonb | Anyone | `{code, cents, problem}` |
+| `offer_waitlist_spot(p_registration, p_event)` → jsonb | Admin | Takes the entry off the waitlist and texts and emails a pay link (free entries go straight in) |
+| `remove_waitlist_entry(p_registration, p_event)` | Admin | Drops a waitlisted entry |
+
+Tournaments add `max_players`, `registration_closes_at`, `waiver_text` (players must agree), `image_data` (one image, a data URL) and `times_published_at` (division start times show to players only once set). `start_registration` takes `discount_code` and `waiver_accepted` in `p_player`; entries into a full division or a full tournament are waitlisted (`registration_entries.waitlisted`) and cost nothing, and a registration that's only waitlisted has status `waitlisted`. Discount codes live in `discount_codes` (admins manage them directly): percent or amount off, optional max uses and expiry.
+
 ## Demo tournaments and planning
 
 `tournaments.is_demo` marks a practice tournament. Events have `pool_match_minutes` and `bracket_match_minutes` (expected minutes per match, court time included); the queue orders matches by division start + rounds × that length.
@@ -142,7 +172,7 @@ Every court call queues one text per player in `notifications`, with the round's
 | `advance_demo(p_tournament, p_minutes)` → timestamptz | Staff of a demo tournament | Plays it forward 1–60 minutes: shifts its timestamps back a minute at a time while players arrive, called teams reach their courts and matches finish with random scores |
 | `demo_inbox(p_team)` → rows | Anyone, demo tournaments only | The texts the team's players got, with score links as `/s/<code>` |
 
-Demo texts are marked as logged by a pg_cron job, and practice tournaments are deleted after 14 days. The Planner (`web/src/lib/planner.ts`) runs in the browser; it reads events and writes `not_before` and the match lengths.
+Demo texts are marked as logged by a pg_cron job, and practice tournaments are deleted after 14 days. With `private.site.demo = true` (a demo database), every new tournament is a practice tournament. The Planner (`web/src/lib/planner.ts`) runs in the browser; it reads events and writes `not_before` and the match lengths.
 
 ## DUPR
 

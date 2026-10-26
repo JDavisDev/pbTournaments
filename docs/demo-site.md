@@ -1,6 +1,6 @@
 # The demo site
 
-A hosted copy of Courtside for real people to try before we run live tournaments. Anyone can make a free account and build practice tournaments. No payments are taken and no texts are sent, whatever keys are set.
+A hosted copy of Courtside for real people to try before we run live tournaments. No account needed: visitors are signed in as a guest the moment they start a practice tournament or press **View as admin**, and anyone signed in (a guest too) is a director of every practice tournament. Real tournaments keep their organization's directors only. No payments are taken and no texts are sent, whatever keys are set.
 
 What testers can do:
 
@@ -23,9 +23,23 @@ The migrations were edited after your first push, so reset the online database o
 npx supabase db reset --linked
 ```
 
+Then push the latest migrations and mark the database as a demo, so every tournament made on it (including ones testers build from scratch) is a practice tournament with fast-forward and its texts shown on team pages. Push:
+
+```bash
+npx supabase db push
+```
+
+Then, in the Supabase **SQL Editor**, run:
+
+```sql
+update private.site set demo = true;
+```
+
+(When you go live, run it with `false`; existing practice tournaments stay practice ones.)
+
 In the Supabase dashboard:
 
-- **Authentication → Sign In / Providers → Email:** turn off **Confirm email**, so testers can sign up and start right away. Supabase's built-in email only sends a few messages an hour.
+- **Authentication → Sign In / Providers:** turn on **Allow anonymous sign-ins** (guests, no email). Also under **Email**, turn off **Confirm email**, for testers who do make an account. Supabase's built-in email only sends a few messages an hour.
 - **Authentication → URL Configuration:** set **Site URL** to the demo address (step 2), and add it under **Redirect URLs**.
 - **Database → Extensions:** check that `pg_cron` is on (the reset turns it on). The jobs are `assign-live-tournaments`, `log-demo-texts` and `clean-up-demo-tournaments`.
 
@@ -57,7 +71,7 @@ If you later put the project on GitHub, connect the repository in Vercel with **
 
 ### 3. Try it
 
-1. Open the site, **Create a free test account**, then **Start one in play**.
+1. Open the site and press **Start one in play** (no account needed).
 2. Put the TV board on a second screen: `/tv/<tournament id>`.
 3. On a phone, open a team page and follow its texts' score link.
 4. Fast-forward an hour and watch pools finish and brackets fill.
@@ -65,3 +79,5 @@ If you later put the project on GitHub, connect the repository in Vercel with **
 ## Going live later
 
 Turn `NEXT_PUBLIC_DEMO_MODE` off (or make a second Vercel project without it), then add the Stripe and Twilio keys (see [twilio.md](twilio.md)). Real tournaments can never be fast-forwarded, and only demo tournaments show their texts on team pages.
+
+Because every visitor can direct every practice tournament, testers should use made-up names, phones and emails when they register (the sign-up form says so on practice tournaments).

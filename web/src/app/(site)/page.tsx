@@ -7,6 +7,7 @@ import { getLiveTournaments, getMyOrganizations } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useLoad, useSession } from '@/lib/hooks';
 import { DemoCard } from '@/components/DemoTools';
+import { PricingBlock } from '@/components/PricingBlock';
 import { isBackendConfigured, isDemoMode } from '@/lib/config';
 
 export default function Home() {
@@ -42,6 +43,7 @@ export default function Home() {
         </div>
       </section>
       {isDemoMode && session !== undefined && <DemoCard signedIn={!!session} />}
+      <PricingBlock />
 
       {session && (
         <section className="mb-10">

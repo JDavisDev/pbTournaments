@@ -47,6 +47,10 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
       <div className="flex flex-col gap-6">
+        {tournament.image_data && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={tournament.image_data} alt="" className="max-h-72 w-full rounded-2xl object-cover" />
+        )}
         {tournament.stream_url && <StreamEmbed url={tournament.stream_url} title={`${tournament.name} live`} />}
         {tournament.status === 'registration' && (
           <Card className="flex flex-wrap items-center justify-between gap-3 border-accent/50 bg-accent-soft/40 p-4">
@@ -55,6 +59,11 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
               <p className="text-sm text-muted">
                 {formatMoney(registrationPrice(tournament, 1))} first event, {formatMoney(registrationPrice(tournament, 2) - registrationPrice(tournament, 1))} each extra
               </p>
+              {tournament.registration_closes_at && (
+                <p className="text-sm font-semibold">
+                  Closes {new Date(tournament.registration_closes_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: tournament.time_zone })}
+                </p>
+              )}
             </div>
             <Link href={`/t/${tournament.id}/register`} className="rounded-lg bg-accent px-4 py-2.5 font-medium text-accent-text">
               Register
@@ -159,7 +168,7 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
                       <div className="font-semibold">{e.name}</div>
                       <div className="text-sm text-muted">
                         {describeDivision(e)} · {teams.filter((t) => t.event_id === e.id).length} teams
-                        {e.not_before ? ` · starts ${formatTime(e.not_before)}` : ''}
+                        {e.not_before && tournament.times_published_at ? ` · starts ${formatTime(e.not_before, tournament.time_zone)}` : ''}
                       </div>
                       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-2">
                         <div className="h-full bg-brand" style={{ width: `${pct}%` }} />

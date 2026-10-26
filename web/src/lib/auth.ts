@@ -13,6 +13,8 @@ interface Auth {
   signIn(email: string, password: string): Promise<void>;
   /** 'confirm-email' when Supabase needs the address confirmed first. */
   signUp(email: string, password: string): Promise<'signed-in' | 'confirm-email'>;
+  /** Demo sites: a session without an email (Supabase anonymous sign-in). */
+  signInAsGuest(): Promise<void>;
   /** Supabase only: a one-time sign-in link by email. */
   emailLink?(email: string): Promise<void>;
   signOut(): Promise<void>;
@@ -22,11 +24,11 @@ const remoteAuth: Auth = {
   async current() {
     const { data } = await supabase().auth.getSession();
     const u = data.session?.user;
-    return u ? { id: u.id, email: u.email ?? '' } : null;
+    return u ? { id: u.id, email: u.email || null } : null;
   },
   subscribe(listener) {
     const { data } = supabase().auth.onAuthStateChange((_event, session) =>
-      listener(session ? { id: session.user.id, email: session.user.email ?? '' } : null),
+      listener(session ? { id: session.user.id, email: session.user.email || null } : null),
     );
     return () => data.subscription.unsubscribe();
   },
@@ -42,6 +44,16 @@ const remoteAuth: Auth = {
     });
     if (error) throw new Error(error.message);
     return data.session ? 'signed-in' : 'confirm-email';
+  },
+  async signInAsGuest() {
+    const { error } = await supabase().auth.signInAnonymously();
+    if (error) {
+      throw new Error(
+        /anonymous/i.test(error.message)
+          ? 'Guest access is off. Turn on anonymous sign-ins in Supabase (Authentication → Sign In / Providers).'
+          : error.message,
+      );
+    }
   },
   async emailLink(email) {
     const { error } = await supabase().auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
@@ -74,6 +86,11 @@ const localAuth: Auth = {
   },
   async signIn(email, password) {
     const user = await localCall<AuthUser>('signIn', [email, password]);
+    setLocalUser(user);
+    notifyLocal(user);
+  },
+  async signInAsGuest() {
+    const user = await localCall<AuthUser>('signInGuest');
     setLocalUser(user);
     notifyLocal(user);
   },

@@ -95,7 +95,7 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
       </div>
 
       <MatchDayPanel tournamentId={id} team={team} mine={mine} onCourt={onCourt} next={next} nextQueue={nextQueue} now={now} />
-      {data.tournament.is_demo && <DemoInbox tournamentId={id} teamId={teamId} />}
+      {data.tournament.is_demo && <DemoInbox tournamentId={id} teamId={teamId} timeZone={tz} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section>

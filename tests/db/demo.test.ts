@@ -58,11 +58,11 @@ describe('demo tournaments', () => {
     expect(new Date(after.at).getTime()).toBeLessThanOrEqual(new Date(before.at).getTime() - 9 * 60_000);
   });
 
-  it('only fast-forwards demo tournaments, and only for their staff', async () => {
+  it('only fast-forwards demo tournaments, and never for visitors who are not signed in', async () => {
     const { tournamentId } = await createLiveTournament(db, { courts: 1, start: new Date() });
     await expect(db.query('select public.advance_demo($1, 5)', [tournamentId])).rejects.toThrow(/Only demo/);
     const { id } = await demo();
-    await actAs(db, await createUser(db));
+    await actAs(db, null);
     await expect(db.query('select public.advance_demo($1, 5)', [id])).rejects.toThrow();
   });
 
@@ -87,5 +87,32 @@ describe('demo clean-up', () => {
     await db.query(`update public.tournaments set created_at = now() - interval '15 days' where id = $1`, [id]);
     expect(await one(db, 'select private.clean_up_demo_tournaments() as n')).toEqual({ n: 1 });
     expect(await one(db, `select count(*)::int as n from public.players where email like '%@players.test'`)).toEqual({ n: 0 });
+  });
+});
+
+describe('demo site', () => {
+  it('makes every new tournament a practice one when the database is a demo', async () => {
+    const plain = await createLiveTournament(db, { courts: 1, start: new Date() });
+    expect((await one(db, 'select is_demo from public.tournaments where id = $1', [plain.tournamentId])).is_demo).toBe(false);
+    await db.query('update private.site set demo = true');
+    const practice = await createLiveTournament(db, { courts: 1, start: new Date() });
+    expect((await one(db, 'select is_demo from public.tournaments where id = $1', [practice.tournamentId])).is_demo).toBe(true);
+  });
+});
+
+describe('guest directors', () => {
+  it('lets any signed-in visitor run a practice tournament, but not a real one', async () => {
+    const real = await createLiveTournament(db, { courts: 1, start: new Date() });
+    const { id } = await demo();
+    const guest = await createUser(db);
+    await actAs(db, guest);
+    expect((await one(db, 'select public.is_tournament_staff($1) as v', [id])).v).toBe(true);
+    expect((await one(db, 'select public.is_tournament_staff($1) as v', [real.tournamentId])).v).toBe(false);
+    await db.query('select public.advance_demo($1, 5)', [id]);
+    await expect(db.query('select public.set_auto_assign($1, false)', [real.tournamentId])).rejects.toThrow();
+
+    // Nobody signed in: still just a viewer.
+    await actAs(db, null);
+    expect((await one(db, 'select public.is_tournament_staff($1) as v', [id])).v).toBe(false);
   });
 });

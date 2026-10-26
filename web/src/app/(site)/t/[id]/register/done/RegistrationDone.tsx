@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Badge, Card, Empty, Spinner } from '@/components/ui';
+import { Badge, Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
 import { getRegistration } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { useAction } from '@/lib/hooks';
 import type { RegistrationView } from '@/lib/types';
 
 /** After checkout. Stripe's webhook can land a moment after the redirect, so this polls until paid. */
@@ -13,6 +14,7 @@ export function RegistrationDone() {
   const id = useSearchParams().get('r');
   const [reg, setReg] = useState<RegistrationView | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const pay = useAction();
 
   useEffect(() => {
     if (!id) return;
@@ -38,9 +40,43 @@ export function RegistrationDone() {
   if (reg === null) return <Empty>Registration not found.</Empty>;
 
   const paid = reg.status === 'paid';
+  const offered = reg.entries.some((e) => e.offered);
+  const startCheckout = () =>
+    pay.run(async () => {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ registrationId: reg.id }),
+      });
+      const body = (await res.json()) as { url?: string; error?: string };
+      if (!body.url) throw new Error(body.error ?? 'Could not start checkout');
+      window.location.href = body.url;
+    });
   return (
     <Card className="mx-auto max-w-xl p-6">
-      {paid ? (
+      {reg.status === 'waitlisted' ? (
+        <>
+          <p className="font-semibold text-called">You’re on the waitlist</p>
+          <h2 className="mt-1 text-4xl">Thanks, {reg.player_name.split(' ')[0]}!</h2>
+          <p className="mt-1 text-muted">
+            {reg.tournament_name} is full right now. Nothing has been charged. If a spot opens, we’ll text and email you
+            a link to pay and claim it.
+          </p>
+        </>
+      ) : reg.status === 'pending' ? (
+        <>
+          <p className="font-semibold text-called">{offered ? 'A spot opened for you!' : 'Almost done'}</p>
+          <h2 className="mt-1 text-4xl">Finish your registration</h2>
+          <p className="mt-1 text-muted">
+            {reg.tournament_name} · {formatMoney(reg.amount_cents)} to pay. If you just paid, this page updates in a few
+            seconds.
+          </p>
+          <Button variant="primary" className="mt-4 h-14 w-full text-lg" disabled={pay.busy} onClick={startCheckout}>
+            Pay {formatMoney(reg.amount_cents)} now
+          </Button>
+          <ErrorText>{pay.error}</ErrorText>
+        </>
+      ) : paid ? (
         <>
           <p className="text-sm font-medium text-accent">You’re registered</p>
           <h2 className="mt-1 text-4xl">See you on court, {reg.player_name.split(' ')[0]}!</h2>
@@ -49,10 +85,7 @@ export function RegistrationDone() {
           </p>
         </>
       ) : (
-        <>
-          <h2 className="text-4xl">Confirming your payment…</h2>
-          <p className="mt-1 text-muted">This usually takes a few seconds.</p>
-        </>
+        <h2 className="text-4xl">This registration was {reg.status}.</h2>
       )}
 
       <ul className="mt-5 flex flex-col divide-y divide-border rounded-xl border border-border">
@@ -61,14 +94,22 @@ export function RegistrationDone() {
             <div>
               <p className="font-medium">{e.event_name}</p>
               <p className="text-sm text-muted">
-                {e.team_name
+                {e.waitlisted
+                  ? 'On the waitlist'
+                  : e.team_name
                   ? `Team ${e.team_name}`
                   : e.partner_name
                     ? `Waiting for ${e.partner_name} to register`
                     : 'Entered'}
               </p>
             </div>
-            {e.team_id ? <Badge tone="live">Team set</Badge> : <Badge>Pending partner</Badge>}
+            {e.waitlisted ? (
+              <Badge tone="called">Waitlist</Badge>
+            ) : e.team_id ? (
+              <Badge tone="live">Team set</Badge>
+            ) : (
+              <Badge>Pending partner</Badge>
+            )}
           </li>
         ))}
       </ul>

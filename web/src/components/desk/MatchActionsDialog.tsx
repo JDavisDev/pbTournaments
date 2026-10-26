@@ -10,17 +10,20 @@ import { Button, ErrorText, Modal, Select } from '../ui';
 export function MatchActionsDialog({
   court,
   courts,
+  admin = true,
   onClose,
   onDone,
 }: {
   court: CourtBoardRow | null;
   courts: CourtBoardRow[];
+  /** Court monitors only get "send back to the queue". */
+  admin?: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
   return (
     <Modal open={!!court} onClose={onClose} title={court ? `${court.court_name}: ${court.label}` : ''}>
-      {court && <Actions key={court.match_id} court={court} courts={courts} onClose={onClose} onDone={onDone} />}
+      {court && <Actions key={court.match_id} court={court} courts={courts} admin={admin} onClose={onClose} onDone={onDone} />}
     </Modal>
   );
 }
@@ -28,11 +31,13 @@ export function MatchActionsDialog({
 function Actions({
   court,
   courts,
+  admin,
   onClose,
   onDone,
 }: {
   court: CourtBoardRow;
   courts: CourtBoardRow[];
+  admin: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -58,7 +63,7 @@ function Actions({
         <span className="text-muted"> · {court.event_name}</span>
       </p>
 
-      <section className="flex flex-col gap-2">
+      <section className={`flex flex-col gap-2 ${admin ? '' : 'hidden'}`}>
         <h3 className="text-lg">Move to another court</h3>
         <div className="flex gap-2">
           <Select className="flex-1" value={target} onChange={(e) => setTarget(e.target.value)}>
@@ -94,7 +99,7 @@ function Actions({
         </Button>
       </section>
 
-      <section className="flex flex-col gap-2">
+      <section className={`flex flex-col gap-2 ${admin ? '' : 'hidden'}`}>
         <h3 className="text-lg">Forfeit</h3>
         <div className="flex gap-2">
           <Select className="flex-1" value={winner} onChange={(e) => setWinner(e.target.value)}>
@@ -111,7 +116,7 @@ function Actions({
         </div>
       </section>
 
-      <section className="flex flex-col gap-2">
+      <section className={`flex flex-col gap-2 ${admin ? '' : 'hidden'}`}>
         <h3 className="text-lg">Court problem</h3>
         <Button disabled={busy} onClick={() => run(() => setCourtPaused(court.court_id, true), done)}>
           Pause {court.court_name} (this match goes back to the queue)

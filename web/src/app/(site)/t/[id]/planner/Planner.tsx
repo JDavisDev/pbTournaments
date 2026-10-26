@@ -7,7 +7,7 @@
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Badge, Button, Card, Empty, ErrorText, Field, Input, Spinner } from '@/components/ui';
-import { getCourtBoard, getEvents, getMatches, getTeams, getTournament, rebuildQueue, saveEvent } from '@/lib/api';
+import { getCourtBoard, getEvents, getMatches, getTeams, getTournament, rebuildQueue, saveEvent, updateTournament } from '@/lib/api';
 import { formatTime, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import { type Plan, type PlanDivision, planDay, suggestMinutes } from '@/lib/planner';
@@ -227,8 +227,15 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" disabled={!changed || save.busy} onClick={() => save.run(saveAll, () => (setDrafts({}), setSaved(true), reload()))}>
-          Save start times and match lengths
+        <Button
+          variant="primary"
+          disabled={!changed || save.busy}
+          onClick={() => {
+            if (scheduled && !confirm('Saving puts the queue back in schedule order with these times. Any matches you moved by hand go back to their places. Save?')) return;
+            save.run(saveAll, () => (setDrafts({}), setSaved(true), reload()));
+          }}
+        >
+          Save start times to events
         </Button>
         {changed && (
           <Button variant="ghost" onClick={() => setDrafts({})}>
@@ -238,6 +245,8 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
         {saved && <span className="text-live">Saved. The queue now uses these times.</span>}
         <ErrorText>{save.error}</ErrorText>
       </div>
+
+      <PublishTimes tournament={t} events={events} unsaved={changed} onChanged={reload} />
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -293,6 +302,72 @@ function shortLabel(label: string) {
     .replace(/^Losers Final$/, 'LF')
     .replace(/^Grand Final \(if needed\)$/, 'GF2')
     .replace(/^Grand Final$/, 'GF');
+}
+
+/**
+ * Division start times stay hidden from players until the director publishes
+ * them, usually close to the tournament once the plan is final.
+ */
+function PublishTimes({
+  tournament: t,
+  events,
+  unsaved,
+  onChanged,
+}: {
+  tournament: { id: string; time_zone: string; times_published_at: string | null };
+  events: TournamentEvent[];
+  unsaved: boolean;
+  onChanged: () => void;
+}) {
+  const action = useAction();
+  const published = !!t.times_published_at;
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: t.time_zone });
+  return (
+    <Card className="flex flex-col gap-3 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-3xl">Start times players see</h3>
+        <Badge tone={published ? 'live' : 'neutral'}>
+          {published ? `Published ${day(t.times_published_at!)}` : 'Not published: hidden from players'}
+        </Badge>
+      </div>
+      <p className="text-sm text-muted">
+        These are the saved start times. Players see them on the tournament page and sign-up form once you publish.
+        {published ? ' Changes you save show to players right away.' : ''}
+      </p>
+      <ul className="grid gap-1 sm:grid-cols-2">
+        {events.map((e) => (
+          <li key={e.id} className="flex justify-between gap-3 rounded-lg bg-surface px-3 py-2">
+            <span className="font-medium">{e.name}</span>
+            <span className="tnum">{e.not_before ? `${day(e.not_before)} · ${formatTime(e.not_before, t.time_zone)}` : 'Not set'}</span>
+          </li>
+        ))}
+      </ul>
+      {unsaved && <p className="text-sm text-called">You have unsaved changes above. Save them first to publish those times.</p>}
+      <div className="flex flex-wrap gap-2">
+        {published ? (
+          <Button disabled={action.busy} onClick={() => action.run(() => updateTournament(t.id, { times_published_at: null }), onChanged)}>
+            Hide from players
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            disabled={action.busy || events.some((e) => !e.not_before)}
+            onClick={() =>
+              confirm('Show these start times to players?') &&
+              action.run(() => updateTournament(t.id, { times_published_at: new Date().toISOString() }), onChanged)
+            }
+          >
+            Publish start times
+          </Button>
+        )}
+        {!published && events.some((e) => !e.not_before) && (
+          <span className="self-center text-sm text-muted">Every division needs a saved start time first.</span>
+        )}
+      </div>
+      <ErrorText>{action.error}</ErrorText>
+    </Card>
+  );
 }
 
 function Tile({ label, value, tone = '' }: { label: string; value: string | number; tone?: string }) {

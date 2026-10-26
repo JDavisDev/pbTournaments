@@ -148,6 +148,12 @@ const ops: Record<string, Op> = {
       'stream_url',
       'location',
       'dupr_score_type',
+      'max_players',
+      'registration_closes_at',
+      'waiver_text',
+      'image_data',
+      'times_published_at',
+      'texts_enabled',
     ]).then(() => null),
 
   saveEvent: async (tx, event: Row) => {
@@ -243,6 +249,32 @@ const ops: Record<string, Op> = {
       'dupr_singles',
       'rating_checked_at',
     ]).then(() => null),
+  offerWaitlistSpot: async (tx, reg: string, event: string) =>
+    (await one<{ r: unknown }>(tx, 'select public.offer_waitlist_spot($1, $2) as r', [reg, event])).r,
+  removeWaitlistEntry: (tx, reg: string, event: string) =>
+    tx.query('select public.remove_waitlist_entry($1, $2)', [reg, event]).then(() => null),
+  getRegistrationAvailability: (tx, id: string) => all(tx, 'select * from public.registration_availability($1)', [id]),
+  checkDiscountCode: async (tx, id: string, code: string, amount: number) =>
+    (await one<{ r: unknown }>(tx, 'select public.check_discount_code($1, $2, $3) as r', [id, code, amount])).r,
+  getDiscountCodes: (tx, id: string) => all(tx, 'select * from public.discount_codes where tournament_id = $1 order by code', [id]),
+  addDiscountCode: (tx, c: Row) =>
+    tx
+      .query(
+        `insert into public.discount_codes (tournament_id, code, percent_off, amount_off_cents, max_uses, expires_at)
+         values ($1, $2, $3, $4, $5, $6)`,
+        [c.tournament_id, c.code, c.percent_off ?? null, c.amount_off_cents ?? null, c.max_uses ?? null, c.expires_at ?? null],
+      )
+      .then(() => null),
+  deleteDiscountCode: (tx, id: string) => tx.query('delete from public.discount_codes where id = $1', [id]).then(() => null),
+  getPlatformPricing: async (tx) => (await one<{ r: unknown }>(tx, 'select public.platform_pricing() as r')).r,
+  getTournamentFees: async (tx, id: string) => (await one<{ r: unknown }>(tx, 'select public.tournament_fees($1) as r', [id])).r,
+  getMyRole: async (tx, id: string) => (await one<{ r: string | null }>(tx, 'select public.my_tournament_role($1) as r', [id])).r,
+  getTournamentTeam: (tx, id: string) => all(tx, 'select * from public.tournament_team($1)', [id]),
+  addTournamentStaff: async (tx, id: string, email: string, role: string) =>
+    (await one<{ r: string }>(tx, 'select public.add_tournament_staff($1, $2, $3) as r', [id, email, role])).r,
+  removeTournamentStaff: (tx, id: string, email: string) =>
+    tx.query('select public.remove_tournament_staff($1, $2)', [id, email]).then(() => null),
+  claimStaffInvites: async (tx) => (await one<{ n: number }>(tx, 'select public.claim_staff_invites() as n')).n,
   getDemoInbox: (tx, id: string) => all(tx, 'select * from public.demo_inbox($1)', [id]),
   getDivisionEligibility: (tx, id: string) => all(tx, 'select * from public.division_eligibility($1)', [id]),
   importDuprRatings: async (tx, id: string, list: unknown) =>
@@ -298,6 +330,9 @@ const authOps: Record<string, Op> = {
     }
     return { id: user.id, email: user.email };
   },
+  // Demo sites: a session with no email or password (like Supabase's anonymous sign-in).
+  signInGuest: async (tx) =>
+    one<{ id: string; email: string | null }>(tx, 'insert into auth.users (email) values (null) returning id, email'),
   // A saved session can outlive the local database (it's rebuilt when migrations change).
   currentUser: async (tx, id: string) => (await all(tx, 'select id, email from auth.users where id = $1', [id]))[0] ?? null,
   // The screens poll this instead of a Realtime subscription.

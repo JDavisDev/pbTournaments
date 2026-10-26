@@ -57,8 +57,11 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
 
   if (error === 'not-configured') return <ConnectNotice />;
   if (error) return <Empty>{error}</Empty>;
-  if (!data || staff.data === undefined) return <Spinner />;
-  if (!staff.data) return <Empty>The court desk is for this tournament’s directors. Sign in with a director account.</Empty>;
+  if (!data || staff.monitor === undefined) return <Spinner />;
+  if (!staff.monitor) return <Empty>The court desk is for this tournament’s directors and court monitors.</Empty>;
+  // Court monitors run the courts (scores, check-in, no-shows); admins also
+  // control the day: going live, courts, the queue order, moves and forfeits.
+  const admin = !!staff.data;
 
   const { tournament: t, courts, queue, matches, events, teams } = data;
   const states = courts.map((c) => courtState(c));
@@ -72,7 +75,8 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className="flex flex-col gap-4">
       <Card className="flex flex-wrap items-center gap-x-6 gap-y-3 p-3">
-        <div className="flex items-center gap-2">
+        {!admin && <span className="font-semibold">Court monitor</span>}
+        <div className={`flex items-center gap-2 ${admin ? '' : 'hidden'}`}>
           {!live ? (
             <Button
               variant="primary"
@@ -102,7 +106,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${admin ? '' : 'hidden'}`}>
           <span className="text-sm text-muted">Courts</span>
           <Button
             size="sm"
@@ -134,7 +138,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
         <Button
           variant="ghost"
           size="sm"
-          className="ml-auto"
+          className={`ml-auto ${admin ? '' : 'hidden'}`}
           disabled={control.busy}
           onClick={() => {
             if (confirm('Put the queue back in schedule order? Your manual moves will be undone.')) {
@@ -146,7 +150,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
         </Button>
       </Card>
       <ErrorText>{control.error}</ErrorText>
-      {t.is_demo && <DemoClock tournamentId={id} now={now} timeZone={t.time_zone} onChanged={reload} />}
+      {t.is_demo && admin && <DemoClock tournamentId={id} now={now} timeZone={t.time_zone} onChanged={reload} />}
       {live && !t.auto_assign && (
         <p className="rounded-lg bg-called-soft px-3 py-2 text-sm text-called">
           Assigning is paused. Courts won’t get new matches until you resume (or send matches by hand).
@@ -185,6 +189,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
                   now={now}
                   queue={queue}
                   staff
+                  admin={admin}
                   onChanged={reload}
                   onMore={() => setActions(c)}
                   onScore={() =>
@@ -214,13 +219,13 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
               ]}
             />
           </div>
-          {sideTab === 'queue' && <QueuePanel queue={queue} staff now={now} onChanged={reload} />}
+          {sideTab === 'queue' && <QueuePanel queue={queue} staff={admin} now={now} onChanged={reload} />}
           {sideTab === 'checkin' && <CheckInPanel teams={teams} events={events} onChanged={reload} />}
           {sideTab === 'results' && (
             <ResultsPanel
               matches={matches}
               timeZone={t.time_zone}
-              staff
+              staff={admin}
               onCorrect={(m) =>
                 setScore({
                   matchId: m.id,
@@ -237,7 +242,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
       </div>
 
       <ScoreDialog target={score} onClose={() => setScore(null)} onDone={reload} />
-      <MatchActionsDialog court={actions} courts={courts} onClose={() => setActions(null)} onDone={reload} />
+      <MatchActionsDialog court={actions} courts={courts} admin={admin} onClose={() => setActions(null)} onDone={reload} />
     </div>
   );
 }

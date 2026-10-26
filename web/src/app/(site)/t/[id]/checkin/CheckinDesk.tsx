@@ -6,14 +6,14 @@ import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Icon } from '@/components/Icon';
 import { Badge, Button, Empty, ErrorText, Input, Spinner } from '@/components/ui';
-import { checkInPlayer, getCheckinRoster, getDivisionCheckin } from '@/lib/api';
+import { checkInPlayer, getCheckinRoster, getDivisionCheckin, getTournament } from '@/lib/api';
 import { formatTime } from '@/lib/format';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import type { DivisionCheckin } from '@/lib/types';
 
 async function load(id: string) {
-  const [players, divisions] = await Promise.all([getCheckinRoster(id), getDivisionCheckin(id)]);
-  return { players, divisions };
+  const [players, divisions, tournament] = await Promise.all([getCheckinRoster(id), getDivisionCheckin(id), getTournament(id)]);
+  return { players, divisions, timeZone: tournament.time_zone };
 }
 
 type Show = 'waiting' | 'here' | 'all';
@@ -29,8 +29,8 @@ export function CheckinDesk({ params }: { params: Promise<{ id: string }> }) {
 
   if (error === 'not-configured') return <ConnectNotice />;
   if (error) return <Empty>{error}</Empty>;
-  if (!data || staff.data === undefined) return <Spinner />;
-  if (!staff.data) return <Empty>The check-in desk is for this tournament’s directors.</Empty>;
+  if (!data || staff.monitor === undefined) return <Spinner />;
+  if (!staff.monitor) return <Empty>The check-in desk is for this tournament’s directors and court monitors.</Empty>;
 
   const totalIn = data.players.filter((p) => p.checked_in_at).length;
   const query = search.trim().toLowerCase();
@@ -51,6 +51,7 @@ export function CheckinDesk({ params }: { params: Promise<{ id: string }> }) {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.divisions.map((d) => (
             <DivisionCard
+              timeZone={data.timeZone}
               key={d.event_id}
               d={d}
               active={division === d.event_id}
@@ -112,7 +113,7 @@ export function CheckinDesk({ params }: { params: Promise<{ id: string }> }) {
                 </div>
                 {p.checked_in_at ? (
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="hidden items-center gap-1 text-sm text-live sm:inline-flex"><Icon name="check" className="h-4 w-4" /> {formatTime(p.checked_in_at)}</span>
+                    <span className="hidden items-center gap-1 text-sm text-live sm:inline-flex"><Icon name="check" className="h-4 w-4" /> {formatTime(p.checked_in_at, data.timeZone)}</span>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -141,7 +142,17 @@ export function CheckinDesk({ params }: { params: Promise<{ id: string }> }) {
   );
 }
 
-function DivisionCard({ d, active, onClick }: { d: DivisionCheckin; active: boolean; onClick: () => void }) {
+function DivisionCard({
+  d,
+  active,
+  timeZone,
+  onClick,
+}: {
+  d: DivisionCheckin;
+  active: boolean;
+  timeZone: string;
+  onClick: () => void;
+}) {
   const pct = d.players ? Math.round((d.players_in / d.players) * 100) : 0;
   const ready = d.teams > 0 && d.teams_ready === d.teams;
   return (
@@ -167,7 +178,7 @@ function DivisionCard({ d, active, onClick }: { d: DivisionCheckin; active: bool
         <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
       </div>
       <p className={`mt-2 text-sm ${active ? 'opacity-80' : 'text-muted'}`}>
-        {d.teams_ready} of {d.teams} teams ready{d.not_before ? ` · starts ${formatTime(d.not_before)}` : ''}
+        {d.teams_ready} of {d.teams} teams ready{d.not_before ? ` · starts ${formatTime(d.not_before, timeZone)}` : ''}
       </p>
     </button>
   );

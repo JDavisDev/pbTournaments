@@ -31,11 +31,14 @@ export function AppHeader() {
         <Link href="/" aria-label={`${BRAND.name} home`}>
           <Wordmark />
         </Link>
-        <nav className="flex items-center gap-2 text-sm">
+        <nav className="flex items-center gap-1 text-sm sm:gap-2">
+          <Link href="/pricing" className="hidden h-11 items-center rounded-full px-3 font-medium text-muted hover:text-text sm:inline-flex">
+            Pricing
+          </Link>
           <TextSizeButton />
           {user === undefined ? null : user ? (
             <>
-              <span className="hidden text-muted md:inline">{user.email}</span>
+              <span className="hidden text-muted md:inline">{user.email ?? 'Guest'}</span>
               <button className="h-11 rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2" onClick={() => auth.signOut()}>
                 Sign out
               </button>

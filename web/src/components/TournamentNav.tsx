@@ -5,7 +5,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { getEvents, getTournament } from '@/lib/api';
 import { formatDate } from '@/lib/format';
-import { useLoad, useNow, useStaffAccess } from '@/lib/hooks';
+import { auth } from '@/lib/auth';
+import { useAction, useLoad, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { isBackendConfigured, isDemoMode } from '@/lib/config';
 import { setViewMode, type ViewMode } from '@/lib/viewMode';
 import { DemoClock } from './DemoTools';
@@ -27,14 +28,22 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   const [myTeam] = useMyTeam(id);
   const router = useRouter();
   const now = useNow(15_000);
+  const session = useSession();
+  const switching = useAction();
 
   if (!isBackendConfigured || !tournament.data) return null;
   const [t, events] = tournament.data;
   const base = `/t/${id}`;
   const tabs = [
     { href: base, label: 'Overview' },
-    ...(!staff.data && myTeam ? [{ href: `${base}/teams/${myTeam}`, label: 'My matches' }] : []),
+    ...(!staff.monitor && myTeam ? [{ href: `${base}/teams/${myTeam}`, label: 'My matches' }] : []),
     ...(t.status === 'registration' ? [{ href: `${base}/register`, label: 'Register' }] : []),
+    ...(staff.monitor && !staff.data
+      ? [
+          { href: `${base}/desk`, label: 'Courts' },
+          { href: `${base}/checkin`, label: 'Check-in' },
+        ]
+      : []),
     ...(staff.data
       ? [
           { href: `${base}/checkin`, label: 'Check-in' },
@@ -49,18 +58,24 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
       : []),
   ];
 
-  const switchTo = (mode: ViewMode) => {
-    setViewMode(mode);
-    router.push(mode === 'player' ? (myTeam ? `${base}/teams/${myTeam}` : base) : `${base}/desk`);
-  };
+  // Admin view needs a session: on a practice tournament anyone signed in (a
+  // guest too) is a director.
+  const view: ViewMode = staff.data ? 'admin' : 'player';
+  const switchTo = (mode: ViewMode) =>
+    switching.run(async () => {
+      if (mode === 'admin' && !session) await auth.signInAsGuest();
+      setViewMode(mode);
+      router.push(mode === 'player' ? (myTeam ? `${base}/teams/${myTeam}` : base) : `${base}/desk`);
+    });
+  const showDemoBar = isDemoMode && (staff.account || t.is_demo);
 
   return (
     <div className="mb-8">
-      {isDemoMode && staff.account && (
+      {showDemoBar && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-called/60 px-4 py-3">
           <p className="text-sm">
             <span className="font-semibold">Demo: </span>
-            {staff.view === 'player'
+            {view === 'player'
               ? 'you’re seeing what a player sees: their own matches, the schedule and results. No director tools.'
               : 'you’re seeing the director’s tools. Switch to see what a player sees.'}
           </p>
@@ -74,17 +89,19 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
               <button
                 key={mode}
                 role="radio"
-                aria-checked={staff.view === mode}
-                onClick={() => staff.view !== mode && switchTo(mode)}
+                aria-checked={view === mode}
+                disabled={switching.busy}
+                onClick={() => view !== mode && switchTo(mode)}
                 className={`h-10 rounded-full px-4 text-sm font-semibold whitespace-nowrap ${
-                  staff.view === mode ? 'bg-accent text-accent-text' : 'text-muted hover:text-text'
+                  view === mode ? 'bg-accent text-accent-text' : 'text-muted hover:text-text'
                 }`}
               >
                 {label}
               </button>
             ))}
           </div>
-          {staff.view === 'player' && t.is_demo && (
+          {switching.error && <p className="w-full text-sm text-late">{switching.error}</p>}
+          {view === 'player' && staff.account && t.is_demo && (
             <div className="w-full">
               <DemoClock tournamentId={id} now={now} timeZone={t.time_zone} onChanged={() => {}} />
             </div>

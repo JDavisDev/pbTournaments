@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useEffectEvent, useState } from 'react';
-import { isStaff } from './api';
+import { claimStaffInvites, getMyRole } from './api';
 import { auth, type AuthUser } from './auth';
 import { isBackendConfigured, isLocalMode } from './config';
 import { localCall } from './localClient';
@@ -114,17 +114,25 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): LiveState<T
 }
 
 /**
- * Whether to show director tools for this tournament: the signed-in user is
- * its staff and isn't viewing as a player (demo sites). `data` is undefined
- * while loading; `account` says whether they're staff at all.
+ * What the signed-in user may do in this tournament. `data`: admin tools
+ * (an admin, not viewing as a player on a demo site). `monitor`: court
+ * monitor tools (courts, scores, check-in), which admins have too. Both are
+ * undefined while loading. Invites sent to the user's email are claimed first.
  */
 export function useStaffAccess(tournamentId: string) {
   const session = useSession();
-  const staff = useLoad(() => (session ? isStaff(tournamentId) : Promise.resolve(false)), [tournamentId, session?.id]);
+  const role = useLoad(async () => {
+    if (!session) return null;
+    if (session.email) await claimStaffInvites().catch(() => 0);
+    return getMyRole(tournamentId);
+  }, [tournamentId, session?.id]);
   const view = useViewMode();
+  const loading = session === undefined || role.data === undefined;
   return {
-    data: staff.data === undefined ? undefined : staff.data && view === 'admin',
-    account: staff.data,
+    data: loading ? undefined : role.data === 'admin' && view === 'admin',
+    monitor: loading ? undefined : !!role.data && view === 'admin',
+    account: role.data === undefined ? undefined : role.data === 'admin',
+    role: role.data ?? null,
     view,
   };
 }

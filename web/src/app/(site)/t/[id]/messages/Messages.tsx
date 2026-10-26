@@ -131,6 +131,11 @@ export function Messages({ params }: { params: Promise<{ id: string }> }) {
             For one team or player, use Team actions on the Players page. Texts only go to players who opted in.
           </p>
         </Card>
+        {!data.tournament.texts_enabled && (
+          <p className="rounded-xl bg-called-soft px-3 py-2 text-sm text-called">
+            Texting is off for this tournament (Setup → Fees), so only emails go out.
+          </p>
+        )}
         <TextingHealth check={twilio.data} messages={data.messages} />
         {testModes.length > 0 && (
           <p className="rounded-xl bg-called-soft px-3 py-2 text-sm text-called">

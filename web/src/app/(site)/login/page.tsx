@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Button, Card, ErrorText, Field, Input } from '@/components/ui';
 import { auth } from '@/lib/auth';
-import { isBackendConfigured, isLocalMode } from '@/lib/config';
+import { isBackendConfigured, isDemoMode, isLocalMode } from '@/lib/config';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -89,6 +89,11 @@ export default function LoginPage() {
             </Button>
           )}
         </div>
+        {isDemoMode && (
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => attempt(async () => (await auth.signInAsGuest(), router.push('/')))}>
+            Continue as a guest
+          </Button>
+        )}
       </form>
     </Card>
   );

@@ -1,5 +1,5 @@
 import type Stripe from 'stripe';
-import { confirmPayment, stripe } from '@/server/payments';
+import { confirmSetupPayment, confirmPayment, stripe } from '@/server/payments';
 
 /**
  * Stripe calls this when a checkout completes. Point a webhook at
@@ -20,6 +20,14 @@ export async function POST(request: Request) {
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const session = event.data.object;
     const registrationId = session.metadata?.registration_id;
+    const setupTournamentId = session.metadata?.setup_tournament_id;
+    if (setupTournamentId && session.payment_status === 'paid') {
+      try {
+        await confirmSetupPayment(setupTournamentId, 'stripe', session.id, session.amount_total ?? 0);
+      } catch (err) {
+        return new Response((err as Error).message, { status: 500 });
+      }
+    }
     if (registrationId && session.payment_status === 'paid') {
       try {
         await confirmPayment(registrationId, 'stripe', session.id, session.amount_total ?? 0);

@@ -34,6 +34,7 @@ export function CourtCard({
   now,
   queue,
   staff,
+  admin = true,
   onScore,
   onMore,
   onChanged,
@@ -42,6 +43,8 @@ export function CourtCard({
   now: number;
   queue: QueueRow[];
   staff: boolean;
+  /** Court monitors score and handle no-shows; only admins send matches or pause courts. */
+  admin?: boolean;
   onScore: () => void;
   onMore: () => void;
   onChanged: () => void;
@@ -88,7 +91,7 @@ export function CourtCard({
                 More…
               </Button>
             </div>
-          ) : state === 'paused' ? (
+          ) : !admin ? null : state === 'paused' ? (
             <Button size="sm" disabled={busy} onClick={() => run(() => setCourtPaused(court.court_id, false), onChanged)}>
               Resume court
             </Button>

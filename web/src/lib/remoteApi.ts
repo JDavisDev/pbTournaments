@@ -9,7 +9,12 @@ import type {
   CodeMatch,
   CourtBoardRow,
   DemoText,
+  DiscountCode,
   DivisionCheckin,
+  PlatformPricing,
+  StaffMember,
+  TournamentFees,
+  StaffRole,
   DuprResultRow,
   EligibilityRow,
   MessageScope,
@@ -215,7 +220,7 @@ export const assignCourtsNow = (tournamentId: string) => rpc<number>('assign_cou
 // Registration ---------------------------------------------------------------
 
 export const startRegistration = (tournamentId: string, f: RegistrationForm) =>
-  rpc<{ registration_id: string; amount_cents: number; status: 'pending' | 'paid' }>('start_registration', {
+  rpc<{ registration_id: string; amount_cents: number; status: 'pending' | 'paid' | 'waitlisted'; waitlisted: string[] }>('start_registration', {
     p_tournament: tournamentId,
     p_player: f.player,
     p_entries: f.entries,
@@ -234,6 +239,53 @@ export const getRegistrations = (tournamentId: string) =>
 
 export const pairRegistrations = (eventId: string, a: string, b: string) =>
   rpc('pair_registrations', { p_event: eventId, p_registration_a: a, p_registration_b: b });
+/** Admin: give a waitlisted player the spot; they get a text and email with a pay link. */
+export const offerWaitlistSpot = (registrationId: string, eventId: string) =>
+  rpc<{ registration_id: string; amount_cents: number; status: string }>('offer_waitlist_spot', {
+    p_registration: registrationId,
+    p_event: eventId,
+  });
+export const removeWaitlistEntry = (registrationId: string, eventId: string) =>
+  rpc<void>('remove_waitlist_entry', { p_registration: registrationId, p_event: eventId });
+
+/** Per division: spots left (null = no limit) and whether new entries join the waitlist. */
+export const getRegistrationAvailability = (tournamentId: string) =>
+  rpc<{ event_id: string; spots_left: number | null; full: boolean }[]>('registration_availability', { p_tournament: tournamentId });
+/** How much a discount code takes off an amount; `problem` says why it can't be used. */
+export const checkDiscountCode = (tournamentId: string, code: string, amountCents: number) =>
+  rpc<{ code: string | null; cents: number; problem: string | null }>('check_discount_code', {
+    p_tournament: tournamentId,
+    p_code: code,
+    p_amount_cents: amountCents,
+  });
+export const getDiscountCodes = (tournamentId: string) =>
+  select<DiscountCode[]>(supabase().from('discount_codes').select('*').eq('tournament_id', tournamentId).order('code'));
+export async function addDiscountCode(code: Omit<DiscountCode, 'id'>) {
+  await select(supabase().from('discount_codes').insert(code).select('id'));
+}
+export async function deleteDiscountCode(id: string) {
+  await select(supabase().from('discount_codes').delete().eq('id', id).select('id'));
+}
+
+// Platform fees ----------------------------------------------------------------
+
+export const getPlatformPricing = () => rpc<PlatformPricing>('platform_pricing', {});
+export const getTournamentFees = (tournamentId: string) => rpc<TournamentFees>('tournament_fees', { p_tournament: tournamentId });
+
+// Sharing with other admins and court monitors -------------------------------
+
+/** 'admin', 'monitor' or null for the signed-in user. */
+export const getMyRole = (tournamentId: string) =>
+  rpc<StaffRole | null>('my_tournament_role', { p_tournament: tournamentId });
+export const getTournamentTeam = (tournamentId: string) =>
+  rpc<StaffMember[]>('tournament_team', { p_tournament: tournamentId });
+/** Returns 'added', or 'invited' when they don't have an account yet. */
+export const addTournamentStaff = (tournamentId: string, email: string, role: StaffRole) =>
+  rpc<'added' | 'invited'>('add_tournament_staff', { p_tournament: tournamentId, p_email: email, p_role: role });
+export const removeTournamentStaff = (tournamentId: string, email: string) =>
+  rpc<void>('remove_tournament_staff', { p_tournament: tournamentId, p_email: email });
+/** After sign-in: invites sent to this email become access. */
+export const claimStaffInvites = () => rpc<number>('claim_staff_invites', {});
 
 // Score links and texts ------------------------------------------------------
 

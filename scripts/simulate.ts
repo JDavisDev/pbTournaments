@@ -5,7 +5,8 @@
 //   npm run simulate -- --seed 7  (a different random tournament)
 //
 // Everything goes through the same database functions the website will call:
-// check_in_team, confirm_on_court, report_score, plus the 30-second cron tick.
+// check_in_team, report_score, plus the 30-second cron tick. A match called to
+// a court is under way (there's no "we're on court" step).
 import {
   type Db,
   addEvent,
@@ -156,7 +157,6 @@ async function buildField(db: Db, tournamentId: string) {
 
 type SimAction =
   | { at: number; kind: 'check_in'; teamId: string }
-  | { at: number; kind: 'arrive'; matchId: string }
   | { at: number; kind: 'finish'; matchId: string }
   | { at: number; kind: 'tick' };
 
@@ -217,15 +217,16 @@ async function main() {
     const assigned = await rows(
       db,
       `select m.id, m.event_id from public.matches m
-       where m.tournament_id = $1 and m.status = 'assigned'`,
+       where m.tournament_id = $1 and m.status = 'in_progress'`,
       [tournamentId],
     );
     for (const m of assigned) {
       if (scheduled.has(m.id)) continue;
       scheduled.add(m.id);
-      // Usually 1-5 minutes to walk over; 1 in 25 shows up after the no-show alert.
+      // A called match is under way: usually 1-5 minutes to walk over (1 in
+      // 25 teams is slow to show), then one game to 11.
       const walk = chance(0.04) ? between(11, 16) : between(1, 5);
-      timeline.push({ at: now + walk * 60_000, kind: 'arrive', matchId: m.id });
+      timeline.push({ at: now + (walk + between(12, 20)) * 60_000, kind: 'finish', matchId: m.id });
     }
   }
 
@@ -251,12 +252,6 @@ async function main() {
       case 'tick':
         await tick(db);
         break;
-      case 'arrive': {
-        await db.query('select public.confirm_on_court($1)', [action.matchId]);
-        // One game to 11.
-        timeline.push({ at: action.at + between(12, 20) * 60_000, kind: 'finish', matchId: action.matchId });
-        break;
-      }
       case 'finish': {
         await reportScore(db, action.matchId, gameScores(11));
         completed++;
@@ -264,9 +259,7 @@ async function main() {
       }
     }
     await scheduleNewAssignments(action.at);
-    // "We're here" taps don't run the engine, so a rest period can end just
-    // before one and leave a court empty until the next 30-second tick.
-    if (action.kind !== 'arrive') await checkNoIdleCourtWithEligibleMatch();
+    await checkNoIdleCourtWithEligibleMatch();
   }
 
   await report(db, tournamentId, {
@@ -350,14 +343,6 @@ async function report(
   const avgWait = waits.reduce((s, w) => s + w, 0) / Math.max(1, waits.length);
   waits.sort((a, b) => a - b);
 
-  const noShows = (
-    await one(
-      db,
-      `select count(*)::int as n from public.matches where tournament_id = $1
-       and started_at > assigned_at + make_interval(mins => $2)`,
-      [tournamentId, CONFIG.noShowMinutes],
-    )
-  ).n;
   const texts = (await one(db, 'select count(*)::int as n from public.notifications where tournament_id = $1', [tournamentId])).n;
 
   const byEvent = await rows(
@@ -383,7 +368,6 @@ async function report(
   line('Player wait between matches, avg', `${avgWait.toFixed(0)} min`);
   line('Player wait between matches, longest', `${(waits.at(-1) ?? 0).toFixed(0)} min`);
   line('Longest wait within one event', `${longestInEvent.toFixed(0)} min`);
-  line('No-show alerts (late > 10 min)', noShows);
   line('Texts queued', `${texts} (~$${(texts * CONFIG.smsCostPerText).toFixed(2)})`);
   console.log('\nChecks');
   line('Courts idle while a match was ready', run.idleWithEligibleMatch === 0 ? 'never ✓' : `${run.idleWithEligibleMatch} times ✗`);

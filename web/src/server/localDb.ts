@@ -102,6 +102,8 @@ async function open(dir: string, files: string[], migrations: string[]): Promise
         throw new Error(`Local database: migration ${file} failed: ${(err as Error).message}`);
       }
     }
+    // Local mode is a demo: every tournament made here is a practice one.
+    await db.query(`update private.site set demo = true`);
     await db.query(`insert into local_meta.info (key, value) values ('ready', 'yes')`);
   } else if (!(await isReady(db))) {
     await db.close();
