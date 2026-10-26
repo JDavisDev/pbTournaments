@@ -1,4 +1,4 @@
-import type { BracketType, EventFormat, MatchDetails } from './types';
+import type { BracketType, ChampionshipMode, EventFormat, MatchDetails } from './types';
 
 export function formatTime(iso: string | null | undefined, timeZone?: string) {
   if (!iso) return '';
@@ -90,6 +90,20 @@ export function courtsLabel(names: string[]) {
   if (names.length > 1 && consecutive) return `Courts ${numbers[0]}–${numbers.at(-1)}`;
   return names.join(', ');
 }
+
+/** A championship court's rank: "Main", "2nd", "3rd", "4th", ... */
+export function championshipRankLabel(rank: number) {
+  if (rank === 1) return 'Main';
+  const suffix = rank % 100 >= 11 && rank % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[rank % 10] ?? 'th';
+  return `${rank}${suffix}`;
+}
+
+/** What a championship match does when the championship courts are busy. */
+export const championshipModes: { value: ChampionshipMode; label: string; hint: string }[] = [
+  { value: 'wait', label: 'Wait for one', hint: 'Finals wait for the Main court. Set how long below.' },
+  { value: 'first_available', label: 'Use the first free court', hint: 'Faster: big matches go out as soon as any court is free.' },
+  { value: 'off', label: 'Off', hint: 'Championship courts are ordinary courts.' },
+];
 
 /** "11-7, 9-11, 11-5" with team 1 first. */
 export function formatScore(m: Pick<MatchDetails, 'games' | 'forfeit'>) {

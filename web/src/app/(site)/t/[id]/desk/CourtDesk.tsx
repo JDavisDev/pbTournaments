@@ -9,9 +9,10 @@ import { MatchActionsDialog } from '@/components/desk/MatchActionsDialog';
 import { QueuePanel } from '@/components/desk/QueuePanel';
 import { ResultsPanel } from '@/components/desk/ResultsPanel';
 import { ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
-import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
+import { Button, Card, Empty, ErrorText, Select, Spinner } from '@/components/ui';
 import {
   assignCourtsNow,
+  getChampionshipHolds,
   getCourtBoard,
   getEvents,
   getMatches,
@@ -22,25 +23,27 @@ import {
   setAutoAssign,
   setCourtCount,
   setTournamentStatus,
+  updateTournament,
 } from '@/lib/api';
 import { DemoClock } from '@/components/DemoTools';
-import { isPlayable } from '@/lib/format';
+import { championshipModes, isPlayable } from '@/lib/format';
 import { rulesOf } from '@/lib/scoring';
 import { useAction, useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
-import type { CourtBoardRow } from '@/lib/types';
+import type { ChampionshipMode, CourtBoardRow } from '@/lib/types';
 
 type Tab = 'courts' | 'queue' | 'checkin' | 'results';
 
 async function loadDesk(id: string) {
-  const [tournament, courts, queue, matches, events, teams] = await Promise.all([
+  const [tournament, courts, queue, matches, events, teams, holds] = await Promise.all([
     getTournament(id),
     getCourtBoard(id),
     getQueue(id),
     getMatches(id),
     getEvents(id),
     getTeams(id),
+    getChampionshipHolds(id),
   ]);
-  return { tournament, courts, queue, matches, events, teams };
+  return { tournament, courts, queue, matches, events, teams, holds };
 }
 
 export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
@@ -63,13 +66,17 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
   // control the day: going live, courts, the queue order, moves and forfeits.
   const admin = !!staff.data;
 
-  const { tournament: t, courts, queue, matches, events, teams } = data;
+  const { tournament: t, courts, queue, matches, events, teams, holds } = data;
   const states = courts.map((c) => courtState(c));
   const count = (s: string) => states.filter((x) => x === s).length;
   const ready = queue.filter((q) => !q.blocked_reason).length;
   // Court sections in force: divisions with matches still to play hold their courts.
   const unfinished = new Set(matches.filter((m) => ['waiting', 'queued', 'assigned', 'in_progress'].includes(m.status)).map((m) => m.event_id));
-  const keptFor = (courtId: string) => events.filter((e) => unfinished.has(e.id) && e.court_ids.includes(courtId)).map((e) => e.name);
+  // Championship courts kept free for a championship match about to be ready.
+  const keptFor = (courtId: string) => [
+    ...events.filter((e) => unfinished.has(e.id) && e.court_ids.includes(courtId)).map((e) => e.name),
+    ...holds.filter((h) => h.court_id === courtId).map((h) => `${h.event_name} ${h.label}`),
+  ];
   const playable = matches.filter(isPlayable);
   const done = playable.filter((m) => m.status === 'completed').length;
   const notIn = teams.filter((x) => !x.checked_in_at && !x.withdrawn_at).length;
@@ -129,6 +136,30 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
             +
           </Button>
         </div>
+
+        {admin && courts.some((c) => c.championship_rank) && (
+          <label className="flex items-center gap-2">
+            <span className="text-sm text-muted">Championship courts</span>
+            <Select
+              aria-label="When the championship courts are busy"
+              value={t.championship_mode}
+              disabled={control.busy}
+              onChange={(e) =>
+                control.run(async () => {
+                  await updateTournament(id, { championship_mode: e.target.value as ChampionshipMode });
+                  // Apply it now rather than at the next score.
+                  if (live && t.auto_assign) await assignCourtsNow(id);
+                }, reload)
+              }
+            >
+              {championshipModes.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
 
         <dl className="grid w-full grid-cols-4 gap-2 text-sm sm:flex sm:w-auto sm:flex-wrap sm:gap-x-5 sm:gap-y-1">
           <Stat label="On court" value={count('playing')} tone="text-live" />

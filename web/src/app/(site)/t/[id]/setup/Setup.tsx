@@ -17,12 +17,22 @@ import {
   renameCourt,
   saveEvent,
   setAdvancePerPool,
+  setCourtChampionshipRank,
   setCourtStream,
   setTournamentStatus,
   updateTournament,
 } from '@/lib/api';
 import { describeDivision, suggestEventName } from '@/lib/eligibility';
-import { courtsLabel, formatSummary, fromZonedInput, poolName, shortFormat, toZonedInput } from '@/lib/format';
+import {
+  championshipModes,
+  championshipRankLabel,
+  courtsLabel,
+  formatSummary,
+  fromZonedInput,
+  poolName,
+  shortFormat,
+  toZonedInput,
+} from '@/lib/format';
 import { isYoutubeUrl } from '@/lib/youtube';
 import { DiscountCodesCard, FeesCard, RegistrationCard, SharingCard } from './SetupCards';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
@@ -100,6 +110,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
         <RegistrationCard key={`reg-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
         <DiscountCodesCard tournament={data.tournament} />
         <StreamsCard tournament={data.tournament} courts={data.courts} onChanged={reload} />
+        <ChampionshipCard key={`champ-${data.tournament.id}`} tournament={data.tournament} courts={data.courts} onChanged={reload} />
       </aside>
     </div>
   );
@@ -277,6 +288,137 @@ function StreamsCard({ tournament, courts, onChanged }: { tournament: Tournament
         {saved && <p className="text-sm text-accent">Saved.</p>}
         <Button type="submit" disabled={busy || !!bad}>
           Save streams
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+// Finals and grand finals are one choice: both are a division's last match.
+const championshipRoundChoices: { label: string; keys: RoundKey[] }[] = [
+  { label: 'Quarterfinals', keys: ['quarterfinal'] },
+  { label: 'Semifinals', keys: ['semifinal'] },
+  { label: 'Bronze', keys: ['bronze'] },
+  { label: 'Finals', keys: ['final', 'grand_final'] },
+];
+
+/** Featured courts (commentary, a stream) that get the big bracket rounds first. */
+function ChampionshipCard({ tournament, courts, onChanged }: { tournament: Tournament; courts: CourtBoardRow[]; onChanged: () => void }) {
+  const [ranks, setRanks] = useState<Record<string, number | null>>(() =>
+    Object.fromEntries(courts.map((c) => [c.court_id, c.championship_rank])),
+  );
+  const [form, setForm] = useState({
+    mode: tournament.championship_mode,
+    rounds: tournament.championship_rounds,
+    wait: tournament.championship_wait_minutes?.toString() ?? '',
+    finalWait: tournament.final_wait_minutes?.toString() ?? '',
+  });
+  const { busy, error, run } = useAction();
+  const [saved, setSaved] = useState(false);
+  const minutes = (value: string) => (value.trim() === '' ? null : Math.max(1, Math.round(Number(value))));
+  const hasRound = (keys: RoundKey[]) => keys.every((k) => form.rounds.includes(k));
+  const toggleRound = (keys: RoundKey[], on: boolean) =>
+    setForm((f) => ({ ...f, rounds: on ? [...new Set([...f.rounds, ...keys])] : f.rounds.filter((r) => !keys.includes(r)) }));
+
+  return (
+    <Card className="p-4">
+      <h2 className="text-xl">Championship courts</h2>
+      <p className="mb-3 text-xs text-muted">
+        Your featured courts, e.g. the one with commentary. They play pool matches until the big rounds, then get those first.
+      </p>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSaved(false);
+          run(
+            async () => {
+              await updateTournament(tournament.id, {
+                championship_mode: form.mode,
+                championship_rounds: form.rounds,
+                championship_wait_minutes: minutes(form.wait),
+                final_wait_minutes: minutes(form.finalWait),
+              });
+              for (const c of courts) {
+                const next = ranks[c.court_id] ?? null;
+                if (next !== c.championship_rank) await setCourtChampionshipRank(c.court_id, next);
+              }
+            },
+            () => (setSaved(true), onChanged()),
+          );
+        }}
+      >
+        {courts.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium">Courts</span>
+            {courts.map((c) => (
+              <div key={c.court_id} className="grid grid-cols-[6.5rem_1fr] items-center gap-2">
+                <span className="text-sm">{c.court_name}</span>
+                <Select
+                  aria-label={`${c.court_name} championship rank`}
+                  value={ranks[c.court_id] ?? ''}
+                  onChange={(e) => setRanks((r) => ({ ...r, [c.court_id]: e.target.value ? Number(e.target.value) : null }))}
+                >
+                  <option value="">Not championship</option>
+                  {courts.map((_, i) => (
+                    <option key={i} value={i + 1}>
+                      {championshipRankLabel(i + 1)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-sm font-medium">When the championship courts are busy</legend>
+          {championshipModes.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              aria-pressed={form.mode === m.value}
+              onClick={() => setForm((f) => ({ ...f, mode: m.value }))}
+              className={`rounded-lg border px-3 py-2 text-left ${
+                form.mode === m.value ? 'border-accent bg-accent-soft' : 'border-border hover:bg-surface-2'
+              }`}
+            >
+              <div className="text-sm font-medium">{m.label}</div>
+              <div className="text-xs text-muted">{m.hint}</div>
+            </button>
+          ))}
+        </fieldset>
+
+        {form.mode === 'wait' && (
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Wait at most (min)" hint="Blank = no limit">
+              <Input type="number" min={1} inputMode="numeric" value={form.wait} onChange={(e) => setForm((f) => ({ ...f, wait: e.target.value }))} />
+            </Field>
+            <Field label="Finals wait (min)" hint="For the Main court">
+              <Input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={form.finalWait}
+                onChange={(e) => setForm((f) => ({ ...f, finalWait: e.target.value }))}
+              />
+            </Field>
+          </div>
+        )}
+
+        <div className="flex flex-col">
+          <span className="text-sm font-medium">Rounds that go there</span>
+          <div className="grid grid-cols-2">
+            {championshipRoundChoices.map((r) => (
+              <Check key={r.label} label={r.label} checked={hasRound(r.keys)} onChange={(on) => toggleRound(r.keys, on)} />
+            ))}
+          </div>
+        </div>
+
+        <ErrorText>{error}</ErrorText>
+        {saved && <p className="text-sm text-accent">Saved.</p>}
+        <Button type="submit" disabled={busy}>
+          Save championship courts
         </Button>
       </form>
     </Card>

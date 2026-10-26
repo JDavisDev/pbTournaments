@@ -10,10 +10,14 @@ import { Badge, Empty, ErrorText } from '../ui';
 /**
  * A queued match is Next up (it goes on the next free court) or Scheduled
  * (waiting its turn: its players are on court or needed by a match above, or
- * its event hasn't started). Directors also see what they can act on.
+ * its event hasn't started). A championship match can be waiting for a
+ * championship court. Directors also see what they can act on.
  */
 export function QueueStatus({ row, staff = false }: { row: QueueRow; staff?: boolean }) {
   if (!row.blocked_reason) return <Badge tone="live">Next up</Badge>;
+  if (row.blocked_reason === 'waiting_for_championship_court') {
+    return <Badge tone="called">Waiting for {row.waiting_for_court ?? 'a championship court'}</Badge>;
+  }
   if (staff && row.blocked_reason === 'on_hold') return <Badge tone="called">On hold</Badge>;
   if (staff && row.blocked_reason === 'not_checked_in') return <Badge tone="late">Not checked in</Badge>;
   return <Badge tone="neutral">Scheduled</Badge>;
@@ -58,6 +62,13 @@ export function QueuePanel({
               </p>
               {row.waiting_since && !row.blocked_reason && (
                 <p className="text-xs text-muted">Waiting {minutesSince(row.waiting_since, now)}m</p>
+              )}
+              {row.blocked_reason === 'waiting_for_championship_court' && (
+                <p className="text-xs text-muted">
+                  {row.wait_until
+                    ? `Takes the first free court in ${Math.max(0, Math.ceil((new Date(row.wait_until).getTime() - now) / 60_000))} min`
+                    : 'Waits for it however long it takes'}
+                </p>
               )}
             </div>
             {staff && (

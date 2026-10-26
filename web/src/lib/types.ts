@@ -28,7 +28,11 @@ export type BlockedReason =
   | 'not_checked_in'
   | 'player_on_court'
   | 'player_needed_elsewhere'
+  | 'waiting_for_championship_court'
   | null;
+
+/** What a championship match does when every championship court is busy (see docs/api.md). */
+export type ChampionshipMode = 'off' | 'wait' | 'first_available';
 
 export interface Organization {
   id: string;
@@ -56,6 +60,13 @@ export interface Tournament {
   stream_url: string | null;
   location: string | null;
   dupr_score_type: 'SIDEOUT' | 'RALLY';
+  championship_mode: ChampionshipMode;
+  /** Bracket rounds that go to championship courts first. */
+  championship_rounds: RoundKey[];
+  /** How long a championship match waits for a championship court in Wait mode (null = no limit). */
+  championship_wait_minutes: number | null;
+  /** The same for finals, which wait for the Main court. */
+  final_wait_minutes: number | null;
   /** A practice tournament: the demo clock works and its texts show on team pages. */
   is_demo: boolean;
   /** Players across the tournament; more go on the waitlist. */
@@ -396,6 +407,8 @@ export interface CourtBoardRow {
   best_of: number | null;
   point_cap: number | null;
   format_text: string | null;
+  /** 1 = the Main championship court, 2 = the next, ...; null = an ordinary court. */
+  championship_rank: number | null;
 }
 
 export interface QueueRow {
@@ -413,6 +426,21 @@ export interface QueueRow {
   waiting_since: string | null;
   /** The division's court section; empty = any court outside the sections. */
   court_names: string[];
+  /** A bracket round that goes to championship courts first. */
+  championship: boolean;
+  /** With waiting_for_championship_court: the court it waits for (null = any championship court). */
+  waiting_for_court: string | null;
+  /** With waiting_for_championship_court: when it stops waiting and takes any court (null = never). */
+  wait_until: string | null;
+}
+
+/** A free championship court kept for a championship match about to be ready. */
+export interface ChampionshipHold {
+  court_id: string;
+  court_name: string;
+  match_id: string;
+  event_name: string;
+  label: string;
 }
 
 export interface MatchDetails {
