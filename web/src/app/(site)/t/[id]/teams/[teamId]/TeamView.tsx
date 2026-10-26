@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { use } from 'react';
+import { use, useMemo, type ReactNode } from 'react';
 import { Bracket } from '@/components/Bracket';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { DemoInbox } from '@/components/DemoTools';
@@ -14,22 +14,34 @@ import { CourtSign, FormatLine, MatchSteps, useMyTeam, useScoreCode } from '@/co
 import { ScoreEntry } from '@/components/ScoreEntry';
 import { StreamEmbed } from '@/components/StreamEmbed';
 import { Button, Card, Empty, Spinner } from '@/components/ui';
-import { getEvents, getMatches, getQueue, getStandings, getTeams, getTournament, reportScore, reportScoreByCode } from '@/lib/api';
+import {
+  getCourtBoard,
+  getEvents,
+  getMatches,
+  getQueue,
+  getStandings,
+  getTeams,
+  getTournament,
+  reportScore,
+  reportScoreByCode,
+} from '@/lib/api';
 import { isPlayable, minutesSince, ordinal, poolName } from '@/lib/format';
 import { useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import { rulesOf } from '@/lib/scoring';
+import { estimateWait, formatWaitRange } from '@/lib/waitTime';
 import type { MatchDetails, QueueRow, Team } from '@/lib/types';
 
 async function load(id: string) {
-  const [tournament, events, teams, matches, standings, queue] = await Promise.all([
+  const [tournament, events, teams, matches, standings, queue, courts] = await Promise.all([
     getTournament(id),
     getEvents(id),
     getTeams(id),
     getMatches(id),
     getStandings(id),
     getQueue(id),
+    getCourtBoard(id),
   ]);
-  return { tournament, events, teams, matches, standings, queue };
+  return { tournament, events, teams, matches, standings, queue, courts };
 }
 
 const statusOrder: Record<MatchDetails['status'], number> = {
@@ -100,7 +112,21 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
         </p>
       </div>
 
-      <MatchDayPanel tournamentId={id} team={team} mine={mine} onCourt={onCourt} next={next} nextQueue={nextQueue} now={now} />
+      <MatchDayPanel
+        tournamentId={id}
+        team={team}
+        mine={mine}
+        onCourt={onCourt}
+        next={next}
+        nextQueue={nextQueue}
+        wait={
+          // Only while courts are being filled: paused, nobody can say.
+          next && nextQueue && data.tournament.status === 'live' && data.tournament.auto_assign ? (
+            <EstimatedWait data={data} matchId={next.id} now={now} />
+          ) : undefined
+        }
+        now={now}
+      />
 
       <Expandable
         id="my-schedule"
@@ -153,6 +179,28 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
   );
 }
 
+/** "Estimated wait: about 25 minutes" for a queued match (see lib/waitTime). */
+function EstimatedWait({ data, matchId, now }: { data: Awaited<ReturnType<typeof load>>; matchId: string; now: number }) {
+  const minute = Math.floor(now / 60_000);
+  const wait = useMemo(
+    () =>
+      estimateWait(
+        {
+          now: minute * 60_000,
+          slotMinutes: data.tournament.match_slot_minutes,
+          events: data.events,
+          courts: data.courts,
+          matches: data.matches,
+          queue: data.queue,
+        },
+        matchId,
+      ),
+    [data, matchId, minute],
+  );
+  if (!wait) return null;
+  return <p className="text-2xl font-semibold">Estimated wait: {formatWaitRange(wait)}</p>;
+}
+
 /** What this team should do right now, in the five match-day steps. */
 function MatchDayPanel({
   tournamentId,
@@ -161,6 +209,7 @@ function MatchDayPanel({
   onCourt,
   next,
   nextQueue,
+  wait,
   now,
 }: {
   tournamentId: string;
@@ -169,6 +218,8 @@ function MatchDayPanel({
   onCourt?: MatchDetails;
   next?: MatchDetails;
   nextQueue?: QueueRow;
+  /** The estimated wait line, when it can be estimated. */
+  wait?: ReactNode;
   now: number;
 }) {
   const [myTeam, setMyTeam] = useMyTeam(tournamentId);
@@ -252,6 +303,7 @@ function MatchDayPanel({
               {nextQueue.queue_rank === 1 ? 'You’re next' : `#${nextQueue.queue_rank} in line`}
             </p>
           )}
+          {wait}
           <p className="text-xl">
             {next.team1_name} <span className="text-muted">vs</span> {next.team2_name}
           </p>
