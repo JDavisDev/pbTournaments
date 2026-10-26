@@ -9,7 +9,7 @@ import { MatchActionsDialog } from '@/components/desk/MatchActionsDialog';
 import { QueuePanel } from '@/components/desk/QueuePanel';
 import { ResultsPanel } from '@/components/desk/ResultsPanel';
 import { ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
-import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
+import { Button, Card, Empty, ErrorText, Select, Spinner } from '@/components/ui';
 import {
   assignCourtsNow,
   getCourtBoard,
@@ -22,12 +22,13 @@ import {
   setAutoAssign,
   setCourtCount,
   setTournamentStatus,
+  updateTournament,
 } from '@/lib/api';
 import { DemoClock } from '@/components/DemoTools';
-import { isPlayable } from '@/lib/format';
+import { championshipModes, isPlayable } from '@/lib/format';
 import { rulesOf } from '@/lib/scoring';
 import { useAction, useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
-import type { CourtBoardRow } from '@/lib/types';
+import type { ChampionshipMode, CourtBoardRow } from '@/lib/types';
 
 type Tab = 'courts' | 'queue' | 'checkin' | 'results';
 
@@ -129,6 +130,30 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
             +
           </Button>
         </div>
+
+        {admin && courts.some((c) => c.championship_rank) && (
+          <label className="flex items-center gap-2">
+            <span className="text-sm text-muted">Championship courts</span>
+            <Select
+              aria-label="When the championship courts are busy"
+              value={t.championship_mode}
+              disabled={control.busy}
+              onChange={(e) =>
+                control.run(async () => {
+                  await updateTournament(id, { championship_mode: e.target.value as ChampionshipMode });
+                  // Apply it now rather than at the next score.
+                  if (live && t.auto_assign) await assignCourtsNow(id);
+                }, reload)
+              }
+            >
+              {championshipModes.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
 
         <dl className="grid w-full grid-cols-4 gap-2 text-sm sm:flex sm:w-auto sm:flex-wrap sm:gap-x-5 sm:gap-y-1">
           <Stat label="On court" value={count('playing')} tone="text-live" />

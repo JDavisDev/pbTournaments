@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { assignMatchToCourt, setCourtPaused } from '@/lib/api';
-import { minutesSince, shortFormat } from '@/lib/format';
+import { championshipRankLabel, minutesSince, shortFormat } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
 import type { CourtBoardRow, QueueRow } from '@/lib/types';
 import { Badge, Button, ErrorText, Select } from '../ui';
@@ -64,6 +64,9 @@ export function CourtCard({
         <h3 className="text-3xl">{court.court_name}</h3>
         <CourtStatus court={court} now={now} />
       </div>
+      {court.championship_rank && (
+        <p className="text-xs font-semibold text-accent">Championship · {championshipRankLabel(court.championship_rank)}</p>
+      )}
 
       {court.match_id ? (
         <div className="mt-2 flex-1">
