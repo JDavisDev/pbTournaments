@@ -51,7 +51,7 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
   const staff = useStaffAccess(id);
   const { data, error, reload } = useLiveTournament(id, () => load(id), 60_000);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [settings, setSettings] = useState<{ courts: string; rest: string; closes: string } | null>(null);
+  const [settings, setSettings] = useState<{ courts: string; closes: string } | null>(null);
   const [day, setDay] = useState<string | null>(null);
   const save = useAction();
   const [saved, setSaved] = useState(false);
@@ -68,7 +68,6 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
   const draftOf = (e: TournamentEvent) => drafts[e.id] ?? initialDraft(e, t, activeTeams(e.id));
   const s = settings ?? {
     courts: String(courts.filter((c) => !c.out_of_service).length || 1),
-    rest: String(t.min_rest_minutes),
     closes: '21:00',
   };
   const setDraft = (e: TournamentEvent, patch: Partial<Draft>) => {
@@ -95,7 +94,7 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
       bracketMinutes: Math.max(5, Number(d.bracketMinutes) || 20),
     };
   });
-  const plan = planDay(divisions, { courts: Math.max(1, Number(s.courts) || 1), restMinutes: Math.max(0, Number(s.rest) || 0) });
+  const plan = planDay(divisions, { courts: Math.max(1, Number(s.courts) || 1) });
   const color = new Map(events.map((e, i) => [e.id, COLORS[i % COLORS.length]]));
   const dayKey = (ms: number) => toZonedInput(ms, t.time_zone).slice(0, 10);
   const days = [...new Set(plan.matches.map((m) => dayKey(m.start)))].sort();
@@ -137,9 +136,6 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
         <div className="flex items-end gap-2">
           <Field label="Courts">
             <Input className="w-20" type="number" min={1} value={s.courts} onChange={(e) => setSettings({ ...s, courts: e.target.value })} />
-          </Field>
-          <Field label="Rest (min)">
-            <Input className="w-20" type="number" min={0} value={s.rest} onChange={(e) => setSettings({ ...s, rest: e.target.value })} />
           </Field>
           <Field label="Closes">
             <Input className="w-32" type="time" value={s.closes} onChange={(e) => setSettings({ ...s, closes: e.target.value })} />

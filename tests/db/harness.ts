@@ -76,7 +76,6 @@ export const addMinutes = (d: Date, n: number) => new Date(d.getTime() + minutes
 export interface TournamentSetup {
   courts: number;
   start: Date;
-  minRestMinutes?: number;
 }
 
 let orgCounter = 0;
@@ -103,10 +102,7 @@ export async function createLiveTournament(db: Db, setup: TournamentSetup) {
     setup.start.toISOString().slice(0, 10),
     setup.courts,
   ]);
-  await db.query(`update public.tournaments set status = 'live', min_rest_minutes = $2 where id = $1`, [
-    t.id,
-    setup.minRestMinutes ?? 10,
-  ]);
+  await db.query(`update public.tournaments set status = 'live' where id = $1`, [t.id]);
   return { director: owner, organizationId, tournamentId: t.id as string };
 }
 
@@ -179,7 +175,7 @@ export async function reportScore(db: Db, matchId: string, games: number[][]) {
   return one(db, 'select * from public.report_score($1, $2::jsonb)', [matchId, JSON.stringify(games)]);
 }
 
-/** The cron job's work: fill courts whose next match was waiting on rest. */
+/** The cron job's work: fill courts whose next match was waiting on a start time. */
 export async function tick(db: Db) {
   await db.query('select private.assign_live_tournaments()');
 }

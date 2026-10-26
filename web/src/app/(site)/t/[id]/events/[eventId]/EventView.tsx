@@ -153,7 +153,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         <Tile label="Teams" value={teams.length} />
         <Tile label="Played" value={matches.length ? `${played}/${matches.length}` : '—'} bar={matches.length ? played / matches.length : 0} />
         <Tile label="On court" value={onCourt.length} tone="text-live" />
-        <Tile label="Ready in queue" value={ready} />
+        <Tile label="Next up" value={ready} />
         <Tile label="Avg match" value={avgLength !== null ? `${avgLength}m` : '—'} />
         <Tile label={event.format === 'round_robin' ? 'Format' : 'Bracket'} value={formatShort(event, matches)} small />
       </dl>

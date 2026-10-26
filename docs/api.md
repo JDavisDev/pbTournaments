@@ -28,7 +28,7 @@ Call a function from TypeScript with `supabase.rpc('report_score', { p_match, p_
 | `set_auto_assign(p_tournament, p_on)` → tournament | Staff | Pause (false) or resume sending matches to courts |
 | `set_court_count(p_tournament, p_count)` → int | Staff | Any number of courts, any time. Removed courts' live matches go back to the queue; courts with history are retired, not deleted |
 
-Tournament settings (`min_rest_minutes`, `no_show_minutes`, `overdue_after_minutes`, `match_slot_minutes`, name, date, time zone) are plain column updates.
+Tournament settings (`no_show_minutes`, `overdue_after_minutes`, `match_slot_minutes`, name, date, time zone) are plain column updates.
 
 ## Events
 
@@ -63,13 +63,14 @@ Every match sits in one ordered queue per tournament (`matches.queue_seq`). By d
 
 - it isn't on hold,
 - its event has started,
-- both teams are checked in,
-- none of its players is on another court, and
-- every player has rested `min_rest_minutes`.
+- both teams are checked in, and
+- none of its players is on another court.
+
+There are no rest periods: a player is on court, in the queue or on a bye, and can be called again as soon as their score is in.
 
 Matches that aren't playable keep their place and are skipped. **Overdue holds**: once a team's next match has been ready in its event for `overdue_after_minutes`, it holds its players, so matches further down can't take them.
 
-Assignment runs after every score, check-in, queue or court change in a live, unpaused tournament, and every 30 seconds via pg_cron, which catches rest periods ending.
+Assignment runs after every score, check-in, queue or court change in a live, unpaused tournament, and every 30 seconds via pg_cron, which catches event start times passing.
 
 | Function | Who | What it does |
 |---|---|---|
@@ -79,7 +80,7 @@ Assignment runs after every score, check-in, queue or court change in a live, un
 | `rebuild_queue(p_tournament)` | Staff | Undo manual moves; back to schedule order |
 | `assign_courts(p_tournament)` → int | Staff | Fill open courts now, even while paused or not live |
 
-`blocked_reason`: `on_hold`, `event_not_started`, `not_checked_in`, `player_on_court`, `resting`, `player_needed_elsewhere` (a match above it, or an overdue match, needs one of its players). Null means it goes on the next free court.
+`blocked_reason`: `on_hold`, `event_not_started`, `not_checked_in`, `player_on_court`, `player_needed_elsewhere` (a match above it, or an overdue match, needs one of its players). Null means it goes on the next free court. The screens show null as **Next up** and the rest as **Scheduled**; directors also see On hold and Not checked in.
 
 ## Matches on court
 
@@ -91,9 +92,9 @@ Assignment runs after every score, check-in, queue or court change in a live, un
 | `confirm_on_court(p_match)` | Staff or the match's players | The "we're here" tap; stops the no-show timer |
 | `report_score(p_match, p_games)` | Staff or the match's players | `p_games` is team 1 first, e.g. `[[11,7],[9,11],[11,5]]`. Validates (to `games_to`, win by 2, `best_of`; playoff settings for bracket matches), completes the match, moves the winner on, pulls the next match |
 | `correct_score(p_match, p_games)` | Staff | Fix a finished match. A changed winner replaces the old one in the next match if that hasn't started (and, for pool matches, if playoffs aren't seeded yet) |
-| `forfeit_match(p_match, p_winner_team)` | Staff | Award without play; no rest owed |
+| `forfeit_match(p_match, p_winner_team)` | Staff | Award without play |
 | `requeue_match(p_match, p_absent_team = null)` | Staff | Off the court and back to its queue spot. The absent team is checked out until it checks in again |
-| `assign_match_to_court(p_match, p_court)` | Staff | Send a chosen queued match to a chosen free court now (overrides order, holds, rest and check-in; never puts a player on two courts) |
+| `assign_match_to_court(p_match, p_court)` | Staff | Send a chosen queued match to a chosen free court now (overrides order, holds and check-in; never puts a player on two courts) |
 | `move_match_to_court(p_match, p_court)` | Staff | Move a live match; swaps if the other court is busy. Players are texted the change |
 | `set_court_out_of_service(p_court, p_paused)` | Staff | Pause a court (its match goes back to the queue) or resume it |
 

@@ -27,7 +27,6 @@ export type BlockedReason =
   | 'event_not_started'
   | 'not_checked_in'
   | 'player_on_court'
-  | 'resting'
   | 'player_needed_elsewhere'
   | null;
 
@@ -44,7 +43,6 @@ export interface Tournament {
   starts_on: string;
   time_zone: string;
   status: TournamentStatus;
-  min_rest_minutes: number;
   no_show_minutes: number;
   overdue_after_minutes: number;
   match_slot_minutes: number;

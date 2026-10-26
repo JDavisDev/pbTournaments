@@ -2,15 +2,21 @@
 
 import { Icon } from '../Icon';
 import { holdMatch, moveInQueue } from '@/lib/api';
-import { blockedLabel, minutesSince } from '@/lib/format';
+import { minutesSince } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
 import type { QueueRow } from '@/lib/types';
 import { Badge, Empty, ErrorText } from '../ui';
 
-export function QueueStatus({ row }: { row: QueueRow }) {
-  if (!row.blocked_reason) return <Badge tone="live">Ready</Badge>;
-  const tone = row.blocked_reason === 'on_hold' ? 'called' : row.blocked_reason === 'not_checked_in' ? 'late' : 'neutral';
-  return <Badge tone={tone}>{blockedLabel[row.blocked_reason]}</Badge>;
+/**
+ * A queued match is Next up (it goes on the next free court) or Scheduled
+ * (waiting its turn: its players are on court or needed by a match above, or
+ * its event hasn't started). Directors also see what they can act on.
+ */
+export function QueueStatus({ row, staff = false }: { row: QueueRow; staff?: boolean }) {
+  if (!row.blocked_reason) return <Badge tone="live">Next up</Badge>;
+  if (staff && row.blocked_reason === 'on_hold') return <Badge tone="called">On hold</Badge>;
+  if (staff && row.blocked_reason === 'not_checked_in') return <Badge tone="late">Not checked in</Badge>;
+  return <Badge tone="neutral">Scheduled</Badge>;
 }
 
 export function QueuePanel({
@@ -38,7 +44,7 @@ export function QueuePanel({
             <span className="tnum mt-0.5 w-6 shrink-0 text-right text-sm font-semibold text-muted">{row.queue_rank}</span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
-                <QueueStatus row={row} />
+                <QueueStatus row={row} staff={staff} />
                 {row.overdue && <Badge tone="late">Overdue</Badge>}
                 <span className="truncate text-xs text-muted">
                   {row.event_name} · {row.label}

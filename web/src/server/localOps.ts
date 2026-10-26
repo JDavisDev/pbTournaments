@@ -135,7 +135,6 @@ const ops: Record<string, Op> = {
       'name',
       'starts_on',
       'time_zone',
-      'min_rest_minutes',
       'no_show_minutes',
       'overdue_after_minutes',
       'match_slot_minutes',

@@ -131,8 +131,8 @@ async function isReady(db: PGlite): Promise<boolean> {
   }
 }
 
-// Background jobs production runs elsewhere: pg_cron fills courts as rest
-// periods end (every 30 s), and the text sender delivers the outbox.
+// Background jobs production runs elsewhere: pg_cron fills courts as start
+// times pass (every 30 s), and the text sender delivers the outbox.
 function startTick() {
   // Replace any timer left by an earlier version of this code (hot reload).
   clearInterval(globals.courtsideLocalTick);

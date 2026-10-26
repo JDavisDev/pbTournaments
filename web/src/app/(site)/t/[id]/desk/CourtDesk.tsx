@@ -130,7 +130,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
         <dl className="grid w-full grid-cols-4 gap-2 text-sm sm:flex sm:w-auto sm:flex-wrap sm:gap-x-5 sm:gap-y-1">
           <Stat label="On court" value={count('playing')} tone="text-live" />
           <Stat label="Open" value={count('open')} />
-          <Stat label="Ready in queue" value={ready} />
+          <Stat label="Next up" value={ready} />
           <Stat label="Not checked in" value={notIn} />
           <Stat label="Matches done" value={`${done}/${playable.length}`} />
         </dl>

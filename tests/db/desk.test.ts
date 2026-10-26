@@ -65,7 +65,7 @@ describe('check-in desk', () => {
 
 describe('swaps and drops', () => {
   it('drops a team: its matches become forfeits, including later bracket rounds', async () => {
-    const { tournamentId } = await createLiveTournament(db, { courts: 1, start: START, minRestMinutes: 0 });
+    const { tournamentId } = await createLiveTournament(db, { courts: 1, start: START });
     const eventId = await addEvent(db, tournamentId, 'Open', { format: 'single_elim' });
     const seeds: string[] = [];
     for (let s = 1; s <= 4; s++) {

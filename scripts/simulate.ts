@@ -32,7 +32,6 @@ function flag(name: string, fallback: number) {
 const CONFIG = {
   players: flag('players', 200),
   courts: flag('courts', 11),
-  minRestMinutes: 10,
   noShowMinutes: 10,
   dayStart: new Date('2026-11-07T12:30:00Z'), // 7:30 am Eastern: doors open
   firstMatches: new Date('2026-11-07T13:00:00Z'), // 8:00 am
@@ -191,7 +190,6 @@ async function main() {
   const { tournamentId } = await createLiveTournament(db, {
     courts: CONFIG.courts,
     start: CONFIG.dayStart,
-    minRestMinutes: CONFIG.minRestMinutes,
   });
   if (OVERDUE_AFTER !== null) {
     await db.query('update public.tournaments set overdue_after_minutes = $2 where id = $1', [tournamentId, OVERDUE_AFTER]);
@@ -341,7 +339,8 @@ async function report(
   // (say, out of an 8 am bracket and into 11 am mixed) are the schedule's.
   const longestInEvent = Math.max(0, ...playerGaps.filter((p) => p.same_event).map((p) => p.wait_min));
   const waits = playerGaps.map((p) => p.wait_min);
-  const restViolations = waits.filter((w) => w < CONFIG.minRestMinutes - 1e-9).length;
+  // A player called before their previous match finished: on two courts at once.
+  const overlaps = waits.filter((w) => w < -1e-9).length;
   const avgWait = waits.reduce((s, w) => s + w, 0) / Math.max(1, waits.length);
   waits.sort((a, b) => a - b);
 
@@ -373,7 +372,7 @@ async function report(
   line('Texts queued', `${texts} (~$${(texts * CONFIG.smsCostPerText).toFixed(2)})`);
   console.log('\nChecks');
   line('Courts idle while a match was ready', run.idleWithEligibleMatch === 0 ? 'never ✓' : `${run.idleWithEligibleMatch} times ✗`);
-  line('Players under minimum rest', restViolations === 0 ? 'none ✓' : `${restViolations} ✗`);
+  line('Players on two courts at once', overlaps === 0 ? 'never ✓' : `${overlaps} times ✗`);
   line('All matches finished', run.completed === run.totalMatches ? 'yes ✓' : 'no ✗');
 
   console.log('\nEvents');
@@ -409,7 +408,7 @@ async function report(
   }
   console.log();
 
-  if (run.idleWithEligibleMatch > 0 || restViolations > 0 || run.completed !== run.totalMatches) process.exitCode = 1;
+  if (run.idleWithEligibleMatch > 0 || overlaps > 0 || run.completed !== run.totalMatches) process.exitCode = 1;
 }
 
 main().catch((err) => {

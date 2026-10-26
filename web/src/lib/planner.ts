@@ -2,8 +2,8 @@
 // divisions' start times and expected match lengths, the way the court engine
 // will run the day: the queue is ordered by expected start (division start +
 // rounds × match length), a free court takes the first match whose teams are
-// ready, teams rest between matches, and bracket matches wait for the matches
-// that feed them. Pure and fast, so it reruns as the director edits.
+// ready (a team is free as soon as its match ends), and bracket matches wait
+// for the matches that feed them. Pure and fast, so it reruns as the director edits.
 
 export interface PlanDivision {
   id: string;
@@ -25,7 +25,6 @@ export interface PlanDivision {
 
 export interface PlanSettings {
   courts: number;
-  restMinutes: number;
 }
 
 export interface PlannedMatch {
@@ -244,7 +243,6 @@ export function planDay(divisions: PlanDivision[], settings: PlanSettings): Plan
   const poolsEnd = new Map<string, number>();
   const poolsLeft = new Map<string, number>();
   for (const n of pending) if (n.stage === 'pool') poolsLeft.set(n.divisionId, (poolsLeft.get(n.divisionId) ?? 0) + 1);
-  const rest = settings.restMinutes * MIN;
 
   /** When a slot's team is ready, or null if that's not known yet. */
   const sourceReady = (s: Source, n: Node): number | null => {
@@ -252,13 +250,13 @@ export function planDay(divisions: PlanDivision[], settings: PlanSettings): Plan
     if ('team' in s) return teamFree.get(s.team) ?? d.start;
     if ('seed' in s) {
       if (!n.afterPools) return d.start;
-      return (poolsLeft.get(d.id) ?? 0) > 0 ? null : (poolsEnd.get(d.id) ?? d.start) + rest;
+      return (poolsLeft.get(d.id) ?? 0) > 0 ? null : (poolsEnd.get(d.id) ?? d.start);
     }
     const feederId = 'loserOf' in s ? s.loserOf : s.winnerOf;
     const feeder = byId.get(feederId)!;
     if (isReal(feederId)) {
       const m = scheduled.get(feederId);
-      return m ? m.end + rest : null;
+      return m ? m.end : null;
     }
     // A bye: the team comes straight from the feeder's real slot.
     const through = feeder.sources.find((x) => sourceReal(x, d))!;
@@ -302,7 +300,7 @@ export function planDay(divisions: PlanDivision[], settings: PlanSettings): Plan
     scheduled.set(best.id, match);
     left.delete(best.id);
     courtFree[court] = match.end;
-    for (const s of best.sources) if ('team' in s) teamFree.set(s.team, match.end + rest);
+    for (const s of best.sources) if ('team' in s) teamFree.set(s.team, match.end);
     if (best.stage === 'pool') {
       poolsLeft.set(best.divisionId, poolsLeft.get(best.divisionId)! - 1);
       poolsEnd.set(best.divisionId, Math.max(poolsEnd.get(best.divisionId) ?? 0, match.end));

@@ -25,17 +25,17 @@ const count = (plan: ReturnType<typeof planDay>, id = 'd1') => plan.divisions.fi
 
 describe('planner', () => {
   it('plays an 8-team round robin in 7 rounds on 4 courts', () => {
-    const plan = planDay([division()], { courts: 4, restMinutes: 0 });
+    const plan = planDay([division()], { courts: 4 });
     expect(count(plan)).toBe(28);
     expect((plan.end - T0) / MIN).toBe(7 * 15);
   });
 
   it('honors max rounds', () => {
-    expect(count(planDay([division({ maxRounds: 6 })], { courts: 4, restMinutes: 0 }))).toBe(24);
+    expect(count(planDay([division({ maxRounds: 6 })], { courts: 4 }))).toBe(24);
   });
 
   it('never puts two matches on a court at once', () => {
-    const plan = planDay([division({ teams: 10, poolCount: 2 })], { courts: 3, restMinutes: 5 });
+    const plan = planDay([division({ teams: 10, poolCount: 2 })], { courts: 3 });
     for (const court of [1, 2, 3]) {
       const mine = plan.matches.filter((m) => m.court === court);
       for (let i = 1; i < mine.length; i++) expect(mine[i].start).toBeGreaterThanOrEqual(mine[i - 1].end);
@@ -43,7 +43,7 @@ describe('planner', () => {
   });
 
   it('counts brackets with byes, bronze and double elimination', () => {
-    const settings = { courts: 4, restMinutes: 0 };
+    const settings = { courts: 4 };
     expect(count(planDay([division({ format: 'single_elim', teams: 6 })], settings))).toBe(5);
     expect(count(planDay([division({ format: 'single_elim', teams: 4, thirdPlace: true })], settings))).toBe(4);
     const de = planDay([division({ format: 'single_elim', teams: 6, bracketType: 'double', gfReset: true })], settings);
@@ -57,16 +57,16 @@ describe('planner', () => {
         division({ id: 'a', format: 'pools_to_bracket', teams: 8, poolCount: 2 }),
         division({ id: 'b', start: T0 + 90 * MIN }),
       ],
-      { courts: 6, restMinutes: 10 },
+      { courts: 6 },
     );
     const a = plan.divisions.find((d) => d.id === 'a')!;
     const firstBracket = Math.min(...plan.matches.filter((m) => m.divisionId === 'a' && m.stage === 'bracket').map((m) => m.start));
-    expect(firstBracket).toBeGreaterThanOrEqual(a.poolsEnd! + 10 * MIN);
+    expect(firstBracket).toBeGreaterThanOrEqual(a.poolsEnd!);
     expect(plan.divisions.find((d) => d.id === 'b')!.firstStart).toBeGreaterThanOrEqual(T0 + 90 * MIN);
   });
 
   it('shows a division waiting when the courts are full', () => {
-    const plan = planDay([division({ id: 'a', teams: 12 }), division({ id: 'b' })], { courts: 2, restMinutes: 0 });
+    const plan = planDay([division({ id: 'a', teams: 12 }), division({ id: 'b' })], { courts: 2 });
     expect(plan.divisions.find((d) => d.id === 'b')!.startDelayMinutes).toBeGreaterThan(0);
   });
 

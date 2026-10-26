@@ -1,4 +1,4 @@
-import type { BlockedReason, BracketType, EventFormat, MatchDetails } from './types';
+import type { BracketType, EventFormat, MatchDetails } from './types';
 
 export function formatTime(iso: string | null | undefined, timeZone?: string) {
   if (!iso) return '';
@@ -82,15 +82,6 @@ export function podium(bracket: MatchDetails[]): Podium | null {
 export function shortFormat(f: { games_to: number; best_of: number; point_cap?: number | null }) {
   return `${f.best_of === 1 ? '1 game' : `Bo${f.best_of}`} to ${f.games_to}${f.point_cap ? ` (cap ${f.point_cap})` : ''}`;
 }
-
-export const blockedLabel: Record<Exclude<BlockedReason, null>, string> = {
-  on_hold: 'On hold',
-  event_not_started: 'Event not started',
-  not_checked_in: 'Not checked in',
-  player_on_court: 'Player on court',
-  resting: 'Resting',
-  player_needed_elsewhere: 'Player up next elsewhere',
-};
 
 /** "11-7, 9-11, 11-5" with team 1 first. */
 export function formatScore(m: Pick<MatchDetails, 'games' | 'forfeit'>) {

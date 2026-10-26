@@ -32,7 +32,7 @@ interface BracketOptions extends EventOptions {
 
 /** A live tournament with one event of checked-in teams seeded 1..n. */
 async function bracketEvent(teamCount: number, opts: BracketOptions = {}) {
-  const { tournamentId } = await createLiveTournament(db, { courts: 8, start: START, minRestMinutes: 0 });
+  const { tournamentId } = await createLiveTournament(db, { courts: 8, start: START });
   const eventId = await addEvent(db, tournamentId, 'Open', opts);
   await db.query(
     `update public.events

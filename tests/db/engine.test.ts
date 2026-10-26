@@ -122,8 +122,8 @@ describe('court assignment', () => {
     expect(await liveMatches(db, tournamentId)).toHaveLength(1);
   });
 
-  it('makes players rest before their next match, and the timer fills the court', async () => {
-    const { tournamentId } = await createLiveTournament(db, { courts: 1, start: START, minRestMinutes: 10 });
+  it('calls a team that just played as soon as its score is in (no rest period)', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 1, start: START });
     const { eventId } = await eventWithTeams(tournamentId, "Men's 3.0", 3);
     await generate(db, eventId);
 
@@ -132,16 +132,8 @@ describe('court assignment', () => {
     await setClock(db, addMinutes(START, 15));
     await reportScore(db, first.id, [[11, 6]]);
 
-    expect(await liveMatches(db, tournamentId)).toHaveLength(0);
-    expect((await upNext(db, tournamentId)).map((m) => m.blocked_reason)).toEqual(['resting', 'resting']);
-
-    await setClock(db, addMinutes(START, 24));
-    await tick(db);
-    expect(await liveMatches(db, tournamentId)).toHaveLength(0);
-
-    await setClock(db, addMinutes(START, 25));
-    await tick(db);
     expect(await liveMatches(db, tournamentId)).toHaveLength(1);
+    expect((await upNext(db, tournamentId)).map((m) => m.blocked_reason)).toEqual(['player_on_court']);
   });
 
   it('never puts a player in two events on court at once', async () => {
@@ -165,10 +157,7 @@ describe('court assignment', () => {
 
     await setClock(db, addMinutes(START, 20));
     await reportScore(db, live[0].id, [[11, 8]]);
-    expect((await upNext(db, tournamentId))[0].blocked_reason).toBe('resting');
-
-    await setClock(db, addMinutes(START, 30));
-    await tick(db);
+    expect(await upNext(db, tournamentId)).toHaveLength(0);
     expect(await liveMatches(db, tournamentId)).toHaveLength(1);
   });
 
@@ -231,7 +220,7 @@ describe('court assignment', () => {
 
 describe('the queue', () => {
   async function oneCourtRoundRobin(teamCount = 4) {
-    const setup = await createLiveTournament(db, { courts: 1, start: START, minRestMinutes: 0 });
+    const setup = await createLiveTournament(db, { courts: 1, start: START });
     const { eventId, teams } = await eventWithTeams(setup.tournamentId, 'Open', teamCount);
     await generate(db, eventId);
     return { ...setup, eventId, teams };
@@ -377,7 +366,7 @@ describe('formats', () => {
   });
 
   it('plays pools, ranks them, then seeds a bracket that avoids same-pool semis', async () => {
-    const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START, minRestMinutes: 0 });
+    const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START });
     const { eventId, teams } = await eventWithTeams(tournamentId, 'Open', 8, {
       format: 'pools_to_bracket',
       pools: 2,

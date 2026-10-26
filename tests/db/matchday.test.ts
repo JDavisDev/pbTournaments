@@ -88,7 +88,7 @@ describe('players', () => {
 
 describe('advancing from pools', () => {
   async function poolsEvent() {
-    const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START, minRestMinutes: 0 });
+    const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START });
     const eventId = await addEvent(db, tournamentId, 'Open', { format: 'pools_to_bracket', pools: 2, advancePerPool: 2 });
     for (let i = 1; i <= 8; i++) await checkIn(db, await addPair(db, eventId, [`T${i}a`, `T${i}b`], i));
     await generate(db, eventId);

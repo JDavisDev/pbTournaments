@@ -5,6 +5,8 @@
    dark). Status colors are what directors read across the room:
    green = playing, amber = called (waiting for players), red = late. */
 :root {
+  /* Light by default, whatever the device's setting. */
+  color-scheme: light;
   --bg: #ffffff;
   --surface: #ffffff;
   --surface-2: #f5f5f5;
@@ -26,28 +28,28 @@
   --info-soft: #e8eefc;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #000000;
-    --surface: #0d0d0d;
-    --surface-2: #1a1a1a;
-    --border: #2a2a2a;
-    --text: #ffffff;
-    --muted: #b4b4b8;
-    --accent: #ffffff;
-    --accent-text: #000000;
-    --accent-soft: #1f1f1f;
-    --brand: #43b97a;
-    --live: #43b97a;
-    --live-soft: #0f2a1c;
-    --called: #f2a33a;
-    --called-soft: #2d1e08;
-    --late: #ff4f45;
-    --late-soft: #33110f;
-    --idle: #6d6d70;
-    --info: #86a6ff;
-    --info-soft: #131c35;
-  }
+/* Dark mode is opt-in: <html data-theme="dark">. Nothing sets it yet. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #0d0d0d;
+  --surface-2: #1a1a1a;
+  --border: #2a2a2a;
+  --text: #ffffff;
+  --muted: #b4b4b8;
+  --accent: #ffffff;
+  --accent-text: #000000;
+  --accent-soft: #1f1f1f;
+  --brand: #43b97a;
+  --live: #43b97a;
+  --live-soft: #0f2a1c;
+  --called: #f2a33a;
+  --called-soft: #2d1e08;
+  --late: #ff4f45;
+  --late-soft: #33110f;
+  --idle: #6d6d70;
+  --info: #86a6ff;
+  --info-soft: #131c35;
 }
 
 /* The TV board is always black: it's read from across a gym. */

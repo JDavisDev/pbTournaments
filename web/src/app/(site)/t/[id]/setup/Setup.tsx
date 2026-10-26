@@ -141,7 +141,6 @@ function SettingsCard({ tournament, onChanged }: { tournament: Tournament; onCha
     name: tournament.name,
     starts_on: tournament.starts_on,
     time_zone: tournament.time_zone,
-    min_rest_minutes: tournament.min_rest_minutes,
     no_show_minutes: tournament.no_show_minutes,
     overdue_after_minutes: tournament.overdue_after_minutes,
     match_slot_minutes: tournament.match_slot_minutes,
@@ -199,9 +198,6 @@ function SettingsCard({ tournament, onChanged }: { tournament: Tournament; onCha
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Rest (min)" hint="Between a player’s matches">
-            <Input {...num('min_rest_minutes')} />
-          </Field>
           <Field label="No-show (min)" hint="Flag a court after">
             <Input {...num('no_show_minutes')} />
           </Field>
