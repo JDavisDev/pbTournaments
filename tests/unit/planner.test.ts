@@ -76,6 +76,30 @@ describe('planner', () => {
   });
 });
 
+describe('planner court sections', () => {
+  it('keeps a sectioned division on its courts and the others off them', () => {
+    const plan = planDay(
+      [division({ id: 'a', teams: 8, courts: [1, 2] }), division({ id: 'b', teams: 8 })],
+      { courts: 4 },
+    );
+    const courtsOf = (id: string) => new Set(plan.matches.filter((m) => m.divisionId === id).map((m) => m.court));
+    expect([...courtsOf('a')].sort()).toEqual([1, 2]);
+    expect([...courtsOf('b')].sort()).toEqual([3, 4]);
+    expect(count(plan, 'a') + count(plan, 'b')).toBe(56);
+  });
+
+  it('opens a finished division’s courts to everyone', () => {
+    const plan = planDay(
+      [division({ id: 'a', teams: 2, courts: [1] }), division({ id: 'b', teams: 8 })],
+      { courts: 2 },
+    );
+    const aEnd = plan.divisions.find((d) => d.id === 'a')!.end!;
+    const onCourt1 = plan.matches.filter((m) => m.divisionId === 'b' && m.court === 1);
+    expect(onCourt1.length).toBeGreaterThan(0);
+    expect(Math.min(...onCourt1.map((m) => m.start))).toBeGreaterThanOrEqual(aEnd);
+  });
+});
+
 describe('tournament time zone inputs', () => {
   it('round-trips a start time in the tournament’s zone, whatever the browser’s', async () => {
     const { fromZonedInput, toZonedInput } = await import('../../web/src/lib/format');

@@ -35,6 +35,7 @@ export function CourtCard({
   queue,
   staff,
   admin = true,
+  keptFor = [],
   onScore,
   onMore,
   onChanged,
@@ -45,6 +46,8 @@ export function CourtCard({
   staff: boolean;
   /** Court monitors score and handle no-shows; only admins send matches or pause courts. */
   admin?: boolean;
+  /** Divisions whose court section holds this court while they still have matches. */
+  keptFor?: string[];
   onScore: () => void;
   onMore: () => void;
   onChanged: () => void;
@@ -76,7 +79,7 @@ export function CourtCard({
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center text-sm text-muted">
-          {state === 'paused' ? 'Not in use' : 'Waiting for the next match'}
+          {state === 'paused' ? 'Not in use' : keptFor.length > 0 ? `Kept for ${keptFor.join(' and ')}` : 'Waiting for the next match'}
         </div>
       )}
 

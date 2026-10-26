@@ -240,35 +240,40 @@ describe('the queue', () => {
     expect(next.id).toBe(queue[0].match_id);
   });
 
+  // The stored order the director edits (up_next lists Next up matches first).
+  const queueOrder = async (tournamentId: string) =>
+    (
+      await rows(db, `select id from public.matches where tournament_id = $1 and status = 'queued' order by queue_seq, id`, [
+        tournamentId,
+      ])
+    ).map((r) => r.id as string);
+
   it('lets the director move a match to the top, hold it, and rebuild the order', async () => {
     const { tournamentId } = await oneCourtRoundRobin();
-    const before = await upNext(db, tournamentId);
+    const before = await queueOrder(tournamentId);
     const last = before.at(-1)!;
 
-    await db.query('select public.move_in_queue($1, $2)', [last.match_id, before[0].match_id]);
-    let queue = await upNext(db, tournamentId);
-    expect(queue[0].match_id).toBe(last.match_id);
+    await db.query('select public.move_in_queue($1, $2)', [last, before[0]]);
+    expect((await queueOrder(tournamentId))[0]).toBe(last);
 
-    await db.query('select public.hold_match($1, true)', [last.match_id]);
-    queue = await upNext(db, tournamentId);
-    expect(queue[0].blocked_reason).toBe('on_hold');
+    await db.query('select public.hold_match($1, true)', [last]);
+    expect((await upNext(db, tournamentId)).find((q) => q.match_id === last)!.blocked_reason).toBe('on_hold');
 
     const [onCourt] = await liveMatches(db, tournamentId);
     await reportScore(db, onCourt.id, [[11, 5]]);
     const [next] = await liveMatches(db, tournamentId);
-    expect(next.id).toBe(before[0].match_id); // held match skipped, keeps its spot
+    expect(next.id).toBe(before[0]); // held match skipped, keeps its spot
 
-    await db.query('select public.hold_match($1, false)', [last.match_id]);
+    await db.query('select public.hold_match($1, false)', [last]);
     await db.query('select public.rebuild_queue($1)', [tournamentId]);
-    queue = await upNext(db, tournamentId);
-    expect(queue.at(-1)!.match_id).toBe(last.match_id);
+    expect((await queueOrder(tournamentId)).at(-1)).toBe(last);
   });
 
   it('moves a match to the bottom', async () => {
     const { tournamentId } = await oneCourtRoundRobin();
-    const before = await upNext(db, tournamentId);
-    await db.query('select public.move_in_queue($1, null)', [before[0].match_id]);
-    expect((await upNext(db, tournamentId)).at(-1)!.match_id).toBe(before[0].match_id);
+    const before = await queueOrder(tournamentId);
+    await db.query('select public.move_in_queue($1, null)', [before[0]]);
+    expect((await queueOrder(tournamentId)).at(-1)).toBe(before[0]);
   });
 
   it('pauses and resumes the whole tournament', async () => {
@@ -596,5 +601,77 @@ describe('access rules', () => {
     await asRole(db, 'authenticated', async () => {
       expect((await reportScore(db, match.id, [[11, 2]])).winner_team_id).toBe(a);
     });
+  });
+});
+
+describe('court sections', () => {
+  /** Keeps an event to the named courts ("Court 1", ...). */
+  async function section(tournamentId: string, eventId: string, courtNames: string[]) {
+    await db.query(
+      `update public.events set court_ids = array(
+         select id from public.courts where tournament_id = $1 and name = any ($3::text[])
+       ) where id = $2`,
+      [tournamentId, eventId, courtNames],
+    );
+  }
+  const courtsOf = async (tournamentId: string, eventId: string) =>
+    (await liveMatches(db, tournamentId)).filter((m) => m.event_id === eventId).map((m) => m.court_name);
+
+  it('keeps a division on its courts and the others off them', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 5, start: START });
+    const mens = await eventWithTeams(tournamentId, "Men's 3.5", 6);
+    const womens = await eventWithTeams(tournamentId, "Women's 3.5", 4);
+    await section(tournamentId, mens.eventId, ['Court 1', 'Court 2']);
+    await generate(db, mens.eventId);
+    await generate(db, womens.eventId);
+
+    expect(await courtsOf(tournamentId, mens.eventId)).toEqual(['Court 1', 'Court 2']);
+    expect(await courtsOf(tournamentId, womens.eventId)).toEqual(['Court 3', 'Court 4']);
+
+    // Men's third round-1 match is ready but waits for court 1 or 2; court 5 stays open.
+    const [top] = await upNext(db, tournamentId);
+    expect(top.event_name).toBe("Men's 3.5");
+    expect(top.blocked_reason).toBeNull();
+    expect(top.court_names).toEqual(['Court 1', 'Court 2']);
+
+    const [first] = (await liveMatches(db, tournamentId)).filter((m) => m.event_id === mens.eventId);
+    await setClock(db, addMinutes(START, 15));
+    await reportScore(db, first.id, [[11, 4]]);
+    const live = await liveMatches(db, tournamentId);
+    expect(live.find((m) => m.id === top.match_id)?.court_name).toBe(first.court_name);
+  });
+
+  it('gives a finished division’s courts back to everyone', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 2, start: START });
+    const final = await eventWithTeams(tournamentId, 'Final', 2);
+    const open = await eventWithTeams(tournamentId, 'Open', 4);
+    await section(tournamentId, final.eventId, ['Court 1']);
+    await generate(db, final.eventId);
+    await generate(db, open.eventId);
+
+    expect(await courtsOf(tournamentId, open.eventId)).toEqual(['Court 2']);
+    const [onCourt1] = await liveMatches(db, tournamentId);
+    await setClock(db, addMinutes(START, 15));
+    await reportScore(db, onCourt1.id, [[11, 9]]);
+
+    expect(await courtsOf(tournamentId, open.eventId)).toEqual(['Court 1', 'Court 2']);
+  });
+});
+
+describe('queue order', () => {
+  it('lists the matches going on next first, then the ones waiting their turn', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 1, start: START });
+    const { eventId } = await eventWithTeams(tournamentId, 'Open', 4);
+    await generate(db, eventId);
+
+    // Move a match whose players are on court to the top of the queue order.
+    const before = await upNext(db, tournamentId);
+    const waiting = before.find((q) => q.blocked_reason === 'player_on_court')!;
+    await db.query('select public.move_in_queue($1, $2)', [waiting.match_id, before[0].match_id]);
+
+    const after = await upNext(db, tournamentId);
+    expect(after[0].blocked_reason).toBeNull();
+    expect(after.map((q) => q.queue_rank)).toEqual(after.map((_, i) => i + 1));
+    expect(after.findIndex((q) => q.match_id === waiting.match_id)).toBeGreaterThan(0);
   });
 });

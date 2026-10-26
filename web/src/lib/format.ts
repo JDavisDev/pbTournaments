@@ -83,6 +83,14 @@ export function shortFormat(f: { games_to: number; best_of: number; point_cap?: 
   return `${f.best_of === 1 ? '1 game' : `Bo${f.best_of}`} to ${f.games_to}${f.point_cap ? ` (cap ${f.point_cap})` : ''}`;
 }
 
+/** A court section: "Courts 1–5" for numbered courts in a row, else the names ("Court 2, Stadium"). */
+export function courtsLabel(names: string[]) {
+  const numbers = names.map((n) => /^Court (\d+)$/i.exec(n)?.[1]).map(Number);
+  const consecutive = numbers.every((n, i) => n > 0 && (i === 0 || n === numbers[i - 1] + 1));
+  if (names.length > 1 && consecutive) return `Courts ${numbers[0]}–${numbers.at(-1)}`;
+  return names.join(', ');
+}
+
 /** "11-7, 9-11, 11-5" with team 1 first. */
 export function formatScore(m: Pick<MatchDetails, 'games' | 'forfeit'>) {
   if (m.forfeit) return 'Forfeit';

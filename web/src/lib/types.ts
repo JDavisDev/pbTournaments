@@ -357,6 +357,8 @@ export interface TournamentEvent {
   grand_final_reset: boolean;
   confirm_seeds: boolean;
   round_formats: RoundFormat[];
+  /** Court section: this division plays only here (and holds these courts until it's done). Empty = any open court. */
+  court_ids: string[];
 }
 
 export interface Team {
@@ -409,6 +411,8 @@ export interface QueueRow {
   blocked_reason: BlockedReason;
   overdue: boolean;
   waiting_since: string | null;
+  /** The division's court section; empty = any court outside the sections. */
+  court_names: string[];
 }
 
 export interface MatchDetails {

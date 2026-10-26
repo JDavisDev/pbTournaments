@@ -75,6 +75,8 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
     setDrafts((d) => ({ ...d, [e.id]: { ...draftOf(e), ...patch } }));
   };
 
+  // Court numbers as the planner counts them: courts in use, in order.
+  const courtNumber = new Map(courts.filter((c) => !c.out_of_service).map((c, i) => [c.court_id, i + 1]));
   const divisions: PlanDivision[] = events.map((e) => {
     const d = draftOf(e);
     return {
@@ -92,6 +94,7 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
       gfReset: e.grand_final_reset,
       poolMinutes: Math.max(5, Number(d.poolMinutes) || 15),
       bracketMinutes: Math.max(5, Number(d.bracketMinutes) || 20),
+      courts: e.court_ids.flatMap((id) => courtNumber.get(id) ?? []),
     };
   });
   const plan = planDay(divisions, { courts: Math.max(1, Number(s.courts) || 1) });

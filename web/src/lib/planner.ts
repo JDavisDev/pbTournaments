@@ -2,8 +2,9 @@
 // divisions' start times and expected match lengths, the way the court engine
 // will run the day: the queue is ordered by expected start (division start +
 // rounds × match length), a free court takes the first match whose teams are
-// ready (a team is free as soon as its match ends), and bracket matches wait
-// for the matches that feed them. Pure and fast, so it reruns as the director edits.
+// ready (a team is free as soon as its match ends), bracket matches wait for
+// the matches that feed them, and a division with a court section plays only
+// on those courts, which nobody else uses until it's done. Pure and fast, so it reruns as the director edits.
 
 export interface PlanDivision {
   id: string;
@@ -21,6 +22,8 @@ export interface PlanDivision {
   /** Minutes per match, court changeover included. */
   poolMinutes: number;
   bracketMinutes: number;
+  /** Court section: court numbers (1 = first court) this division is kept to. Empty = any other court. */
+  courts?: number[];
 }
 
 export interface PlanSettings {
@@ -263,8 +266,20 @@ export function planDay(divisions: PlanDivision[], settings: PlanSettings): Plan
     return sourceReady(through, feeder);
   };
 
-  const courtFree = Array.from({ length: Math.max(1, settings.courts) }, () => Math.min(...divisions.map((d) => d.start)));
+  const courtCount = Math.max(1, settings.courts);
+  const courtFree = Array.from({ length: courtCount }, () => Math.min(...divisions.map((d) => d.start)));
   const left = new Set(pending.map((n) => n.id));
+
+  // Court sections, as the engine runs them: a sectioned division plays only
+  // on its courts and holds them while it has matches left.
+  const section = new Map(divisions.map((d) => [d.id, new Set((d.courts ?? []).filter((c) => c >= 1 && c <= courtCount))]));
+  const leftIn = new Map<string, number>();
+  for (const n of pending) leftIn.set(n.divisionId, (leftIn.get(n.divisionId) ?? 0) + 1);
+  const mayUse = (divisionId: string, court: number) => {
+    const own = section.get(divisionId)!;
+    if (own.size > 0) return own.has(court + 1);
+    return !divisions.some((d) => section.get(d.id)!.has(court + 1) && (leftIn.get(d.id) ?? 0) > 0);
+  };
   let guard = pending.length * 4 + 100;
 
   while (left.size > 0 && guard-- > 0) {
@@ -274,6 +289,7 @@ export function planDay(divisions: PlanDivision[], settings: PlanSettings): Plan
     let nextReady = Infinity;
     for (const id of left) {
       const n = byId.get(id)!;
+      if (!mayUse(n.divisionId, court)) continue;
       const [a, b] = n.sources.map((s) => sourceReady(s, n));
       if (a === null || b === null) continue;
       const ready = Math.max(a, b, division.get(n.divisionId)!.start);
@@ -284,7 +300,10 @@ export function planDay(divisions: PlanDivision[], settings: PlanSettings): Plan
       }
     }
     if (!best) {
-      courtFree[court] = Number.isFinite(nextReady) ? nextReady : now + MIN;
+      // Nothing for this court yet: wait for a match it may take, or for
+      // another court to finish (which can free teams or a section).
+      const next = Math.min(nextReady, ...courtFree.filter((t, i) => i !== court && t > now));
+      courtFree[court] = Number.isFinite(next) ? next : now + MIN;
       continue;
     }
     const match: PlannedMatch = {
@@ -299,6 +318,7 @@ export function planDay(divisions: PlanDivision[], settings: PlanSettings): Plan
     };
     scheduled.set(best.id, match);
     left.delete(best.id);
+    leftIn.set(best.divisionId, leftIn.get(best.divisionId)! - 1);
     courtFree[court] = match.end;
     for (const s of best.sources) if ('team' in s) teamFree.set(s.team, match.end);
     if (best.stage === 'pool') {

@@ -67,6 +67,9 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
   const states = courts.map((c) => courtState(c));
   const count = (s: string) => states.filter((x) => x === s).length;
   const ready = queue.filter((q) => !q.blocked_reason).length;
+  // Court sections in force: divisions with matches still to play hold their courts.
+  const unfinished = new Set(matches.filter((m) => ['waiting', 'queued', 'assigned', 'in_progress'].includes(m.status)).map((m) => m.event_id));
+  const keptFor = (courtId: string) => events.filter((e) => unfinished.has(e.id) && e.court_ids.includes(courtId)).map((e) => e.name);
   const playable = matches.filter(isPlayable);
   const done = playable.filter((m) => m.status === 'completed').length;
   const notIn = teams.filter((x) => !x.checked_in_at && !x.withdrawn_at).length;
@@ -190,6 +193,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
                   queue={queue}
                   staff
                   admin={admin}
+                  keptFor={keptFor(c.court_id)}
                   onChanged={reload}
                   onMore={() => setActions(c)}
                   onScore={() =>

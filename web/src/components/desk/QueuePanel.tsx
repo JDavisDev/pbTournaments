@@ -2,7 +2,7 @@
 
 import { Icon } from '../Icon';
 import { holdMatch, moveInQueue } from '@/lib/api';
-import { minutesSince } from '@/lib/format';
+import { courtsLabel, minutesSince } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
 import type { QueueRow } from '@/lib/types';
 import { Badge, Empty, ErrorText } from '../ui';
@@ -48,6 +48,7 @@ export function QueuePanel({
                 {row.overdue && <Badge tone="late">Overdue</Badge>}
                 <span className="truncate text-xs text-muted">
                   {row.event_name} · {row.label}
+                  {row.court_names.length > 0 && ` · ${courtsLabel(row.court_names)}`}
                 </span>
               </div>
               <p className="mt-1 text-sm leading-snug">

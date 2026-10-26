@@ -22,7 +22,7 @@ import {
   updateTournament,
 } from '@/lib/api';
 import { describeDivision, suggestEventName } from '@/lib/eligibility';
-import { formatSummary, fromZonedInput, poolName, shortFormat, toZonedInput } from '@/lib/format';
+import { courtsLabel, formatSummary, fromZonedInput, poolName, shortFormat, toZonedInput } from '@/lib/format';
 import { isYoutubeUrl } from '@/lib/youtube';
 import { DiscountCodesCard, FeesCard, RegistrationCard, SharingCard } from './SetupCards';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
@@ -74,7 +74,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
         </div>
         {adding && (
           <Card className="p-4">
-            <EventForm tournamentId={id} timeZone={data.tournament.time_zone} onDone={() => (setAdding(false), reload())} onCancel={() => setAdding(false)} />
+            <EventForm tournamentId={id} timeZone={data.tournament.time_zone} courts={data.courts} onDone={() => (setAdding(false), reload())} onCancel={() => setAdding(false)} />
           </Card>
         )}
         {data.events.length === 0 && !adding && <Empty>Add your first event, e.g. “Men’s Doubles 3.5”.</Empty>}
@@ -83,6 +83,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             key={e.id}
             event={e}
             timeZone={data.tournament.time_zone}
+            courts={data.courts}
             teams={data.teams.filter((t) => t.event_id === e.id)}
             matches={data.matches.filter((m) => m.event_id === e.id)}
             onChanged={reload}
@@ -379,6 +380,55 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /**
+ * A division's court section. Picked courts are this division's alone until
+ * it's done; with none picked it plays on any court outside the sections.
+ */
+function CourtPicker({
+  courts,
+  value,
+  onChange,
+}: {
+  courts: CourtBoardRow[];
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const picked = courts.filter((c) => value.includes(c.court_id)).map((c) => c.court_name);
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm text-muted">
+        {picked.length > 0
+          ? `Plays only on ${courtsLabel(picked)}. Other divisions stay off these courts until this one is done.`
+          : 'Any open court. Pick courts to keep this division on them.'}
+      </p>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Courts">
+        {courts.map((c) => {
+          const on = value.includes(c.court_id);
+          return (
+            <button
+              key={c.court_id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(c.court_id)}
+              className={`h-12 min-w-12 rounded-xl border px-3 font-semibold ${
+                on ? 'border-accent bg-accent text-accent-text' : 'border-border bg-surface hover:border-text'
+              }`}
+            >
+              {c.court_name.replace(/^Court /i, '')}
+            </button>
+          );
+        })}
+        {value.length > 0 && (
+          <Button type="button" variant="ghost" onClick={() => onChange([])}>
+            Any court
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Add or edit an event. Once its schedule is built, the fields that shape the
  * schedule (format, pools, singles/doubles) are locked; everything else can
  * still be changed live.
@@ -386,6 +436,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function EventForm({
   tournamentId,
   timeZone,
+  courts,
   event,
   scheduled = false,
   onDone,
@@ -393,6 +444,7 @@ function EventForm({
 }: {
   tournamentId: string;
   timeZone: string;
+  courts: CourtBoardRow[];
   event?: TournamentEvent;
   scheduled?: boolean;
   onDone: () => void;
@@ -433,6 +485,7 @@ function EventForm({
     confirm_seeds: event?.confirm_seeds ?? false,
     round_formats: event?.round_formats ?? ([] as RoundFormat[]),
     not_before: toZonedInput(event?.not_before, timeZone),
+    court_ids: event?.court_ids ?? [],
   });
   const { busy, error, run } = useAction();
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
@@ -494,6 +547,7 @@ function EventForm({
               playoff_best_of: form.playoff_best_of,
               playoff_point_cap: form.playoff_point_cap,
               not_before: form.not_before ? new Date(fromZonedInput(form.not_before, timeZone)).toISOString() : null,
+              court_ids: form.court_ids.filter((c) => courts.some((x) => x.court_id === c)),
             } as Partial<TournamentEvent> & { tournament_id: string });
         }, onDone);
       }}
@@ -708,6 +762,12 @@ function EventForm({
         <Field label="Start time" hint="Optional. Matches won’t be sent out before this.">
           <Input type="datetime-local" value={form.not_before} onChange={(e) => set('not_before', e.target.value)} />
         </Field>
+      </Section>
+
+      <Section title="Courts">
+        <div className="sm:col-span-2">
+          <CourtPicker courts={courts} value={form.court_ids} onChange={(ids) => set('court_ids', ids)} />
+        </div>
       </Section>
 
       {hasBracket && (
@@ -927,12 +987,14 @@ function RoundFormatsEditor({
 function EventCard({
   event,
   timeZone,
+  courts,
   teams,
   matches,
   onChanged,
 }: {
   event: TournamentEvent;
   timeZone: string;
+  courts: CourtBoardRow[];
   teams: Team[];
   matches: MatchDetails[];
   onChanged: () => void;
@@ -943,6 +1005,7 @@ function EventCard({
   const scheduled = matches.length > 0;
   const started = matches.some((m) => m.status !== 'waiting' && m.status !== 'queued');
   const nextSeed = Math.max(0, ...teams.map((t) => t.seed ?? 0)) + 1;
+  const section = courts.filter((c) => event.court_ids.includes(c.court_id)).map((c) => c.court_name);
 
   if (editing) {
     return (
@@ -950,6 +1013,7 @@ function EventCard({
         <EventForm
           tournamentId={event.tournament_id}
           timeZone={timeZone}
+          courts={courts}
           event={event}
           scheduled={scheduled}
           onDone={() => (setEditing(false), onChanged())}
@@ -970,6 +1034,7 @@ function EventCard({
             {event.third_place_match ? ' · bronze match' : ''}
             {event.confirm_seeds ? ' · seeds reviewed' : ''} · {teams.length} teams
           </p>
+          {section.length > 0 && <p className="text-sm font-medium">Plays on {courtsLabel(section)}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           {scheduled ? (

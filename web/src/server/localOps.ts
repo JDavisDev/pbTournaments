@@ -53,6 +53,7 @@ const EVENT_COLUMNS = [
   'partner_required',
   'pool_match_minutes',
   'bracket_match_minutes',
+  'court_ids',
   'rating_tolerance',
   'play_up_limit',
   'require_dupr_id',

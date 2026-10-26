@@ -32,7 +32,7 @@ Tournament settings (`no_show_minutes`, `overdue_after_minutes`, `match_slot_min
 
 ## Events
 
-Event fields: `format` (`round_robin`, `pools_to_bracket`, `single_elim`), `pool_count`, `advance_per_pool`, `games_to`, `best_of`, optional `playoff_games_to`/`playoff_best_of` for the bracket, and an optional `not_before` start time.
+Event fields: `format` (`round_robin`, `pools_to_bracket`, `single_elim`), `pool_count`, `advance_per_pool`, `games_to`, `best_of`, optional `playoff_games_to`/`playoff_best_of` for the bracket, an optional `not_before` start time, and `court_ids`, the event's court section (empty = any court; see below).
 
 Pools and brackets:
 
@@ -68,13 +68,15 @@ Every match sits in one ordered queue per tournament (`matches.queue_seq`). By d
 
 There are no rest periods: a player is on court, in the queue or on a bye, and can be called again as soon as their score is in.
 
+**Court sections** (`events.court_ids`): a sectioned event's matches go only on its courts, and while it has matches left to play those courts are its own; events without a section use the other courts. Once a sectioned event is done its courts go back to everyone. Events can share a section. Each playable match, top of the queue first, takes the first free court it may use; one whose courts are all busy keeps its place. Directors sending a match to a court by hand aren't limited by sections.
+
 Matches that aren't playable keep their place and are skipped. **Overdue holds**: once a team's next match has been ready in its event for `overdue_after_minutes`, it holds its players, so matches further down can't take them.
 
 Assignment runs after every score, check-in, queue or court change in a live, unpaused tournament, and every 30 seconds via pg_cron, which catches event start times passing.
 
 | Function | Who | What it does |
 |---|---|---|
-| `up_next(p_tournament)` → rows | Anyone (staff for drafts) | The queue top to bottom with `queue_rank`, `blocked_reason` and `overdue` |
+| `up_next(p_tournament)` → rows | Anyone (staff for drafts) | The queue: matches that go on the next free court first (in the order they'll be called), then the rest in queue order. `queue_rank` is the place in that list; also `blocked_reason`, `overdue` and `court_names` (the event's section) |
 | `move_in_queue(p_match, p_before_match = null)` | Staff | Put a match just above another one, or at the bottom |
 | `hold_match(p_match, p_hold)` | Staff | Hold: keeps its place but is skipped |
 | `rebuild_queue(p_tournament)` | Staff | Undo manual moves; back to schedule order |
