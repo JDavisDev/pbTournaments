@@ -11,7 +11,7 @@ import { getCourtBoard, getEvents, getMatches, getTeams, getTournament, rebuildQ
 import { formatTime, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import { type Plan, type PlanDivision, planDay, suggestMinutes } from '@/lib/planner';
-import type { Tournament, TournamentEvent } from '@/lib/types';
+import type { RoundKey, Tournament, TournamentEvent } from '@/lib/types';
 
 async function load(id: string) {
   const [tournament, events, teams, courts, matches] = await Promise.all([
@@ -33,6 +33,17 @@ interface Draft {
   teams: string;
   poolMinutes: string;
   bracketMinutes: string;
+  goldMinutes: string;
+  bronzeMinutes: string;
+}
+
+/** Whether a division has a gold match (a final) and a bronze match. */
+function medalMatches(e: TournamentEvent) {
+  const bracket = e.format !== 'round_robin';
+  return {
+    gold: bracket,
+    bronze: bracket && (e.bracket_type === 'medal' || (e.bracket_type === 'single' && e.third_place_match)),
+  };
 }
 
 function initialDraft(e: TournamentEvent, t: Tournament, teamCount: number): Draft {
@@ -43,7 +54,16 @@ function initialDraft(e: TournamentEvent, t: Tournament, teamCount: number): Dra
     bracketMinutes: String(
       e.bracket_match_minutes ?? suggestMinutes(e.playoff_games_to ?? e.games_to, e.playoff_best_of ?? e.best_of),
     ),
+    // From the medal rounds' own formats when they have one (e.g. gold best of 3).
+    goldMinutes: String(e.gold_match_minutes ?? roundMinutes(e, e.bracket_type === 'double' ? 'grand_final' : 'final')),
+    bronzeMinutes: String(e.bronze_match_minutes ?? roundMinutes(e, 'bronze')),
   };
+}
+
+/** Suggested minutes for a bracket round: its own format, else the bracket's. */
+function roundMinutes(e: TournamentEvent, key: RoundKey) {
+  const f = e.round_formats.find((r) => r.key === key);
+  return suggestMinutes(f?.games_to ?? e.playoff_games_to ?? e.games_to, f?.best_of ?? e.playoff_best_of ?? e.best_of);
 }
 
 export function Planner({ params }: { params: Promise<{ id: string }> }) {
@@ -96,6 +116,8 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
       gfReset: e.grand_final_reset,
       poolMinutes: Math.max(5, Number(d.poolMinutes) || 15),
       bracketMinutes: Math.max(5, Number(d.bracketMinutes) || 20),
+      goldMinutes: Math.max(5, Number(d.goldMinutes) || 20),
+      bronzeMinutes: Math.max(5, Number(d.bronzeMinutes) || 20),
       courts: e.court_ids.flatMap((id) => courtNumber.get(id) ?? []),
     };
   });
@@ -122,6 +144,8 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
         not_before: new Date(fromZonedInput(d.start, t.time_zone)).toISOString(),
         pool_match_minutes: Math.max(5, Number(d.poolMinutes) || 15),
         bracket_match_minutes: Math.max(5, Number(d.bracketMinutes) || 20),
+        gold_match_minutes: Math.max(5, Number(d.goldMinutes) || 20),
+        bronze_match_minutes: Math.max(5, Number(d.bronzeMinutes) || 20),
       });
     }
     // Queue order comes from start times and match lengths.
@@ -160,7 +184,7 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
       </dl>
 
       <div className="overflow-x-auto rounded-2xl border border-border">
-        <table className="tnum w-full min-w-[60rem] text-sm">
+        <table className="tnum w-full min-w-[70rem] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-2 text-left text-xs text-muted">
               <th className="px-3 py-2 font-semibold">Division</th>
@@ -168,6 +192,8 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
               <th className="px-2 py-2 font-semibold">Teams</th>
               <th className="px-2 py-2 font-semibold" title="Minutes per pool match, changeover included">Pool min</th>
               <th className="px-2 py-2 font-semibold" title="Minutes per bracket match, changeover included">Bracket min</th>
+              <th className="px-2 py-2 font-semibold" title="Minutes for the gold match (the final), changeover included">Gold min</th>
+              <th className="px-2 py-2 font-semibold" title="Minutes for the bronze match, changeover included">Bronze min</th>
               <th className="px-2 py-2 text-right font-semibold">Matches</th>
               <th className="px-2 py-2 font-semibold">First match</th>
               <th className="px-2 py-2 font-semibold">Pools done</th>
@@ -205,6 +231,12 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
                   </td>
                   <td className="px-2 py-2">
                     <Input type="number" min={5} className="h-10 w-20" value={d.bracketMinutes} disabled={e.format === 'round_robin'} onChange={(ev) => setDraft(e, { bracketMinutes: ev.target.value })} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <Input type="number" min={5} className="h-10 w-20" aria-label={`${e.name} gold match minutes`} value={medalMatches(e).gold ? d.goldMinutes : ''} placeholder="—" disabled={!medalMatches(e).gold} onChange={(ev) => setDraft(e, { goldMinutes: ev.target.value })} />
+                  </td>
+                  <td className="px-2 py-2">
+                    <Input type="number" min={5} className="h-10 w-20" aria-label={`${e.name} bronze match minutes`} value={medalMatches(e).bronze ? d.bronzeMinutes : ''} placeholder="—" disabled={!medalMatches(e).bronze} onChange={(ev) => setDraft(e, { bronzeMinutes: ev.target.value })} />
                   </td>
                   <td className="px-2 py-2 text-right">{p.matches}</td>
                   <td className="px-2 py-2">

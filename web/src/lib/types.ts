@@ -506,6 +506,9 @@ export interface TournamentEvent {
   /** Expected minutes per match (court time included); null = the tournament's match_slot_minutes. */
   pool_match_minutes: number | null;
   bracket_match_minutes: number | null;
+  /** The gold and bronze matches' expected minutes; null = bracket_match_minutes. */
+  gold_match_minutes: number | null;
+  bronze_match_minutes: number | null;
   rating_tolerance: number;
   play_up_limit: number | null;
   require_dupr_id: boolean;

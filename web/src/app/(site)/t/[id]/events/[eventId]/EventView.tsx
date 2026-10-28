@@ -172,7 +172,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
           </p>
         </div>
         {isDirector && (
-          <Link href={`/t/${id}/setup`} className="text-sm font-medium text-muted underline hover:text-text">
+          <Link href={`/t/${id}/setup?step=divisions`} className="text-sm font-medium text-muted underline hover:text-text">
             Division settings
           </Link>
         )}

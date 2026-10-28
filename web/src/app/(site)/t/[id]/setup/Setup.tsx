@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { DivisionStatus, divisionState } from '@/components/DivisionStatus';
+import { Icon } from '@/components/Icon';
 import { Badge, Button, Card, Empty, ErrorText, Field, Input, Select, Spinner, Textarea } from '@/components/ui';
 import {
   addMockTeams,
@@ -42,7 +43,8 @@ import {
   toZonedInput,
 } from '@/lib/format';
 import { isYoutubeUrl } from '@/lib/youtube';
-import { DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SharingCard } from './SetupCards';
+import { SaveAllProvider, useSaveAll, useUnsaved } from './SaveAll';
+import { DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SaveState, SharingCard } from './SetupCards';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import type {
   BracketType,
@@ -69,11 +71,17 @@ async function load(id: string) {
   return { tournament, events, teams, matches, courts };
 }
 
+type Step = 'settings' | 'divisions';
+
 export function Setup({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const staff = useStaffAccess(id);
   const { data, error, reload } = useLiveTournament(id, () => load(id));
   const [adding, setAdding] = useState(false);
+  // ?step=divisions opens the divisions (a division page's "Division settings" link).
+  const [step, setStep] = useState<Step>(() =>
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('step') === 'divisions' ? 'divisions' : 'settings',
+  );
 
   if (error === 'not-configured') return <ConnectNotice />;
   if (error) return <Empty>{error}</Empty>;
@@ -82,20 +90,42 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
 
   // A draft starts here: its name, date and venue come first.
   const draft = data.tournament.status === 'draft';
+  const go = (next: Step) => {
+    setStep(next);
+    window.history.replaceState(null, '', next === 'divisions' ? '?step=divisions' : window.location.pathname);
+    window.scrollTo({ top: 0 });
+  };
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_22rem]">
-      <section className="flex flex-col gap-4">
-        {!draft && <h2 className="text-4xl">Settings</h2>}
-        {draft && (
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+      {!draft && <h2 className="text-4xl">Settings</h2>}
+      <StatusTrack tournament={data.tournament} events={data.events} onChanged={reload} />
+      {draft && <OpenRegistration tournament={data.tournament} divisions={data.events.length} />}
+      <Steps step={step} divisions={data.events.length} onStep={go} />
+
+      {/* Both steps stay mounted, so switching keeps what's typed. */}
+      <SaveAllProvider>
+        <section className={`flex flex-col gap-4 ${step === 'settings' ? '' : 'hidden'}`}>
           <SettingsCard
-            key={`start-${data.tournament.id}`}
+            key={`details-${data.tournament.id}`}
             tournament={data.tournament}
             courtCount={data.courts.length}
-            startHere
+            startHere={draft}
             onChanged={reload}
           />
-        )}
+          <PricesCard key={`prices-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
+          <RegistrationCard key={`reg-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
+          <QuestionsCard tournament={data.tournament} />
+          <DiscountCodesCard tournament={data.tournament} />
+          <FeesCard tournament={data.tournament} onChanged={reload} />
+          <SharingCard tournament={data.tournament} />
+          <StreamsCard tournament={data.tournament} courts={data.courts} onChanged={reload} />
+          <ChampionshipCard key={`champ-${data.tournament.id}`} tournament={data.tournament} courts={data.courts} onChanged={reload} />
+          <ContinueToDivisions onDone={() => (reload(), go('divisions'))} />
+        </section>
+      </SaveAllProvider>
+
+      <section className={`flex flex-col gap-4 ${step === 'divisions' ? '' : 'hidden'}`}>
         <div className="flex items-center justify-between">
           <h2 className="text-3xl">Divisions</h2>
           {!adding && (
@@ -122,21 +152,56 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             onChanged={reload}
           />
         ))}
-        {draft && <OpenRegistration tournament={data.tournament} divisions={data.events.length} />}
+        <Button variant="ghost" className="self-start" onClick={() => go('settings')}>
+          ← Back to tournament settings
+        </Button>
       </section>
+    </div>
+  );
+}
 
-      <aside className="flex flex-col gap-4">
-        <StatusCard tournament={data.tournament} onChanged={reload} />
-        {!draft && <SettingsCard key={data.tournament.id} tournament={data.tournament} onChanged={reload} />}
-        <PricesCard key={`prices-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
-        <FeesCard tournament={data.tournament} onChanged={reload} />
-        <SharingCard tournament={data.tournament} />
-        <RegistrationCard key={`reg-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
-        <QuestionsCard tournament={data.tournament} />
-        <DiscountCodesCard tournament={data.tournament} />
-        <StreamsCard tournament={data.tournament} courts={data.courts} onChanged={reload} />
-        <ChampionshipCard key={`champ-${data.tournament.id}`} tournament={data.tournament} courts={data.courts} onChanged={reload} />
-      </aside>
+/** Setup's two steps: the tournament's settings, then its divisions. */
+function Steps({ step, divisions, onStep }: { step: Step; divisions: number; onStep: (step: Step) => void }) {
+  const steps: [Step, string][] = [
+    ['settings', 'Tournament settings'],
+    ['divisions', divisions ? `Divisions (${divisions})` : 'Divisions'],
+  ];
+  return (
+    <nav className="grid grid-cols-2 gap-2" aria-label="Setup steps">
+      {steps.map(([key, label], i) => (
+        <button
+          key={key}
+          onClick={() => onStep(key)}
+          aria-current={step === key ? 'step' : undefined}
+          className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left ${
+            step === key ? 'bg-accent text-accent-text' : 'bg-surface-2 text-muted hover:text-text'
+          }`}
+        >
+          <span
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full font-display text-lg font-bold ${
+              step === key ? 'bg-accent-text/20' : 'bg-surface'
+            }`}
+            aria-hidden
+          >
+            {i + 1}
+          </span>
+          <span className="font-semibold leading-tight">{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** The end of the settings step: save every card with changes, then on to the divisions. */
+function ContinueToDivisions({ onDone }: { onDone: () => void }) {
+  const saveAll = useSaveAll();
+  const { busy, error, run } = useAction();
+  return (
+    <div className="flex flex-col gap-2 pt-2">
+      <Button variant="primary" className="h-14 w-full px-8 text-lg sm:w-auto sm:self-end" disabled={busy} onClick={() => run(saveAll, onDone)}>
+        {busy ? 'Saving…' : 'Save and continue to divisions'} <Icon name="arrow" />
+      </Button>
+      <ErrorText>{error}</ErrorText>
     </div>
   );
 }
@@ -151,8 +216,8 @@ function OpenRegistration({ tournament, divisions }: { tournament: Tournament; d
       <div>
         <h2 className="text-2xl">Done setting up?</h2>
         <p className="text-muted">
-          Open registration to make the tournament public. Check-in, Players and the rest show up then, and these settings
-          move to <b>More → Settings</b>, where you can still change them.
+          Set up the tournament and its divisions below, then open registration to make it public. Check-in, Players and the
+          rest show up then, and these settings move to <b>More → Settings</b>, where you can still change them.
         </p>
       </div>
       {!ready && <p className="text-sm text-called">Add at least one division first.</p>}
@@ -169,33 +234,71 @@ function OpenRegistration({ tournament, divisions }: { tournament: Tournament; d
   );
 }
 
-const statuses: { value: TournamentStatus; label: string; hint: string }[] = [
-  { value: 'draft', label: 'Draft', hint: 'Only directors can see it.' },
-  { value: 'registration', label: 'Registration', hint: 'Public, not playing yet.' },
-  { value: 'live', label: 'Live', hint: 'Courts are filled automatically.' },
-  { value: 'complete', label: 'Complete', hint: 'Finished; results stay public.' },
+const stages: { value: TournamentStatus; label: string; hint: string; current: string; dot: string }[] = [
+  { value: 'draft', label: 'Draft', hint: 'Only directors see it', current: 'bg-surface-2 ring-2 ring-text', dot: 'bg-text' },
+  { value: 'registration', label: 'Registration', hint: 'Public; players sign up', current: 'bg-called-soft text-called ring-2 ring-called', dot: 'bg-called' },
+  { value: 'live', label: 'Live', hint: 'Divisions playing', current: 'bg-live-soft text-live ring-2 ring-live', dot: 'bg-live' },
+  { value: 'complete', label: 'Complete', hint: 'Results stay public', current: 'bg-info-soft text-info ring-2 ring-info', dot: 'bg-info' },
 ];
 
-function StatusCard({ tournament, onChanged }: { tournament: Tournament; onChanged: () => void }) {
+/**
+ * Where the tournament is. It moves along on its own: opening registration
+ * (above, in a draft), starting the first division, and here, marking it
+ * complete once every division is final.
+ */
+function StatusTrack({ tournament, events, onChanged }: { tournament: Tournament; events: TournamentEvent[]; onChanged: () => void }) {
   const { busy, error, run } = useAction();
+  const at = stages.findIndex((s) => s.value === tournament.status);
+  const allFinal = events.length > 0 && events.every((e) => e.finalized_at);
   return (
-    <Card className="p-4">
-      <h2 className="mb-3 text-xl">Status</h2>
-      <div className="flex flex-col gap-2">
-        {statuses.map((s) => (
-          <button
+    <Card className="flex flex-col gap-3 p-4">
+      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Tournament status">
+        {stages.map((s, i) => (
+          <li
             key={s.value}
-            disabled={busy}
-            onClick={() => run(() => setTournamentStatus(tournament.id, s.value), onChanged)}
-            className={`rounded-lg border px-3 py-2 text-left ${
-              tournament.status === s.value ? 'border-accent bg-accent-soft' : 'border-border hover:bg-surface-2'
-            }`}
+            aria-current={i === at ? 'step' : undefined}
+            className={`flex items-start gap-2 rounded-xl px-3 py-2 ${i === at ? s.current : i < at ? 'text-text' : 'text-muted'}`}
           >
-            <div className="text-sm font-medium">{s.label}</div>
-            <div className="text-xs text-muted">{s.hint}</div>
-          </button>
+            {i < at ? (
+              <Icon name="check" className="mt-0.5 h-5 w-5 text-live" />
+            ) : (
+              <span className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${i === at ? s.dot : 'border-2 border-border'}`} aria-hidden />
+            )}
+            <span>
+              <span className="block font-semibold">{s.label}</span>
+              <span className={`block text-xs ${i === at ? '' : 'text-muted'}`}>{s.hint}</span>
+            </span>
+          </li>
         ))}
-      </div>
+      </ol>
+      {tournament.status === 'registration' && (
+        <p className="text-sm text-muted">It goes live when you start the first division at Check-in.</p>
+      )}
+      {tournament.status === 'live' &&
+        (allFinal ? (
+          <Button
+            className="self-start"
+            disabled={busy}
+            onClick={() =>
+              confirm('Mark the tournament complete? Results stay public.') && run(() => setTournamentStatus(tournament.id, 'complete'), onChanged)
+            }
+          >
+            Mark tournament complete
+          </Button>
+        ) : (
+          <p className="text-sm text-muted">Mark it complete once every division’s results are final.</p>
+        ))}
+      {tournament.status === 'complete' && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start"
+          disabled={busy}
+          onClick={() => run(() => setTournamentStatus(tournament.id, 'live'), onChanged)}
+        >
+          Reopen the tournament
+        </Button>
+      )}
       <ErrorText>{error}</ErrorText>
     </Card>
   );
@@ -230,6 +333,15 @@ function SettingsCard({
   });
   const { busy, error, run } = useAction();
   const [saved, setSaved] = useState(false);
+  const { dirty, commit } = useUnsaved('details', { form, courts }, async () => {
+    await updateTournament(tournament.id, {
+      ...form,
+      name: form.name.trim(),
+      location: form.location.trim() || null,
+      checkin_grace_minutes: optionalNumber(form.checkin_grace_minutes),
+    });
+    if (startHere && courts !== courtCount) await setCourtCount(tournament.id, courts);
+  });
   const num = (key: keyof typeof form) => ({
     type: 'number',
     min: 0,
@@ -245,29 +357,18 @@ function SettingsCard({
           <p className="text-muted">
             {tournament.is_demo
               ? 'A practice tournament dated today, so you can run it right away. Rename it if you like, then fill the division with mock players and build its schedule.'
-              : 'Name your tournament and set its date and venue. Everything else is filled in; change it below or in the cards beside.'}
+              : 'Name your tournament and set its date and venue. Everything else is filled in; change it in the cards below.'}
           </p>
         </div>
       ) : (
-        <h2 className="mb-3 text-xl">Settings</h2>
+        <h2 className="mb-3 text-xl">Tournament details</h2>
       )}
       <form
-        className={startHere ? 'grid gap-3 sm:grid-cols-2' : 'flex flex-col gap-3'}
+        className="grid gap-3 sm:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault();
           setSaved(false);
-          run(
-            async () => {
-              await updateTournament(tournament.id, {
-                ...form,
-                name: form.name.trim(),
-                location: form.location.trim() || null,
-                checkin_grace_minutes: optionalNumber(form.checkin_grace_minutes),
-              });
-              if (startHere && courts !== courtCount) await setCourtCount(tournament.id, courts);
-            },
-            () => (setSaved(true), onChanged()),
-          );
+          run(commit, () => (setSaved(true), onChanged()));
         }}
       >
         <Field label="Name">
@@ -302,7 +403,7 @@ function SettingsCard({
             )}
           </Select>
         </Field>
-        <div className={`grid grid-cols-2 gap-3 ${startHere ? 'sm:col-span-2 sm:grid-cols-3' : ''}`}>
+        <div className="grid grid-cols-2 gap-3 sm:col-span-2 sm:grid-cols-4">
           <Field label="No-show (min)" hint="Flag a court after">
             <Input {...num('no_show_minutes')} />
           </Field>
@@ -323,11 +424,11 @@ function SettingsCard({
             />
           </Field>
         </div>
-        <div className={`flex flex-col gap-2 ${startHere ? 'sm:col-span-2' : ''}`}>
+        <div className="flex flex-col gap-2 sm:col-span-2">
           <ErrorText>{error}</ErrorText>
-          {saved && <p className="text-sm text-accent">Saved.</p>}
+          <SaveState saved={saved} dirty={dirty} />
           <Button type="submit" variant={startHere ? 'primary' : 'secondary'} disabled={busy}>
-            {startHere ? 'Save tournament details' : 'Save settings'}
+            Save tournament details
           </Button>
         </div>
       </form>
@@ -343,6 +444,15 @@ function StreamsCard({ tournament, courts, onChanged }: { tournament: Tournament
   );
   const { busy, error, run } = useAction();
   const [saved, setSaved] = useState(false);
+  const { dirty, commit } = useUnsaved('streams', { main, perCourt }, async () => {
+    await updateTournament(tournament.id, { stream_url: main.trim() || null });
+    for (const c of courts) {
+      const next = perCourt[c.court_id];
+      if (!next) continue;
+      if (next.url.trim() !== (c.stream_url ?? '')) await setCourtStream(c.court_id, next.url.trim() || null);
+      if (next.name.trim() && next.name.trim() !== c.court_name) await renameCourt(c.court_id, next.name.trim());
+    }
+  });
   const bad = [main, ...Object.values(perCourt).map((c) => c.url)].find((u) => u.trim() && !isYoutubeUrl(u.trim()));
 
   return (
@@ -356,18 +466,7 @@ function StreamsCard({ tournament, courts, onChanged }: { tournament: Tournament
         onSubmit={(e) => {
           e.preventDefault();
           setSaved(false);
-          run(
-            async () => {
-              await updateTournament(tournament.id, { stream_url: main.trim() || null });
-              for (const c of courts) {
-                const next = perCourt[c.court_id];
-                if (!next) continue;
-                if (next.url.trim() !== (c.stream_url ?? '')) await setCourtStream(c.court_id, next.url.trim() || null);
-                if (next.name.trim() && next.name.trim() !== c.court_name) await renameCourt(c.court_id, next.name.trim());
-              }
-            },
-            () => (setSaved(true), onChanged()),
-          );
+          run(commit, () => (setSaved(true), onChanged()));
         }}
       >
         <Field label="Main stream">
@@ -390,7 +489,7 @@ function StreamsCard({ tournament, courts, onChanged }: { tournament: Tournament
         )}
         {bad && <p className="text-xs text-late">“{bad}” isn’t a YouTube link.</p>}
         <ErrorText>{error}</ErrorText>
-        {saved && <p className="text-sm text-accent">Saved.</p>}
+        <SaveState saved={saved} dirty={dirty} />
         <Button type="submit" disabled={busy || !!bad}>
           Save streams
         </Button>
@@ -421,6 +520,18 @@ function ChampionshipCard({ tournament, courts, onChanged }: { tournament: Tourn
   const { busy, error, run } = useAction();
   const [saved, setSaved] = useState(false);
   const minutes = (value: string) => (value.trim() === '' ? null : Math.max(1, Math.round(Number(value))));
+  const { dirty, commit } = useUnsaved('championship', { ranks, form }, async () => {
+    await updateTournament(tournament.id, {
+      championship_mode: form.mode,
+      championship_rounds: form.rounds,
+      championship_wait_minutes: minutes(form.wait),
+      final_wait_minutes: minutes(form.finalWait),
+    });
+    for (const c of courts) {
+      const next = ranks[c.court_id] ?? null;
+      if (next !== c.championship_rank) await setCourtChampionshipRank(c.court_id, next);
+    }
+  });
   const hasRound = (keys: RoundKey[]) => keys.every((k) => form.rounds.includes(k));
   const toggleRound = (keys: RoundKey[], on: boolean) =>
     setForm((f) => ({ ...f, rounds: on ? [...new Set([...f.rounds, ...keys])] : f.rounds.filter((r) => !keys.includes(r)) }));
@@ -436,21 +547,7 @@ function ChampionshipCard({ tournament, courts, onChanged }: { tournament: Tourn
         onSubmit={(e) => {
           e.preventDefault();
           setSaved(false);
-          run(
-            async () => {
-              await updateTournament(tournament.id, {
-                championship_mode: form.mode,
-                championship_rounds: form.rounds,
-                championship_wait_minutes: minutes(form.wait),
-                final_wait_minutes: minutes(form.finalWait),
-              });
-              for (const c of courts) {
-                const next = ranks[c.court_id] ?? null;
-                if (next !== c.championship_rank) await setCourtChampionshipRank(c.court_id, next);
-              }
-            },
-            () => (setSaved(true), onChanged()),
-          );
+          run(commit, () => (setSaved(true), onChanged()));
         }}
       >
         {courts.length > 0 && (
@@ -521,7 +618,7 @@ function ChampionshipCard({ tournament, courts, onChanged }: { tournament: Tourn
         </div>
 
         <ErrorText>{error}</ErrorText>
-        {saved && <p className="text-sm text-accent">Saved.</p>}
+        <SaveState saved={saved} dirty={dirty} />
         <Button type="submit" disabled={busy}>
           Save championship courts
         </Button>
@@ -544,6 +641,17 @@ function PricesCard({ tournament, onChanged }: { tournament: Tournament; onChang
   });
   const { busy, error, run } = useAction();
   const [saved, setSaved] = useState(false);
+  const { dirty, commit } = useUnsaved('prices', form, () =>
+    updateTournament(tournament.id, {
+      entry_fee_cents: cents(form.entry) ?? 0,
+      extra_event_fee_cents: cents(form.extra) ?? 0,
+      early_entry_fee_cents: cents(form.earlyEntry),
+      early_extra_event_fee_cents: cents(form.earlyExtra),
+      // Early prices last through the end of the chosen day.
+      early_until: form.earlyUntil ? new Date(`${form.earlyUntil}T23:59:59`).toISOString() : null,
+      refund_fee_cents: cents(form.refundFee) ?? 0,
+    }),
+  );
   const money = (key: keyof typeof form, placeholder = '0.00') => ({
     type: 'number',
     min: 0,
@@ -563,22 +671,10 @@ function PricesCard({ tournament, onChanged }: { tournament: Tournament; onChang
         onSubmit={(e) => {
           e.preventDefault();
           setSaved(false);
-          run(
-            () =>
-              updateTournament(tournament.id, {
-                entry_fee_cents: cents(form.entry) ?? 0,
-                extra_event_fee_cents: cents(form.extra) ?? 0,
-                early_entry_fee_cents: cents(form.earlyEntry),
-                early_extra_event_fee_cents: cents(form.earlyExtra),
-                // Early prices last through the end of the chosen day.
-                early_until: form.earlyUntil ? new Date(`${form.earlyUntil}T23:59:59`).toISOString() : null,
-                refund_fee_cents: cents(form.refundFee) ?? 0,
-              }),
-            () => (setSaved(true), onChanged()),
-          );
+          run(commit, () => (setSaved(true), onChanged()));
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Field label="First event ($)">
             <Input {...money('entry')} />
           </Field>
@@ -599,7 +695,7 @@ function PricesCard({ tournament, onChanged }: { tournament: Tournament; onChang
           </Field>
         </div>
         <ErrorText>{error}</ErrorText>
-        {saved && <p className="text-sm text-accent">Saved.</p>}
+        <SaveState saved={saved} dirty={dirty} />
         <Button type="submit" disabled={busy}>
           Save prices
         </Button>

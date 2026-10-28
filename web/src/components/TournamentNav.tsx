@@ -16,7 +16,7 @@ import { Icon, type IconName } from './Icon';
 import { WatchChip } from './StreamEmbed';
 import { Badge, Button, Modal } from './ui';
 
-const statusTone = { draft: 'neutral', registration: 'info', live: 'live', complete: 'neutral' } as const;
+const statusTone = { draft: 'neutral', registration: 'called', live: 'live', complete: 'info' } as const;
 const statusText = { draft: 'Draft', registration: 'Registration', live: 'Live', complete: 'Complete' };
 
 type Tab = { href: string; label: string };

@@ -71,6 +71,19 @@ describe('planner', () => {
     expect(plan.matches.filter((m) => m.stage === 'bracket').map((m) => m.label).sort()).toEqual(['Bronze', 'Final']);
   });
 
+  it('gives the gold and bronze matches their own length', () => {
+    const length = (plan: ReturnType<typeof planDay>, label: string) => {
+      const m = plan.matches.find((x) => x.label === label)!;
+      return (m.end - m.start) / MIN;
+    };
+    const single = planDay([division({ format: 'single_elim', thirdPlace: true, goldMinutes: 45, bronzeMinutes: 25 })], { courts: 4 });
+    expect([length(single, 'Final'), length(single, 'Bronze'), length(single, 'Semifinal 1')]).toEqual([45, 25, 20]);
+    const double = planDay([division({ format: 'single_elim', teams: 4, bracketType: 'double', gfReset: true, goldMinutes: 40 })], { courts: 4 });
+    expect([length(double, 'Grand Final'), length(double, 'Grand Final (if needed)'), length(double, 'Winners Final')]).toEqual([40, 40, 20]);
+    // Not set: the bracket length.
+    expect(length(planDay([division({ format: 'single_elim' })], { courts: 4 }), 'Final')).toBe(20);
+  });
+
   it('starts the bracket after pool play, and late divisions at their start time', () => {
     const plan = planDay(
       [

@@ -10,7 +10,7 @@ import { formatDate } from '@/lib/format';
 import { useAction, useLoad, useSession } from '@/lib/hooks';
 import { isBackendConfigured } from '@/lib/config';
 
-const statusTone = { draft: 'neutral', registration: 'info', live: 'live', complete: 'neutral' } as const;
+const statusTone = { draft: 'neutral', registration: 'called', live: 'live', complete: 'info' } as const;
 
 export function OrganizationView({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);

@@ -21,6 +21,7 @@ import {
 import { formatMoney, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
 import { shrinkImage } from '@/lib/image';
+import { useUnsaved } from './SaveAll';
 import type { RegistrationQuestion, StaffRole, Tournament } from '@/lib/types';
 
 const roleText: Record<StaffRole, string> = { admin: 'Admin', monitor: 'Court monitor' };
@@ -101,6 +102,12 @@ export function SharingCard({ tournament }: { tournament: Tournament }) {
   );
 }
 
+/** Under a card's Save button: saved, or changes waiting to be saved. */
+export function SaveState({ saved, dirty }: { saved: boolean; dirty: boolean }) {
+  if (dirty) return <p className="text-sm text-called">Not saved yet</p>;
+  return saved ? <p className="text-sm text-live">Saved.</p> : null;
+}
+
 /** Registration limits and extras. */
 export function RegistrationCard({ tournament, onChanged }: { tournament: Tournament; onChanged: () => void }) {
   const tz = tournament.time_zone;
@@ -112,6 +119,14 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
   });
   const { busy, error, run } = useAction();
   const [saved, setSaved] = useState(false);
+  const { dirty, commit } = useUnsaved('registration', form, () =>
+    updateTournament(tournament.id, {
+      max_players: form.max_players ? Number(form.max_players) : null,
+      registration_closes_at: form.closes ? new Date(fromZonedInput(form.closes, tz)).toISOString() : null,
+      waiver_text: form.waiver.trim() || null,
+      refund_policy: form.refundPolicy.trim() || null,
+    }),
+  );
 
   return (
     <Card className="flex flex-col gap-3 p-4">
@@ -149,16 +164,7 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
         onSubmit={(e) => {
           e.preventDefault();
           setSaved(false);
-          run(
-            () =>
-              updateTournament(tournament.id, {
-                max_players: form.max_players ? Number(form.max_players) : null,
-                registration_closes_at: form.closes ? new Date(fromZonedInput(form.closes, tz)).toISOString() : null,
-                waiver_text: form.waiver.trim() || null,
-                refund_policy: form.refundPolicy.trim() || null,
-              }),
-            () => (setSaved(true), onChanged()),
-          );
+          run(commit, () => (setSaved(true), onChanged()));
         }}
       >
         <div className="grid grid-cols-2 gap-3">
@@ -186,7 +192,7 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
           />
         </Field>
         <ErrorText>{error}</ErrorText>
-        {saved && <p className="text-sm text-live">Saved.</p>}
+        <SaveState saved={saved} dirty={dirty} />
         <Button type="submit" disabled={busy}>
           Save registration settings
         </Button>

@@ -189,7 +189,7 @@ Tournaments add `max_players`, `registration_closes_at`, `waiver_text` (players 
 
 ## Demo tournaments and planning
 
-`tournaments.is_demo` marks a practice tournament. Events have `pool_match_minutes` and `bracket_match_minutes` (expected minutes per match, court time included); the queue orders matches by division start + rounds × that length.
+`tournaments.is_demo` marks a practice tournament. Events have `pool_match_minutes` and `bracket_match_minutes` (expected minutes per match, court time included); the queue orders matches by division start + rounds × that length. `gold_match_minutes` and `bronze_match_minutes` (null = the bracket length) are the Planner's estimate for the gold match (the final, or the grand final in double elimination) and the bronze match.
 
 | Function | Who | What it does |
 |---|---|---|

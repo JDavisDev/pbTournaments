@@ -27,6 +27,9 @@ export interface PlanDivision {
   /** Minutes per match, court changeover included. */
   poolMinutes: number;
   bracketMinutes: number;
+  /** The gold match (final, or grand final) and bronze match; default bracketMinutes. */
+  goldMinutes?: number | null;
+  bronzeMinutes?: number | null;
   /** Court section: court numbers (1 = first court) this division is kept to. Empty = any other court. */
   courts?: number[];
 }
@@ -182,6 +185,10 @@ function buildDivision(d: PlanDivision, divisionIndex: number): Node[] {
   const order = seedOrder(size);
   const afterPools = d.format === 'pools_to_bracket';
   const id = (part: string) => `${d.id}:${part}`;
+  // The medal matches can take longer than the rest of the bracket.
+  const gold = d.bracketType === 'medal' ? ['w1m1'] : d.bracketType === 'single' ? [`w${k}m1`] : ['gf', 'gf2'];
+  const minutesOf = (part: string) =>
+    part === 'bronze' ? (d.bronzeMinutes ?? d.bracketMinutes) : gold.includes(part) ? (d.goldMinutes ?? d.bracketMinutes) : d.bracketMinutes;
   const add = (part: string, label: string, wave: number, sources: [Source, Source], optional = false, position = 1) =>
     nodes.push({
       id: id(part),
@@ -192,7 +199,7 @@ function buildDivision(d: PlanDivision, divisionIndex: number): Node[] {
       sources,
       priority: priority(poolRounds + wave, d.poolMinutes, 0, position),
       afterPools,
-      minutes: d.bracketMinutes,
+      minutes: minutesOf(part),
     });
 
   if (d.bracketType === 'medal') {
