@@ -147,7 +147,6 @@ export function describeDivision(e: Division & { dupr_rated?: boolean }) {
     ageText(e) ? `ages ${ageText(e)}${e.age_basis === 'year_end' ? ' by Dec 31' : ''}` : '',
     e.team_rating_max ? `team rating under ${Number(e.team_rating_max).toFixed(1)}` : '',
     e.team_age_min ? `combined age ${e.team_age_min}+` : '',
-    e.require_dupr_id ? 'DUPR ID required' : '',
     e.dupr_rated === false ? 'not DUPR rated' : '',
     e.max_teams ? `up to ${e.max_teams} ${e.kind === 'singles' ? 'players' : 'teams'}` : '',
   ]

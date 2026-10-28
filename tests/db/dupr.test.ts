@@ -42,7 +42,7 @@ describe('registration rules', () => {
       return asRole(db, 'anon', () =>
         one(db, 'select public.start_registration($1, $2::jsonb, $3::jsonb) as r', [
           tournamentId,
-          JSON.stringify({ first_name: 'Pat', last_name: 'Ray', email: `${Math.random()}@x.test`, ...player }),
+          JSON.stringify({ first_name: 'Pat', last_name: 'Ray', email: `${Math.random()}@x.test`, dupr_id: Math.random().toString(36).slice(2, 8).toUpperCase(), ...player }),
           JSON.stringify([{ event_id: eventId, partner_name: 'Sam', partner_email: 'sam@x.test' }]),
         ]),
       );
@@ -50,9 +50,11 @@ describe('registration rules', () => {
     return { tournamentId, eventId, register };
   }
 
-  it('requires a DUPR ID when the division asks for one, and checks its format', async () => {
-    const { register } = await openEvent({ require_dupr_id: true });
-    await expect(register({ dupr_doubles: 3.2 })).rejects.toThrow(/needs your DUPR ID/);
+  it('requires a DUPR ID in every division, and checks its format', async () => {
+    const { eventId, register } = await openEvent({});
+    await expect(register({ dupr_doubles: 3.2, dupr_id: null })).rejects.toThrow(/needs your DUPR ID/);
+    await expect(register({ dupr_doubles: 3.2, dupr_id: '  ' })).rejects.toThrow(/needs your DUPR ID/);
+    await expect(setEvent(eventId, { require_dupr_id: false })).rejects.toThrow(/events_dupr_id_required/);
     await expect(register({ dupr_doubles: 3.2, dupr_id: 'no way!' })).rejects.toThrow(/letters and numbers/);
     await register({ dupr_doubles: 3.2, dupr_id: '7k2qxw' });
     expect((await one(db, 'select dupr_id from public.players where last_name = $1', ['Ray'])).dupr_id).toBe('7K2QXW');
@@ -83,7 +85,11 @@ describe('division eligibility', () => {
     const young = await addPair(db, eventId, ['Ezra', 'Ford']);
     const set = async (team: string, ratings: number[], births: string[]) => {
       for (const [i, p] of (await playersOf(team)).entries()) {
-        await db.query('update public.players set dupr_doubles = $2, birth_date = $3 where id = $1', [p.id, ratings[i], births[i]]);
+        await db.query(`update public.players set dupr_doubles = $2, birth_date = $3, dupr_id = 'ID' || left(md5(id::text), 5) where id = $1`, [
+          p.id,
+          ratings[i],
+          births[i],
+        ]);
       }
     };
     await set(ok, [3.4, 3.4], ['1960-01-01', '1965-01-01']);

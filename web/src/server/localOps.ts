@@ -166,6 +166,8 @@ const ops: Record<string, Op> = {
       'waiver_text',
       'image_data',
       'refund_policy',
+      'details',
+      'announcement',
       'times_published_at',
       'texts_enabled',
       'championship_mode',

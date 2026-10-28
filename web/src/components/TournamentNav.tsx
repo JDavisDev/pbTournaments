@@ -9,6 +9,7 @@ import { auth } from '@/lib/auth';
 import { useAction, useLiveTournament, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { isBackendConfigured, isDemoMode } from '@/lib/config';
 import { setViewMode, type ViewMode } from '@/lib/viewMode';
+import { Announcement } from './Announcement';
 import { DemoClock } from './DemoTools';
 import { useMyTeam } from './MatchDay';
 import { ShareDialog } from './ShareDialog';
@@ -126,6 +127,12 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
               <DemoClock tournamentId={id} now={now} timeZone={t.time_zone} onChanged={() => {}} />
             </div>
           )}
+        </div>
+      )}
+      {/* On every page of the tournament; directors post one from the Overview. */}
+      {(t.announcement || (staff.data && pathname === base)) && (
+        <div className="mb-5 flex flex-col">
+          <Announcement tournament={t} editable={!!staff.data} onChanged={tournament.reload} />
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">

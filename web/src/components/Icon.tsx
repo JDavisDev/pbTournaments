@@ -18,6 +18,7 @@ const paths = {
   arrow: 'M5 12h14M13 6l6 6-6 6',
   chevron: 'M6 9l6 6 6-6',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
+  megaphone: 'M4 10v4h3l7 4V6l-7 4zM17 9.5a3.5 3.5 0 0 1 0 5M7 14l1.5 5h2.5l-1-4.5',
   sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
   message: 'M4 5h16v11H9l-5 4z',
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',

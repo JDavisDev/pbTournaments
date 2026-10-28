@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
+import { Linked } from '@/components/Announcement';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { CourtStatus } from '@/components/desk/CourtCard';
 import { DivisionStatus, dayHeading, divisionDay, divisionState } from '@/components/DivisionStatus';
@@ -70,6 +71,14 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
             <Link href={`/t/${tournament.id}/register`} className="rounded-lg bg-accent px-4 py-2.5 font-medium text-accent-text">
               Register
             </Link>
+          </Card>
+        )}
+        {tournament.details && (
+          <Card className="p-5">
+            <h2 className="mb-2 text-3xl">About this tournament</h2>
+            <p className="text-lg whitespace-pre-wrap">
+              <Linked text={tournament.details} />
+            </p>
           </Card>
         )}
         {tournament.is_demo && !myTeam && (

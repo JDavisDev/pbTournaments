@@ -44,7 +44,7 @@ import {
 } from '@/lib/format';
 import { isYoutubeUrl } from '@/lib/youtube';
 import { SaveAllProvider, useSaveAll, useUnsaved } from './SaveAll';
-import { DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SaveState, SharingCard } from './SetupCards';
+import { AboutCard, DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SaveState, SharingCard } from './SetupCards';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import type {
   BracketType,
@@ -113,6 +113,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             startHere={draft}
             onChanged={reload}
           />
+          <AboutCard key={`about-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
           <PricesCard key={`prices-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
           <RegistrationCard key={`reg-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
           <QuestionsCard tournament={data.tournament} />
@@ -821,7 +822,6 @@ function EventForm({
     playoff_point_cap: event?.playoff_point_cap ?? null,
     rating_tolerance: event && Number(event.rating_tolerance) > 0 ? String(Number(event.rating_tolerance)) : '',
     play_up_limit: event?.play_up_limit != null ? String(Number(event.play_up_limit)) : '',
-    require_dupr_id: event?.require_dupr_id ?? false,
     dupr_rated: event?.dupr_rated ?? true,
     team_rating_max: event?.team_rating_max != null ? String(Number(event.team_rating_max)) : '',
     team_age_min: event?.team_age_min?.toString() ?? '',
@@ -855,7 +855,6 @@ function EventForm({
     max_teams: optionalNumber(form.max_teams),
     rating_tolerance: form.skill_rule === 'open' ? 0 : (hundredths(form.rating_tolerance) ?? 0),
     play_up_limit: form.allow_play_up ? hundredths(form.play_up_limit) : null,
-    require_dupr_id: form.require_dupr_id,
     team_rating_max: form.kind === 'doubles' ? optionalNumber(form.team_rating_max) : null,
     team_age_min: form.kind === 'doubles' ? optionalNumber(form.team_age_min) : null,
   };
@@ -1050,11 +1049,6 @@ function EventForm({
           label="Results go to DUPR (rated division)"
           checked={form.dupr_rated}
           onChange={(v) => set('dupr_rated', v)}
-        />
-        <Check
-          label="Every player must give a DUPR ID"
-          checked={form.require_dupr_id}
-          onChange={(v) => set('require_dupr_id', v)}
         />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Min age">

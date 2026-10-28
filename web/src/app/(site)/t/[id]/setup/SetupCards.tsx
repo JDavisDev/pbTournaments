@@ -21,6 +21,7 @@ import {
 import { formatMoney, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
 import { shrinkImage } from '@/lib/image';
+import { ANNOUNCEMENT_MAX } from '@/components/Announcement';
 import { useUnsaved } from './SaveAll';
 import type { RegistrationQuestion, StaffRole, Tournament } from '@/lib/types';
 
@@ -106,6 +107,56 @@ export function SharingCard({ tournament }: { tournament: Tournament }) {
 export function SaveState({ saved, dirty }: { saved: boolean; dirty: boolean }) {
   if (dirty) return <p className="text-sm text-called">Not saved yet</p>;
   return saved ? <p className="text-sm text-live">Saved.</p> : null;
+}
+
+/** What players read about the event, and the announcement for last-minute changes. */
+export function AboutCard({ tournament, onChanged }: { tournament: Tournament; onChanged: () => void }) {
+  const [form, setForm] = useState({ details: tournament.details ?? '', announcement: tournament.announcement ?? '' });
+  const { busy, error, run } = useAction();
+  const [saved, setSaved] = useState(false);
+  const { dirty, commit } = useUnsaved('about', form, () =>
+    updateTournament(tournament.id, { details: form.details.trim() || null, announcement: form.announcement.trim() || null }),
+  );
+  return (
+    <Card className="p-4">
+      <h2 className="text-xl">Details and announcement</h2>
+      <form
+        className="mt-3 flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSaved(false);
+          run(commit, () => (setSaved(true), onChanged()));
+        }}
+      >
+        <Field label="Details" hint="On the tournament page: schedule notes, parking, food, what to bring, prizes. Web links work.">
+          <Textarea
+            rows={8}
+            maxLength={10000}
+            value={form.details}
+            onChange={(e) => setForm({ ...form, details: e.target.value })}
+            placeholder={'Check-in opens at 7:30 in the main lobby.\nFree parking in the north lot.\nFood trucks from 11.'}
+          />
+        </Field>
+        <Field
+          label="Announcement"
+          hint={`For last-minute changes: a yellow notice at the top of the tournament’s pages. Leave blank for none. ${form.announcement.length}/${ANNOUNCEMENT_MAX}`}
+        >
+          <Textarea
+            rows={2}
+            maxLength={ANNOUNCEMENT_MAX}
+            value={form.announcement}
+            onChange={(e) => setForm({ ...form, announcement: e.target.value })}
+            placeholder="Courts 5–8 are moving to the north gym at noon."
+          />
+        </Field>
+        <ErrorText>{error}</ErrorText>
+        <SaveState saved={saved} dirty={dirty} />
+        <Button type="submit" disabled={busy}>
+          Save details and announcement
+        </Button>
+      </form>
+    </Card>
+  );
 }
 
 /** Registration limits and extras. */

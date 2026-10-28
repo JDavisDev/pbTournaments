@@ -61,6 +61,7 @@ async function register(
     birth_date: who.birth_date ?? null,
     dupr_doubles: 'dupr_doubles' in who ? who.dupr_doubles : 3.5,
     self_rating: who.self_rating ?? null,
+    dupr_id: Math.random().toString(36).slice(2, 8).toUpperCase(),
   };
   return asRole(db, 'anon', async () =>
     (

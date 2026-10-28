@@ -189,7 +189,7 @@ Tournaments add `max_players`, `registration_closes_at`, `waiver_text` (players 
 
 ## Demo tournaments and planning
 
-`tournaments.is_demo` marks a practice tournament. Events have `pool_match_minutes` and `bracket_match_minutes` (expected minutes per match, court time included); the queue orders matches by division start + rounds × that length. `gold_match_minutes` and `bronze_match_minutes` (null = the bracket length) are the Planner's estimate for the gold match (the final, or the grand final in double elimination) and the bronze match.
+Tournaments have `details` (up to 10,000 characters, shown on the tournament page) and `announcement` (up to 500, a yellow notice at the top of every tournament page; blank takes it down; `announcement_at` is set when it changes). `tournaments.is_demo` marks a practice tournament. Events have `pool_match_minutes` and `bracket_match_minutes` (expected minutes per match, court time included); the queue orders matches by division start + rounds × that length. `gold_match_minutes` and `bronze_match_minutes` (null = the bracket length) are the Planner's estimate for the gold match (the final, or the grand final in double elimination) and the bronze match.
 
 | Function | Who | What it does |
 |---|---|---|
@@ -201,7 +201,7 @@ Demo texts are marked as logged by a pg_cron job, and practice tournaments are d
 
 ## DUPR
 
-See [dupr.md](dupr.md). Players have `dupr_id`, `dupr_doubles`, `dupr_singles` and `rating_checked_at` (a director confirmed the ratings). Division rules on events: `rating_tolerance`, `play_up_limit`, `require_dupr_id`, `team_rating_max`, `team_age_min`. Tournaments: `location`, `dupr_score_type` (`SIDEOUT` or `RALLY`).
+See [dupr.md](dupr.md). Players have `dupr_id`, `dupr_doubles`, `dupr_singles` and `rating_checked_at` (a director confirmed the ratings). Division rules on events: `rating_tolerance`, `play_up_limit`, `team_rating_max`, `team_age_min`. `require_dupr_id` is always true: every registering player needs a DUPR ID. Tournaments: `location`, `dupr_score_type` (`SIDEOUT` or `RALLY`).
 
 | Function | Who | What it does |
 |---|---|---|

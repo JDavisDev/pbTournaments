@@ -1,6 +1,6 @@
 # DUPR
 
-Players give their **DUPR ID** when they sign up (required in divisions with "Every player must give a DUPR ID"). Directors can add or fix IDs and ratings on the **Players** page.
+Players give their **DUPR ID** when they sign up; it is required in every division. Players a director adds by hand are flagged on the Players page until they have one. Directors can add or fix IDs and ratings on the **Players** page.
 
 ## Ratings and division rules
 
@@ -20,7 +20,6 @@ Each division has its own rules (Setup → event):
 | Leeway over the top | 0.25 lets a 4.20 into a 3.5–4.0 division |
 | Allow playing up, and how far | Up to 0.5: a 3.0 may play 3.5, a 2.9 may not |
 | DUPR, or self-rating if no DUPR | |
-| Every player must give a DUPR ID | |
 | Ages: min/max, counted on the tournament day or Dec 31 | 50+ |
 | Team rating limit (doubles) | Ratings added under 7.5 |
 | Combined age (doubles) | Ages added at least 110 |

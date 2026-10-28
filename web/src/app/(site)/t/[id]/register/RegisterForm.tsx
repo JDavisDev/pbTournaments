@@ -110,7 +110,6 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   // Only ask for what some event needs.
   const needsAge = events.some((e) => e.min_age !== null || e.max_age !== null);
   const needsRating = events.some((e) => e.skill_rule !== 'open');
-  const needsDuprId = events.some((e) => e.require_dupr_id);
   const hasSingles = events.some((e) => e.kind === 'singles' && e.skill_rule !== 'open');
 
   const toggle = (eventId: string) =>
@@ -236,10 +235,11 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
           )}
         </div>
         <Field
-          label={needsDuprId ? 'DUPR ID' : 'DUPR ID (optional)'}
-          hint="On your DUPR profile, under your name. We use it to check ratings and send your results to DUPR."
+          label="DUPR ID"
+          hint="On your DUPR profile, under your name. We use it to check ratings and send your results to DUPR. No account yet? It’s free at dupr.com."
         >
           <Input
+            required
             autoCapitalize="characters"
             autoComplete="off"
             spellCheck={false}

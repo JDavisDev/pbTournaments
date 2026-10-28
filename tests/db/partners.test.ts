@@ -38,6 +38,7 @@ async function register(tournamentId: string, email: string, entries: Entry[], e
     email,
     gender: 'male',
     dupr_doubles: 3.5,
+    dupr_id: Math.random().toString(36).slice(2, 8).toUpperCase(),
     waiver_accepted: true,
     ...extra,
   };

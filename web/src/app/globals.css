@@ -30,6 +30,9 @@
   --idle: #8d8d90;
   --info: #2450c4;
   --info-soft: #e8eefc;
+  /* Announcements: a yellow notice. */
+  --warn: #c99a00;
+  --warn-soft: #fff6cc;
 }
 
 /* Dark mode is opt-in: <html data-theme="dark">. Nothing sets it yet. */
@@ -54,6 +57,8 @@
   --idle: #6d6d70;
   --info: #86a6ff;
   --info-soft: #131c35;
+  --warn: #e6c229;
+  --warn-soft: #2b2504;
 }
 
 /* The TV board is always black: it's read from across a gym. */
@@ -96,6 +101,8 @@
   --color-idle: var(--idle);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
   --font-sans: var(--font-body);
   --font-mono: var(--font-code);
   --font-display: var(--font-barlow-condensed);

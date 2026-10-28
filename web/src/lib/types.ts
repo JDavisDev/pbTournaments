@@ -84,6 +84,11 @@ export interface Tournament {
   image_data: string | null;
   /** Shown before players register and before they withdraw. */
   refund_policy: string | null;
+  /** More about the event, on the tournament page. */
+  details: string | null;
+  /** A short notice for last-minute changes, at the top of the tournament's pages; announcement_at is when it changed. */
+  announcement: string | null;
+  announcement_at: string | null;
   /** Division start times show to players only once published. */
   times_published_at: string | null;
   /** Off: no texts (and no texting fee); emails still go out. */
