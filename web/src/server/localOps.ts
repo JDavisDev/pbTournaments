@@ -147,6 +147,7 @@ const ops: Record<string, Op> = {
       'starts_on',
       'time_zone',
       'no_show_minutes',
+      'checkin_grace_minutes',
       'overdue_after_minutes',
       'match_slot_minutes',
       'entry_fee_cents',
@@ -188,6 +189,9 @@ const ops: Record<string, Op> = {
     (await one<{ n: number }>(tx, 'select public.set_advance_per_pool($1, $2) as n', [id, advance])).n,
   setBracketSize: async (tx, id: string, size: number) =>
     (await one<{ n: number }>(tx, 'select public.set_bracket_size($1, $2) as n', [id, size])).n,
+  startEvent: (tx, id: string) => one(tx, 'select public.start_event($1) as r', [id]).then((x) => x.r),
+  finalizeEvent: (tx, id: string) => one(tx, 'select * from public.finalize_event($1)', [id]),
+  reopenEvent: (tx, id: string) => one(tx, 'select * from public.reopen_event($1)', [id]),
   startBracket: (tx, id: string) => tx.query('select public.start_bracket($1)', [id]).then(() => null),
   swapBracketTeams: (tx, eventId: string, a: string, b: string) =>
     tx.query('select public.swap_bracket_teams($1, $2, $3)', [eventId, a, b]).then(() => null),

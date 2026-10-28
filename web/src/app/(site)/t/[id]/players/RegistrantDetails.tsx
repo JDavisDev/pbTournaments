@@ -294,7 +294,7 @@ function MoneyActions({ who, tournament, onChanged }: { who: Registrant; tournam
               <p className="mt-1 whitespace-pre-wrap text-muted">{tournament.refund_policy}</p>
             </details>
           ) : (
-            <p className="text-sm text-muted">No refund policy yet: add one in Setup → Registration.</p>
+            <p className="text-sm text-muted">No refund policy yet: add one in Settings → Registration.</p>
           )}
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Refund ($)">

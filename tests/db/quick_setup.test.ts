@@ -128,7 +128,7 @@ describe('divisions', () => {
     await db.query('update public.events set dupr_rated = false where id = $1', [unrated]);
     for (const e of [event, unrated]) {
       await asUser(() => db.query('select public.add_mock_teams($1, 4)', [e]));
-      await asUser(() => generate(db, e));
+      await generate(db, e);
     }
     await db.query(`update public.tournaments set status = 'live' where id = $1`, [tournamentId]);
     await setClock(db, new Date());
@@ -136,6 +136,8 @@ describe('divisions', () => {
       await db.query(`update public.matches set status = 'in_progress', court_id = (select id from public.courts where tournament_id = $2 limit 1) where id = $1`, [m.id, tournamentId]);
       await reportScore(db, m.id, [[11, 5]]);
     }
+    // Only final divisions go to DUPR.
+    await db.query(`update public.events set finalized_at = now() where tournament_id = $1`, [tournamentId]);
     await actAs(db, director);
     const results = await asUser(() => rows(db, 'select event_id from public.dupr_results($1)', [tournamentId]));
     expect(results.length).toBeGreaterThan(0);

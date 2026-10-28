@@ -31,7 +31,7 @@ Call a function from TypeScript with `supabase.rpc('report_score', { p_match, p_
 | `set_auto_assign(p_tournament, p_on)` → tournament | Staff | Pause (false) or resume sending matches to courts |
 | `set_court_count(p_tournament, p_count)` → int | Staff | Any number of courts, any time. Removed courts' live matches go back to the queue; courts with history are retired, not deleted |
 
-Tournament settings (`no_show_minutes`, `overdue_after_minutes`, `match_slot_minutes`, name, date, time zone) are plain column updates.
+Tournament settings (`no_show_minutes`, `checkin_grace_minutes`, `overdue_after_minutes`, `match_slot_minutes`, name, date, time zone) are plain column updates.
 
 ## Events
 
@@ -57,6 +57,9 @@ Each match has `side` (`main`: pools, single elimination and the winners bracket
 | `set_advance_per_pool(p_event, p_advance)` → int | Staff | The same, as a number per pool (`set_bracket_size` with `pool_count × p_advance`) |
 | `clear_matches(p_event)` | Staff | Deletes the schedule so teams or format can change. Only before any match has gone on a court |
 | `end_pool_play(p_event)` → int | Staff | Ends pool play early: pool matches not yet on a court are `cancelled` (returns how many). Matches on court finish normally; the bracket is seeded once they do. Swiss play stops after the round being played (`max_rounds` becomes that round) Standings rank by win percentage, so uneven match counts are fair |
+| `start_event(p_event)` → `{not_checked_in, sitting_out, deadline}` | Staff | Officially starts a division (and makes the tournament live if it isn't). Until then none of its matches go on court (`blocked_reason` `division_not_started`), whatever `not_before` says; `events.started_at` records it. It can start before every team is checked in: a team that isn't takes its pool's round-1 sit-out where there is one (an odd round-robin pool, or Swiss), and its players who aren't checked in get a `division_started` text. Teams still not checked in `checkin_grace_minutes` (default 10; null = never) after the start become no-shows (`teams.no_show_at`): every match they're in completes as a forfeit once the opponent is known. Checking in clears `no_show_at`; forfeits already made stand. Needs a schedule; `clear_matches` un-starts it |
+| `finalize_event(p_event)` → event | Staff | Marks a started division's results final once no match is left to play (`events.finalized_at`). Its matches' scores, winners and teams are then locked (marking them sent to DUPR still works); only final divisions are in `dupr_results` |
+| `reopen_event(p_event)` → event | Staff | Clears `finalized_at` so a result can be fixed |
 | `start_bracket(p_event)` | Staff | Releases a bracket held for seed review |
 | `swap_bracket_teams(p_event, p_team_a, p_team_b)` | Staff | Swaps two teams' places in the bracket (manual seeding). Neither may have played a bracket match yet |
 | `check_in_team(p_team, p_checked_in = true)` → team | Staff or the team's players | Check in (or undo) |
@@ -96,7 +99,7 @@ Assignment runs after every score, check-in, queue or court change in a live, un
 | `rebuild_queue(p_tournament)` | Staff | Undo manual moves; back to schedule order |
 | `assign_courts(p_tournament)` → int | Staff | Fill open courts now, even while paused or not live |
 
-`blocked_reason`: `on_hold`, `event_not_started`, `not_checked_in`, `player_on_court`, `player_needed_elsewhere` (a match above it, or an overdue match, needs one of its players). Null means it goes on the next free court. The screens show null as **Next up** and the rest as **Scheduled**; directors also see On hold and Not checked in.
+`blocked_reason`: `on_hold`, `division_not_started` (no director has started it), `event_not_started`, `not_checked_in`, `player_on_court`, `player_needed_elsewhere` (a match above it, or an overdue match, needs one of its players). Null means it goes on the next free court. The screens show null as **Next up** and the rest as **Scheduled**; directors also see On hold and Not checked in.
 
 ## Matches on court
 
@@ -204,7 +207,7 @@ See [dupr.md](dupr.md). Players have `dupr_id`, `dupr_doubles`, `dupr_singles` a
 |---|---|---|
 | `division_eligibility(p_tournament)` → rows | Staff | Every team checked against its division with current player details: `problems` (empty when fine) and `unchecked_ratings` |
 | `import_dupr_ratings(p_tournament, p_rows)` → jsonb | Staff | `p_rows`: `[{dupr_id, doubles, singles}]`. Sets ratings for players in this tournament by DUPR ID and marks them checked. Returns `{updated, unknown}` |
-| `dupr_results(p_tournament)` → rows | Staff | Played matches (no forfeits or byes) with match type, event, date, names, DUPR IDs, games, location, score type, `missing_ids` and `exported_at` |
+| `dupr_results(p_tournament)` → rows | Staff | Played matches of final divisions (no forfeits or byes) with match type, event, date, names, DUPR IDs, games, location, score type, `missing_ids` and `exported_at` |
 | `mark_dupr_exported(p_tournament, p_matches, p_exported = true)` → int | Staff | Marks matches as sent to DUPR (or clears it) |
 
 ## Money, withdrawals and moving divisions

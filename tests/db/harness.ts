@@ -102,7 +102,8 @@ export async function createLiveTournament(db: Db, setup: TournamentSetup) {
     setup.start.toISOString().slice(0, 10),
     setup.courts,
   ]);
-  await db.query(`update public.tournaments set status = 'live' where id = $1`, [t.id]);
+  // No automatic forfeits for missing check-in unless a test turns them on.
+  await db.query(`update public.tournaments set status = 'live', checkin_grace_minutes = null where id = $1`, [t.id]);
   return { director: owner, organizationId, tournamentId: t.id as string };
 }
 
@@ -181,7 +182,16 @@ export async function tick(db: Db) {
   await db.query('select private.assign_live_tournaments()');
 }
 
+/** Builds the division's schedule and starts it (see startEvent for the director's way). */
 export async function generate(db: Db, eventId: string): Promise<number> {
+  const n = (await one(db, 'select public.generate_matches($1) as n', [eventId])).n;
+  const e = await one(db, 'update public.events set started_at = private.clock() where id = $1 returning tournament_id', [eventId]);
+  await db.query('select private.auto_assign($1)', [e.tournament_id]);
+  return n;
+}
+
+/** Builds the division's schedule without starting it. */
+export async function buildSchedule(db: Db, eventId: string): Promise<number> {
   return (await one(db, 'select public.generate_matches($1) as n', [eventId])).n;
 }
 

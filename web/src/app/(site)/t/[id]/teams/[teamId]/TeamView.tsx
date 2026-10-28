@@ -25,7 +25,7 @@ import {
   reportScore,
   reportScoreByCode,
 } from '@/lib/api';
-import { bracketSeeds, isPlayable, minutesSince, ordinal, poolName } from '@/lib/format';
+import { bracketSeeds, formatTime, isPlayable, minutesSince, ordinal, poolName } from '@/lib/format';
 import { useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import { rulesOf } from '@/lib/scoring';
 import { estimateWait, formatWaitRange } from '@/lib/waitTime';
@@ -115,6 +115,12 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
       <MatchDayPanel
         tournamentId={id}
         team={team}
+        checkInBy={
+          event.started_at && data.tournament.checkin_grace_minutes !== null
+            ? formatTime(new Date(new Date(event.started_at).getTime() + data.tournament.checkin_grace_minutes * 60_000).toISOString(), tz)
+            : null
+        }
+        started={!!event.started_at}
         mine={mine}
         onCourt={onCourt}
         next={next}
@@ -211,9 +217,15 @@ function MatchDayPanel({
   nextQueue,
   wait,
   now,
+  started,
+  checkInBy,
 }: {
   tournamentId: string;
   team: Team;
+  /** The division has started (start_event). */
+  started: boolean;
+  /** When the team forfeits if it hasn't checked in, as a time; null = no deadline. */
+  checkInBy: string | null;
   mine: MatchDetails[];
   onCourt?: MatchDetails;
   next?: MatchDetails;
@@ -256,11 +268,24 @@ function MatchDayPanel({
         <MatchSteps
           current={step}
           hints={{
-            0: team.checked_in_at ? undefined : 'At the front desk. Both players check in.',
+            0: team.checked_in_at
+              ? undefined
+              : started && checkInBy
+                ? `Your division has started. Both players check in at the front desk by ${checkInBy}, or your team forfeits its matches.`
+                : started
+                  ? 'Your division has started. Both players check in at the front desk now.'
+                  : 'At the front desk. Both players check in.',
             1: nextQueue ? `You’re number ${nextQueue.queue_rank} in line. We’ll text you the court.` : undefined,
             2: onCourt ? `Go to ${onCourt.court_name} now and play. ${capitalized(onCourt.format_text)}.` : undefined,
           }}
         />
+      )}
+
+      {team.no_show_at && (
+        <Card className="border-2 border-late p-4">
+          <p className="font-semibold text-late">You missed check-in</p>
+          <p>Your team’s matches were forfeited. If you’re here now, check in at the front desk: any match still to come can be played.</p>
+        </Card>
       )}
 
       {onCourt ? (

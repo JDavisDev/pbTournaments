@@ -25,7 +25,7 @@ export function CheckInPanel({
     .sort((a, b) => Number(!!a.checked_in_at) - Number(!!b.checked_in_at) || a.name.localeCompare(b.name));
   const eventName = (id: string) => events.find((e) => e.id === id)?.name ?? '';
 
-  if (active.length === 0) return <Empty>No teams yet. Add them in Setup.</Empty>;
+  if (active.length === 0) return <Empty>No teams yet. Add them in Settings.</Empty>;
 
   return (
     <div className="flex flex-col gap-2">

@@ -4,11 +4,14 @@ import Link from 'next/link';
 import { use, useState } from 'react';
 import { Bracket } from '@/components/Bracket';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { DivisionStatus, divisionState } from '@/components/DivisionStatus';
+import { FinalizeDivision } from '@/components/FinalizeDivision';
 import { Icon } from '@/components/Icon';
 import { QueuePanel } from '@/components/desk/QueuePanel';
 import { MatchRow } from '@/components/MatchRow';
 import { Podium } from '@/components/Podium';
 import { StandingsTable } from '@/components/StandingsTable';
+import { StartDivision } from '@/components/StartDivision';
 import { WatchChip } from '@/components/StreamEmbed';
 import { Badge, Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
 import {
@@ -18,15 +21,16 @@ import {
   getMatches,
   getQueue,
   getStandings,
+  getTeamRoster,
   getTeams,
   getTournament,
   startBracket,
   swapBracketTeams,
 } from '@/lib/api';
 import { describeDivision } from '@/lib/eligibility';
-import { advanceRule, bracketSeeds, formatSummary, isPlayable, podium, poolName, shortFormat } from '@/lib/format';
-import { useAction, useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
-import type { MatchDetails, QueueRow } from '@/lib/types';
+import { advanceRule, bracketSeeds, formatSummary, formatTime, isPlayable, podium, poolName, shortFormat } from '@/lib/format';
+import { useAction, useLiveTournament, useLoad, useNow, useStaffAccess } from '@/lib/hooks';
+import type { MatchDetails, QueueRow, Team } from '@/lib/types';
 
 async function load(id: string) {
   const [tournament, events, teams, matches, standings, queue, courts] = await Promise.all([
@@ -41,7 +45,7 @@ async function load(id: string) {
   return { tournament, events, teams, matches, standings, queue, courts };
 }
 
-type Tab = 'standings' | 'bracket' | 'matches' | 'queue';
+type Tab = 'standings' | 'bracket' | 'matches' | 'teams' | 'queue';
 
 /** A division: standings, bracket and matches for everyone; stats and stage controls for directors. */
 export function EventView({ params }: { params: Promise<{ id: string; eventId: string }> }) {
@@ -89,9 +93,15 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
   const medals =
     podium(bracket) ??
     (event.format === 'round_robin' && finished && pools.length === 1
-      ? { gold: byRank(1), silver: byRank(2), bronze: [byRank(3)].filter((t): t is string => !!t) }
+      ? {
+          gold: byRank(1),
+          silver: byRank(2),
+          bronze: [byRank(3)].filter((t): t is string => !!t),
+        }
       : null);
-  const bracketNotStarted = bracket.length > 0 && !bracket.some((m) => isPlayable(m) && (m.status === 'assigned' || m.status === 'in_progress' || m.status === 'completed'));
+  const bracketNotStarted =
+    bracket.length > 0 &&
+    !bracket.some((m) => isPlayable(m) && (m.status === 'assigned' || m.status === 'in_progress' || m.status === 'completed'));
   const held = bracket.some((m) => m.on_hold && (m.status === 'waiting' || m.status === 'queued'));
   const seeded = event.format !== 'pools_to_bracket' || !!event.playoffs_seeded_at;
   const stage =
@@ -105,6 +115,12 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
             ? 'Seeds under review'
             : 'Bracket';
 
+  const state = divisionState(event, all);
+  const grace = data.tournament.checkin_grace_minutes;
+  const forfeitAt = event.started_at && grace !== null ? new Date(event.started_at).getTime() + grace * 60_000 : null;
+  const absent = teams.filter((t) => !t.checked_in_at && !t.no_show_at);
+  const noShows = teams.filter((t) => t.no_show_at);
+
   const played = matches.filter((m) => m.status === 'completed').length;
   const lengths = matches
     .filter((m) => m.status === 'completed' && m.started_at && m.completed_at && !m.forfeit)
@@ -116,9 +132,17 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
     ...(pools.length ? ([['standings', 'Standings']] as [Tab, string][]) : []),
     ...(bracket.length ? ([['bracket', 'Bracket']] as [Tab, string][]) : []),
     ['matches', `Matches ${matches.length ? `${played}/${matches.length}` : ''}`.trim()],
+    ['teams', `Teams ${teams.length}`],
     ...(isDirector ? ([['queue', `Queue ${queue.length}`]] as [Tab, string][]) : []),
   ];
-  const defaultTab: Tab = bracket.length && (poolLeft.length === 0 || !pools.length) ? 'bracket' : pools.length ? 'standings' : 'matches';
+  const defaultTab: Tab =
+    all.length === 0
+      ? 'teams'
+      : bracket.length && (poolLeft.length === 0 || !pools.length)
+        ? 'bracket'
+        : pools.length
+          ? 'standings'
+          : 'matches';
   const active = tab && tabs.some(([k]) => k === tab) ? tab : defaultTab;
 
   const pick = (teamId: string) => {
@@ -134,9 +158,12 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={stage === 'Complete' ? 'neutral' : stage === 'Not scheduled' ? 'neutral' : stage === 'Seeds under review' ? 'called' : 'live'}>
-              {stage === 'Pool play' && swiss ? 'Swiss rounds' : stage}
-            </Badge>
+            <DivisionStatus state={state} startedAt={event.started_at} timeZone={data.tournament.time_zone} />
+            {state === 'live' && (
+              <Badge tone={stage === 'Seeds under review' ? 'called' : 'neutral'}>
+                {stage === 'Pool play' && swiss ? 'Swiss rounds' : stage}
+              </Badge>
+            )}
             {onCourt.length > 0 && <Badge tone="live">{onCourt.length} on court</Badge>}
           </div>
           <h2 className="mt-2 text-4xl sm:text-5xl">{event.name}</h2>
@@ -153,9 +180,31 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
 
       <StageTrack event={event} pools={pools.length > 0} stage={stage} />
 
+      {state === 'not_started' &&
+        (isDirector ? (
+          <StartDivision
+            eventId={event.id}
+            eventName={event.name}
+            teams={teams.length}
+            teamsReady={teams.filter((t) => t.checked_in_at).length}
+            graceMinutes={grace}
+            onStarted={reload}
+          />
+        ) : (
+          <p className="text-muted">This division hasn’t started yet. Matches go on court once the director starts it.</p>
+        ))}
+
+      {isDirector && (state === 'finished' || state === 'final') && (
+        <FinalizeDivision tournament={data.tournament} event={event} matches={all} onChanged={reload} />
+      )}
+
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <Tile label="Teams" value={teams.length} />
-        <Tile label="Played" value={matches.length ? `${played}/${matches.length}` : '—'} bar={matches.length ? played / matches.length : 0} />
+        <Tile
+          label="Played"
+          value={matches.length ? `${played}/${matches.length}` : '—'}
+          bar={matches.length ? played / matches.length : 0}
+        />
         <Tile label="On court" value={onCourt.length} tone="text-live" />
         <Tile label="Next up" value={ready} />
         <Tile label="Avg match" value={avgLength !== null ? `${avgLength}m` : '—'} />
@@ -169,7 +218,28 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         </section>
       )}
 
-      {isDirector && !medals && (poolUnstarted.length > 0 || (bracketNotStarted && seeded) || held) && (
+
+      {state === 'live' && (absent.length > 0 || noShows.length > 0) && (
+        <Card className="flex flex-col gap-1 p-4">
+          {absent.length > 0 && (
+            <p>
+              <strong>Not checked in:</strong> {absent.map((t) => t.name).join(', ')}.{' '}
+              {forfeitAt !== null &&
+                (forfeitAt > now
+                  ? `Unless they check in by ${formatTime(new Date(forfeitAt).toISOString(), data.tournament.time_zone)}, they forfeit their matches.`
+                  : 'Their matches are being forfeited.')}
+            </p>
+          )}
+          {noShows.length > 0 && (
+            <p className="text-late">
+              <strong>Missed check-in:</strong> {noShows.map((t) => t.name).join(', ')}. Their matches are forfeited until they
+              check in.
+            </p>
+          )}
+        </Card>
+      )}
+
+      {isDirector && !medals && state === 'live' && (poolUnstarted.length > 0 || (bracketNotStarted && seeded) || held) && (
         <Card className="flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="mr-auto text-sm font-semibold tracking-widest text-muted uppercase">Division controls</span>
@@ -191,22 +261,40 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
               </Button>
             )}
             {bracketNotStarted && seeded && (
-              <Button size="sm" variant={arranging ? 'primary' : 'secondary'} onClick={() => (setArranging(!arranging), setPicked(null))}>
+              <Button
+                size="sm"
+                variant={arranging ? 'primary' : 'secondary'}
+                onClick={() => (setArranging(!arranging), setPicked(null))}
+              >
                 {arranging ? 'Done arranging' : 'Arrange seeds'}
               </Button>
             )}
             {held && (
-              <Button size="sm" variant="primary" disabled={control.busy} onClick={() => control.run(() => startBracket(eventId), () => (setArranging(false), reload()))}>
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={control.busy}
+                onClick={() =>
+                  control.run(
+                    () => startBracket(eventId),
+                    () => (setArranging(false), reload()),
+                  )
+                }
+              >
                 <Icon name="play" /> Start bracket
               </Button>
             )}
           </div>
           {held && !arranging && (
-            <p className="text-sm text-called">The bracket is held so you can check the seeds. Arrange them if needed, then start it.</p>
+            <p className="text-sm text-called">
+              The bracket is held so you can check the seeds. Arrange them if needed, then start it.
+            </p>
           )}
           {arranging && (
             <p className="text-sm text-info">
-              {picked ? `Now click the team to swap with ${teamName(picked)}.` : 'Click a team, then another, to swap their places in the bracket.'}
+              {picked
+                ? `Now click the team to swap with ${teamName(picked)}.`
+                : 'Click a team, then another, to swap their places in the bracket.'}
             </p>
           )}
           <ErrorText>{control.error}</ErrorText>
@@ -227,85 +315,161 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         </div>
       )}
 
-      {all.length === 0 ? (
-        <Empty>The schedule for this event hasn’t been built yet.</Empty>
-      ) : (
-        <>
-          <div className="flex gap-1 overflow-x-auto rounded-lg bg-surface-2 p-1" role="tablist">
-            {tabs.map(([key, label]) => (
-              <button
-                key={key}
-                role="tab"
-                aria-selected={active === key}
-                onClick={() => setTab(key)}
-                className={`flex-1 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap ${
-                  active === key ? 'bg-surface shadow-sm' : 'text-muted hover:text-text'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+      {all.length === 0 && <Empty>The schedule for this event hasn’t been built yet.</Empty>}
+      <>
+        <div className="flex gap-1 overflow-x-auto rounded-lg bg-surface-2 p-1" role="tablist">
+          {tabs.map(([key, label]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={active === key}
+              onClick={() => setTab(key)}
+              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap ${
+                active === key ? 'bg-surface shadow-sm' : 'text-muted hover:text-text'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-          {swiss && (active === 'standings' || active === 'matches') && (
-            <p className="text-muted">
-              Swiss round {swissRound} of {event.max_rounds}.
-              {swissRound < (event.max_rounds ?? 0) ? ' The next round is drawn from the standings when this one finishes.' : ''}
-            </p>
-          )}
+        {swiss && (active === 'standings' || active === 'matches') && (
+          <p className="text-muted">
+            Swiss round {swissRound} of {event.max_rounds}.
+            {swissRound < (event.max_rounds ?? 0) ? ' The next round is drawn from the standings when this one finishes.' : ''}
+          </p>
+        )}
 
-          {active === 'standings' && (
-            <section>
-              <div className="grid gap-4 lg:grid-cols-2">
-                {pools.map((pool) => (
-                  <div key={pool}>
-                    {pools.length > 1 && <h4 className="mb-2 font-display text-xl font-bold uppercase">{poolName(pool)}</h4>}
-                    <StandingsTable rows={standings.filter((s) => s.pool === pool)} tournamentId={id} advance={advance} />
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-muted">
-                {seeds > 0 ? `${advanceRule(pools.length, seeds)} ` : ''}
-                Ranked by win percentage, then head-to-head, point differential and points scored.
-              </p>
-            </section>
-          )}
-
-          {active === 'bracket' && (
-            <section>
-              {event.format === 'pools_to_bracket' && !event.playoffs_seeded_at && (
-                <p className="mb-3 text-sm text-muted">Seeds are filled in when pool play finishes.</p>
-              )}
-              <Bracket matches={bracket} picking={arranging ? { pickedTeamId: picked, onPick: pick } : undefined} />
-            </section>
-          )}
-
-          {active === 'matches' && (
-            <section className="grid gap-4 lg:grid-cols-2">
+        {active === 'standings' && (
+          <section>
+            <div className="grid gap-4 lg:grid-cols-2">
               {pools.map((pool) => (
-                <MatchList
-                  key={pool}
-                  title={pools.length > 1 ? poolName(pool) : swiss ? 'Swiss rounds' : 'Pool play'}
-                  matches={poolMatches.filter((m) => m.pool === pool && isPlayable(m))}
-                  queueById={queueById}
-                  timeZone={data.tournament.time_zone}
-                />
+                <div key={pool}>
+                  {pools.length > 1 && <h4 className="mb-2 font-display text-xl font-bold uppercase">{poolName(pool)}</h4>}
+                  <StandingsTable rows={standings.filter((s) => s.pool === pool)} tournamentId={id} advance={advance} />
+                </div>
               ))}
-              {bracket.some(isPlayable) && (
-                <MatchList
-                  title="Bracket"
-                  matches={bracket.filter(isPlayable).sort((a, b) => Number(a.queue_seq) - Number(b.queue_seq))}
-                  queueById={queueById}
-                  timeZone={data.tournament.time_zone}
-                />
-              )}
-            </section>
-          )}
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              {seeds > 0 ? `${advanceRule(pools.length, seeds)} ` : ''}
+              Ranked by win percentage, then head-to-head, point differential and points scored.
+            </p>
+          </section>
+        )}
 
-          {active === 'queue' && isDirector && <QueuePanel queue={queue} staff now={now} onChanged={reload} />}
-        </>
-      )}
+        {active === 'bracket' && (
+          <section>
+            {event.format === 'pools_to_bracket' && !event.playoffs_seeded_at && (
+              <p className="mb-3 text-sm text-muted">Seeds are filled in when pool play finishes.</p>
+            )}
+            <Bracket matches={bracket} picking={arranging ? { pickedTeamId: picked, onPick: pick } : undefined} />
+          </section>
+        )}
+
+        {active === 'matches' && (
+          <section className="grid gap-4 lg:grid-cols-2">
+            {pools.map((pool) => (
+              <MatchList
+                key={pool}
+                title={pools.length > 1 ? poolName(pool) : swiss ? 'Swiss rounds' : 'Pool play'}
+                matches={poolMatches.filter((m) => m.pool === pool && isPlayable(m))}
+                queueById={queueById}
+                timeZone={data.tournament.time_zone}
+              />
+            ))}
+            {bracket.some(isPlayable) && (
+              <MatchList
+                title="Bracket"
+                matches={bracket.filter(isPlayable).sort((a, b) => Number(a.queue_seq) - Number(b.queue_seq))}
+                queueById={queueById}
+                timeZone={data.tournament.time_zone}
+              />
+            )}
+          </section>
+        )}
+
+        {active === 'teams' && (
+          <TeamList tournamentId={id} eventId={eventId} teams={teams} director={isDirector} started={!!event.started_at} />
+        )}
+
+        {active === 'queue' && isDirector && <QueuePanel queue={queue} staff now={now} onChanged={reload} />}
+      </>
     </div>
+  );
+}
+
+/** The division's teams and whether they're here; directors also see the players and their ratings. */
+function TeamList({
+  tournamentId,
+  eventId,
+  teams,
+  director,
+  started,
+}: {
+  tournamentId: string;
+  eventId: string;
+  teams: Team[];
+  director: boolean;
+  started: boolean;
+}) {
+  const roster = useLoad(
+    () => (director ? getTeamRoster(tournamentId) : Promise.resolve([])),
+    [tournamentId, director, teams.length],
+  );
+  const players = new Map((roster.data ?? []).filter((r) => r.event_id === eventId).map((r) => [r.team_id, r.players]));
+  if (teams.length === 0) return <Empty>No teams yet.</Empty>;
+  const sorted = [...teams].sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999) || a.name.localeCompare(b.name));
+  return (
+    <section className="flex flex-col gap-2">
+      <ul className="flex flex-col divide-y divide-border rounded-2xl border border-border bg-surface">
+        {sorted.map((t) => (
+          <li key={t.id} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 py-3">
+            <div className="min-w-0">
+              <Link
+                href={`/t/${tournamentId}/teams/${t.id}`}
+                className="text-lg font-semibold underline-offset-4 hover:underline"
+              >
+                {t.name}
+              </Link>
+              <p className="text-sm text-muted">
+                {[t.seed ? `Seed ${t.seed}` : '', t.pool ? poolName(t.pool) : ''].filter(Boolean).join(' · ')}
+              </p>
+              {director &&
+                players.get(t.id)?.map((p) => (
+                  <p key={p.player_id} className="text-sm">
+                    {p.first_name} {p.last_name}
+                    <span className="text-muted">
+                      {p.dupr_doubles != null
+                        ? ` · ${Number(p.dupr_doubles).toFixed(2)}`
+                        : p.self_rating != null
+                          ? ` · ${Number(p.self_rating).toFixed(1)} self`
+                          : ''}
+                      {p.dupr_id ? '' : ' · no DUPR ID'}
+                    </span>
+                  </p>
+                ))}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {t.no_show_at ? (
+                <Badge tone="late">Missed check-in</Badge>
+              ) : t.checked_in_at ? (
+                <Badge tone="live">Here</Badge>
+              ) : (
+                <Badge tone={started ? 'called' : 'neutral'}>Not here</Badge>
+              )}
+              {director && (
+                <Link
+                  href={`/t/${tournamentId}/players?q=${encodeURIComponent(t.name)}`}
+                  className="text-sm font-medium text-muted underline hover:text-text"
+                >
+                  Manage
+                </Link>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -330,14 +494,35 @@ function MatchList({
   );
 }
 
-function formatShort(event: { format: string; bracket_type: string; games_to: number; best_of: number; point_cap: number | null }, matches: MatchDetails[]) {
+function formatShort(
+  event: {
+    format: string;
+    bracket_type: string;
+    games_to: number;
+    best_of: number;
+    point_cap: number | null;
+  },
+  matches: MatchDetails[],
+) {
   if (event.format === 'round_robin') return shortFormat(event);
   const final = matches.find((m) => m.round_key === 'final' || m.round_key === 'grand_final');
   const kind = event.bracket_type === 'medal' ? 'Medal matches' : `${event.bracket_type === 'double' ? 'Double' : 'Single'} elim`;
   return `${kind}${final ? ` · final ${shortFormat(final)}` : ''}`;
 }
 
-function Tile({ label, value, tone = '', bar, small }: { label: string; value: number | string; tone?: string; bar?: number; small?: boolean }) {
+function Tile({
+  label,
+  value,
+  tone = '',
+  bar,
+  small,
+}: {
+  label: string;
+  value: number | string;
+  tone?: string;
+  bar?: number;
+  small?: boolean;
+}) {
   return (
     <div className="flex flex-col justify-between gap-1 rounded-2xl bg-surface-2 p-3">
       <dt className="text-xs font-semibold tracking-widest text-muted uppercase">{label}</dt>
@@ -352,26 +537,35 @@ function Tile({ label, value, tone = '', bar, small }: { label: string; value: n
 }
 
 /** Pool play → bracket → medals, with the current step lit. */
-function StageTrack({ event, pools, stage }: { event: { format: string; bracket_type: string; pool_play: string }; pools: boolean; stage: string }) {
-  const bracket = event.bracket_type === 'double' ? 'Double-elim bracket' : event.bracket_type === 'medal' ? 'Medal matches' : 'Bracket';
+function StageTrack({
+  event,
+  pools,
+  stage,
+}: {
+  event: { format: string; bracket_type: string; pool_play: string };
+  pools: boolean;
+  stage: string;
+}) {
+  const bracket =
+    event.bracket_type === 'double' ? 'Double-elim bracket' : event.bracket_type === 'medal' ? 'Medal matches' : 'Bracket';
   const steps = [
     ...(pools || event.format !== 'single_elim' ? [event.pool_play === 'swiss' ? 'Swiss rounds' : 'Pool play'] : []),
     ...(event.format !== 'round_robin' ? [bracket] : []),
     'Complete',
   ];
   const current =
-    stage === 'Complete'
-      ? steps.length - 1
-      : stage === 'Pool play' || stage === 'Not scheduled'
-        ? 0
-        : steps.length - 2;
+    stage === 'Complete' ? steps.length - 1 : stage === 'Pool play' || stage === 'Not scheduled' ? 0 : steps.length - 2;
   return (
     <ol className="flex items-center gap-2 text-sm">
       {steps.map((s, i) => (
         <li key={s} className="flex min-w-0 flex-1 items-center gap-2">
           <span
             className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${
-              i < current || stage === 'Complete' ? 'bg-brand text-white' : i === current ? 'bg-accent text-accent-text' : 'bg-surface-2 text-muted'
+              i < current || stage === 'Complete'
+                ? 'bg-brand text-white'
+                : i === current
+                  ? 'bg-accent text-accent-text'
+                  : 'bg-surface-2 text-muted'
             }`}
           >
             {i < current || stage === 'Complete' ? <Icon name="check" className="h-4 w-4" /> : i + 1}

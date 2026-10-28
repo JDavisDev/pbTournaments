@@ -62,7 +62,7 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
   if (!staff.data) return <Empty>The planner is for this tournament’s directors.</Empty>;
 
   const { tournament: t, events, teams, courts, matches } = data;
-  if (events.length === 0) return <Empty>Add divisions in Setup first, then plan the day here.</Empty>;
+  if (events.length === 0) return <Empty>Add divisions in Settings first, then plan the day here.</Empty>;
 
   const activeTeams = (eventId: string) => teams.filter((x) => x.event_id === eventId && !x.withdrawn_at).length;
   const draftOf = (e: TournamentEvent) => drafts[e.id] ?? initialDraft(e, t, activeTeams(e.id));

@@ -17,6 +17,14 @@ const paths = {
   text: 'M4 7V5h10v2M9 5v14M7 19h4M14 12v-1h6v1M17 11v8M15.5 19h3',
   arrow: 'M5 12h14M13 6l6 6-6 6',
   chevron: 'M6 9l6 6 6-6',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
+  message: 'M4 5h16v11H9l-5 4z',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  upload: 'M12 15V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4',
+  tv: 'M3 6h18v12H3zM8 21h8',
+  people: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20a6 6 0 0 1 12 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3 5.5',
+  pen: 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4',
 } as const;
 
 export type IconName = keyof typeof paths;

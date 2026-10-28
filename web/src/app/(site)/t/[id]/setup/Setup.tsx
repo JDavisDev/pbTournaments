@@ -1,7 +1,9 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { DivisionStatus, divisionState } from '@/components/DivisionStatus';
 import { Badge, Button, Card, Empty, ErrorText, Field, Input, Select, Spinner, Textarea } from '@/components/ui';
 import {
   addMockTeams,
@@ -25,7 +27,7 @@ import {
   setTournamentStatus,
   updateTournament,
 } from '@/lib/api';
-import { describeDivision, suggestEventName } from '@/lib/eligibility';
+import { describeDivision, ratingLimits, ratingText, suggestEventName } from '@/lib/eligibility';
 import {
   championshipModes,
   championshipRankLabel,
@@ -82,8 +84,9 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
   const draft = data.tournament.status === 'draft';
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_22rem]">
       <section className="flex flex-col gap-4">
+        {!draft && <h2 className="text-4xl">Settings</h2>}
         {draft && (
           <SettingsCard
             key={`start-${data.tournament.id}`}
@@ -119,6 +122,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             onChanged={reload}
           />
         ))}
+        {draft && <OpenRegistration tournament={data.tournament} divisions={data.events.length} />}
       </section>
 
       <aside className="flex flex-col gap-4">
@@ -134,6 +138,34 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
         <ChampionshipCard key={`champ-${data.tournament.id}`} tournament={data.tournament} courts={data.courts} onChanged={reload} />
       </aside>
     </div>
+  );
+}
+
+/** The end of a draft: open registration, and the day's tabs take over from Setup. */
+function OpenRegistration({ tournament, divisions }: { tournament: Tournament; divisions: number }) {
+  const router = useRouter();
+  const { busy, error, run } = useAction();
+  const ready = divisions > 0 && !!tournament.name.trim();
+  return (
+    <Card className="flex flex-col gap-3 border-2 border-accent p-5">
+      <div>
+        <h2 className="text-2xl">Done setting up?</h2>
+        <p className="text-muted">
+          Open registration to make the tournament public. Check-in, Players and the rest show up then, and these settings
+          move to <b>More → Settings</b>, where you can still change them.
+        </p>
+      </div>
+      {!ready && <p className="text-sm text-called">Add at least one division first.</p>}
+      <Button
+        variant="primary"
+        className="self-start"
+        disabled={busy || !ready}
+        onClick={() => run(() => setTournamentStatus(tournament.id, 'registration'), () => router.push(`/t/${tournament.id}`))}
+      >
+        Save and open registration
+      </Button>
+      <ErrorText>{error}</ErrorText>
+    </Card>
   );
 }
 
@@ -191,6 +223,8 @@ function SettingsCard({
     no_show_minutes: tournament.no_show_minutes,
     overdue_after_minutes: tournament.overdue_after_minutes,
     match_slot_minutes: tournament.match_slot_minutes,
+    // Blank: teams that miss check-in never forfeit automatically.
+    checkin_grace_minutes: tournament.checkin_grace_minutes?.toString() ?? '',
     location: tournament.location ?? '',
     dupr_score_type: tournament.dupr_score_type,
   });
@@ -224,7 +258,12 @@ function SettingsCard({
           setSaved(false);
           run(
             async () => {
-              await updateTournament(tournament.id, { ...form, name: form.name.trim(), location: form.location.trim() || null });
+              await updateTournament(tournament.id, {
+                ...form,
+                name: form.name.trim(),
+                location: form.location.trim() || null,
+                checkin_grace_minutes: optionalNumber(form.checkin_grace_minutes),
+              });
               if (startHere && courts !== courtCount) await setCourtCount(tournament.id, courts);
             },
             () => (setSaved(true), onChanged()),
@@ -272,6 +311,16 @@ function SettingsCard({
           </Field>
           <Field label="Match length (min)" hint="Orders the queue">
             <Input {...num('match_slot_minutes')} />
+          </Field>
+          <Field label="Check-in (min)" hint="To arrive once a division starts, or forfeit. Blank: no forfeits">
+            <Input
+              type="number"
+              min={0}
+              max={240}
+              placeholder="Never"
+              value={form.checkin_grace_minutes}
+              onChange={(e) => setForm({ ...form, checkin_grace_minutes: e.target.value })}
+            />
           </Field>
         </div>
         <div className={`flex flex-col gap-2 ${startHere ? 'sm:col-span-2' : ''}`}>
@@ -567,6 +616,8 @@ const toLocalInput = (iso: string | null) => {
 
 const LEVELS = ['2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5', '6.0'];
 const optionalNumber = (v: string) => (v === '' ? null : Number(v));
+/** A rating amount to the hundredth, as the database stores it. */
+const hundredths = (v: string) => (v === '' ? null : Math.round(Number(v) * 100) / 100);
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -672,7 +723,7 @@ function EventForm({
     playoff_games_to: event?.playoff_games_to ?? null,
     playoff_best_of: event?.playoff_best_of ?? null,
     playoff_point_cap: event?.playoff_point_cap ?? null,
-    rating_tolerance: event ? Number(event.rating_tolerance) : 0,
+    rating_tolerance: event && Number(event.rating_tolerance) > 0 ? String(Number(event.rating_tolerance)) : '',
     play_up_limit: event?.play_up_limit != null ? String(Number(event.play_up_limit)) : '',
     require_dupr_id: event?.require_dupr_id ?? false,
     dupr_rated: event?.dupr_rated ?? true,
@@ -706,13 +757,14 @@ function EventForm({
     max_age: optionalNumber(form.max_age),
     age_basis: form.age_basis,
     max_teams: optionalNumber(form.max_teams),
-    rating_tolerance: form.skill_rule === 'open' ? 0 : form.rating_tolerance,
-    play_up_limit: form.allow_play_up ? optionalNumber(form.play_up_limit) : null,
+    rating_tolerance: form.skill_rule === 'open' ? 0 : (hundredths(form.rating_tolerance) ?? 0),
+    play_up_limit: form.allow_play_up ? hundredths(form.play_up_limit) : null,
     require_dupr_id: form.require_dupr_id,
     team_rating_max: form.kind === 'doubles' ? optionalNumber(form.team_rating_max) : null,
     team_age_min: form.kind === 'doubles' ? optionalNumber(form.team_age_min) : null,
   };
   const suggested = suggestEventName(division);
+  const limits = ratingLimits(division);
 
   return (
     <form
@@ -833,22 +885,44 @@ function EventForm({
               />
               Allow lower-rated players to play up
             </label>
-            <Field label="Leeway over the top" hint="Lets players just over the limit in. Nobody plays down past this.">
-              <Select value={form.rating_tolerance} onChange={(e) => set('rating_tolerance', Number(e.target.value))}>
-                <option value={0}>None</option>
-                <option value={0.1}>0.10</option>
-                <option value={0.25}>0.25</option>
-                <option value={0.5}>0.50</option>
-              </Select>
-            </Field>
+            {limits.under !== null && (
+              <Field
+                label="Leeway over the top"
+                hint={`Players rated under ${ratingText(limits.under)} can enter.${
+                  form.rating_tolerance ? '' : ' Add leeway (any amount, e.g. 0.15) to let players just over the limit in.'
+                }`}
+              >
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={5}
+                  step={0.01}
+                  placeholder="None"
+                  value={form.rating_tolerance}
+                  onChange={(e) => set('rating_tolerance', e.target.value)}
+                />
+              </Field>
+            )}
             {form.allow_play_up && (
-              <Field label="How far players may play up">
-                <Select value={form.play_up_limit} onChange={(e) => set('play_up_limit', e.target.value)}>
-                  <option value="">Any amount</option>
-                  <option value="0.5">Up to 0.5</option>
-                  <option value="1">Up to 1.0</option>
-                  <option value="1.5">Up to 1.5</option>
-                </Select>
+              <Field
+                label="How far players may play up"
+                hint={
+                  limits.playUpFrom !== null
+                    ? `Players rated ${ratingText(limits.playUpFrom)} and up can play up.`
+                    : 'Optional, any amount (e.g. 0.3). Blank: anyone rated lower can play up.'
+                }
+              >
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={5}
+                  step={0.01}
+                  placeholder="Any amount"
+                  value={form.play_up_limit}
+                  onChange={(e) => set('play_up_limit', e.target.value)}
+                />
               </Field>
             )}
           </>
@@ -1293,7 +1367,10 @@ function EventCard({
         </div>
         <div className="flex flex-wrap gap-2">
           {scheduled ? (
-            <Badge tone="live">{matches.length} matches scheduled</Badge>
+            <>
+              <DivisionStatus state={divisionState(event, matches)} startedAt={event.started_at} timeZone={timeZone} />
+              <Badge>{matches.length} matches</Badge>
+            </>
           ) : (
             <Badge>Not scheduled</Badge>
           )}

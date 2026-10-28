@@ -6,24 +6,30 @@ import { use, useState } from 'react';
 import { getEvents, getTournament } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { auth } from '@/lib/auth';
-import { useAction, useLoad, useNow, useSession, useStaffAccess } from '@/lib/hooks';
+import { useAction, useLiveTournament, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { isBackendConfigured, isDemoMode } from '@/lib/config';
 import { setViewMode, type ViewMode } from '@/lib/viewMode';
 import { DemoClock } from './DemoTools';
 import { useMyTeam } from './MatchDay';
 import { ShareDialog } from './ShareDialog';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import { WatchChip } from './StreamEmbed';
-import { Badge, Button } from './ui';
+import { Badge, Button, Modal } from './ui';
 
 const statusTone = { draft: 'neutral', registration: 'info', live: 'live', complete: 'neutral' } as const;
 const statusText = { draft: 'Draft', registration: 'Registration', live: 'Live', complete: 'Complete' };
 
+type Tab = { href: string; label: string };
+/** A page in the More sheet: used less often than the tabs. */
+type MoreItem = Tab & { icon: IconName; hint: string; newTab?: boolean };
+
 export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const pathname = usePathname();
-  const tournament = useLoad(() => Promise.all([getTournament(id), getEvents(id)]), [id]);
+  // Live: the tabs change as the tournament moves along (a division starting shows the court desk).
+  const tournament = useLiveTournament(id, () => Promise.all([getTournament(id), getEvents(id)]));
   const [sharing, setSharing] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const staff = useStaffAccess(id);
   const [myTeam] = useMyTeam(id);
   const router = useRouter();
@@ -34,29 +40,43 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   if (!isBackendConfigured || !tournament.data) return null;
   const [t, events] = tournament.data;
   const base = `/t/${id}`;
-  const tabs = [
-    { href: base, label: 'Overview' },
-    ...(!staff.monitor && myTeam ? [{ href: `${base}/teams/${myTeam}`, label: 'My matches' }] : []),
-    ...(t.status === 'registration' ? [{ href: `${base}/register`, label: 'Register' }] : []),
-    ...(staff.monitor && !staff.data
-      ? [
-          { href: `${base}/desk`, label: 'Courts' },
-          { href: `${base}/checkin`, label: 'Check-in' },
-        ]
-      : []),
-    ...(staff.data
-      ? [
-          { href: `${base}/checkin`, label: 'Check-in' },
-          { href: `${base}/desk`, label: 'Court desk' },
-          { href: `${base}/players`, label: 'Players' },
-          { href: `${base}/messages`, label: 'Messages' },
-          { href: `${base}/registrations`, label: 'Registrations' },
-          { href: `${base}/dupr`, label: 'DUPR' },
-          { href: `${base}/setup`, label: 'Setup' },
-          { href: `${base}/planner`, label: 'Planner' },
-        ]
-      : []),
-  ];
+  const draft = t.status === 'draft';
+  // The court desk is for play: it shows once a director starts a division.
+  const playing = events.some((e) => e.started_at) && t.status !== 'complete';
+  const desk = playing ? [{ href: `${base}/desk`, label: 'Court desk' }] : [];
+  const register = t.status === 'registration' ? [{ href: `${base}/register`, label: 'Register' }] : [];
+  const tv: MoreItem = { href: `/tv/${id}`, label: 'TV board', icon: 'tv', hint: 'Courts and results for a big screen', newTab: true };
+  let tabs: Tab[];
+  let more: MoreItem[] = [];
+  if (staff.data) {
+    // A draft is set up first; the other tabs come once registration opens.
+    tabs = draft
+      ? [{ href: `${base}/setup`, label: 'Setup' }, { href: base, label: 'Overview' }]
+      : [{ href: base, label: 'Overview' }, { href: `${base}/checkin`, label: 'Check-in' }, ...desk, { href: `${base}/players`, label: 'Players' }];
+    more = [
+      draft
+        ? { href: `${base}/players`, label: 'Players', icon: 'people', hint: 'Everyone entered so far' }
+        : { href: `${base}/setup`, label: 'Settings', icon: 'sliders', hint: 'Details, divisions, prices and registration' },
+      { href: `${base}/planner`, label: 'Planner', icon: 'calendar', hint: 'Plan the day’s divisions and courts' },
+      { href: `${base}/messages`, label: 'Messages', icon: 'message', hint: 'Text and email players' },
+      ...(draft ? [] : [{ href: `${base}/dupr`, label: 'DUPR', icon: 'upload', hint: 'Send final results to DUPR' } as MoreItem]),
+      ...(t.status === 'registration'
+        ? [{ href: `${base}/register`, label: 'Register a player', icon: 'pen', hint: 'The registration form' } as MoreItem]
+        : []),
+      tv,
+    ];
+  } else if (staff.monitor) {
+    tabs = [{ href: base, label: 'Overview' }, { href: `${base}/checkin`, label: 'Check-in' }, ...desk];
+    more = [tv];
+  } else {
+    tabs = [
+      { href: base, label: 'Overview' },
+      ...(myTeam ? [{ href: `${base}/teams/${myTeam}`, label: 'My matches' }] : []),
+      ...register,
+    ];
+  }
+  const isActive = (href: string) => (href === base ? pathname === base : pathname.startsWith(href));
+  const moreActive = more.find((m) => !m.newTab && isActive(m.href));
 
   // Director view needs a session: on a practice tournament anyone signed in
   // (a guest too, which demo sites make automatically) is a director.
@@ -65,7 +85,7 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
     switching.run(async () => {
       if (mode === 'admin' && !session) await auth.signInAsGuest();
       setViewMode(mode);
-      router.push(mode === 'player' ? (myTeam ? `${base}/teams/${myTeam}` : base) : `${base}/desk`);
+      router.push(mode === 'player' ? (myTeam ? `${base}/teams/${myTeam}` : base) : draft ? `${base}/setup` : playing ? `${base}/desk` : `${base}/checkin`);
     });
   const showDemoBar = isDemoMode && (staff.account || t.is_demo);
 
@@ -122,28 +142,66 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
       </div>
       <ShareDialog open={sharing} onClose={() => setSharing(false)} tournament={t} events={events} />
       <nav className="mt-6 flex gap-6 overflow-x-auto overflow-y-hidden border-b border-border [scrollbar-width:none]">
-        {tabs.map((tab) => {
-          const active = tab.href === base ? pathname === base : pathname.startsWith(tab.href);
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={`-mb-px border-b-2 py-3 font-medium whitespace-nowrap ${
-                active ? 'border-text text-text' : 'border-transparent text-muted hover:text-text'
-              }`}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-        <a
-          href={`/tv/${id}`}
-          target="_blank"
-          className="-mb-px border-b-2 border-transparent py-3 font-medium whitespace-nowrap text-muted hover:text-text"
-        >
-          <span className="inline-flex items-center gap-1">TV board <Icon name="external" className="h-4 w-4" /></span>
-        </a>
+        {tabs.map((tab) => (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            className={`-mb-px border-b-2 py-3 font-medium whitespace-nowrap ${
+              isActive(tab.href) ? 'border-text text-text' : 'border-transparent text-muted hover:text-text'
+            }`}
+          >
+            {tab.label}
+          </Link>
+        ))}
+        {more.length > 0 ? (
+          <button
+            onClick={() => setMoreOpen(true)}
+            aria-haspopup="dialog"
+            className={`-mb-px inline-flex items-center gap-1 border-b-2 py-3 font-medium whitespace-nowrap ${
+              moreActive ? 'border-text text-text' : 'border-transparent text-muted hover:text-text'
+            }`}
+          >
+            {moreActive ? moreActive.label : 'More'}
+            <Icon name="chevron" className="h-4 w-4" />
+          </button>
+        ) : (
+          <a
+            href={`/tv/${id}`}
+            target="_blank"
+            className="-mb-px border-b-2 border-transparent py-3 font-medium whitespace-nowrap text-muted hover:text-text"
+          >
+            <span className="inline-flex items-center gap-1">
+              TV board <Icon name="external" className="h-4 w-4" />
+            </span>
+          </a>
+        )}
       </nav>
+      <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="More">
+        <ul className="flex flex-col gap-2">
+          {more.map((m) => (
+            <li key={m.href}>
+              <Link
+                href={m.href}
+                target={m.newTab ? '_blank' : undefined}
+                onClick={() => setMoreOpen(false)}
+                className={`flex min-h-16 items-center gap-4 rounded-2xl px-4 py-3 ${
+                  moreActive === m ? 'bg-accent-soft' : 'bg-surface-2 hover:bg-border'
+                }`}
+              >
+                <Icon name={m.icon} className="h-6 w-6" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-lg font-semibold">{m.label}</span>
+                  <span className="block text-sm text-muted">{m.hint}</span>
+                </span>
+                <Icon name={m.newTab ? 'external' : 'arrow'} className="h-5 w-5 text-muted" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <Button className="mt-4 w-full" onClick={() => setMoreOpen(false)}>
+          Cancel
+        </Button>
+      </Modal>
     </div>
   );
 }

@@ -133,7 +133,7 @@ export function Messages({ params }: { params: Promise<{ id: string }> }) {
         </Card>
         {!data.tournament.texts_enabled && (
           <p className="rounded-xl bg-called-soft px-3 py-2 text-sm text-called">
-            Texting is off for this tournament (Setup → Fees), so only emails go out.
+            Texting is off for this tournament (Settings → Fees), so only emails go out.
           </p>
         )}
         <TextingHealth check={twilio.data} messages={data.messages} />

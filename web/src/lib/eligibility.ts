@@ -47,6 +47,26 @@ export function skillBounds(e: Division): { low: number | null; high: number | n
   }
 }
 
+/** A rating limit as players see it: 4.0, 4.25, 3.35. */
+export const ratingText = (n: number) => {
+  const r = n.toFixed(2);
+  return r.endsWith('0') ? r.slice(0, -1) : r;
+};
+
+/**
+ * The limits after the fine-tuning: players must be rated under `under`
+ * (the top plus rating_tolerance), and may play up from `playUpFrom` (the
+ * bottom less play_up_limit). Null = no limit.
+ */
+export function ratingLimits(e: Division): { under: number | null; playUpFrom: number | null } {
+  const { low, high } = skillBounds(e);
+  const limit = num(e.play_up_limit ?? null);
+  return {
+    under: high === null ? null : high + Number(e.rating_tolerance ?? 0),
+    playUpFrom: low === null || limit === null ? null : low - limit,
+  };
+}
+
 export function ageOn(birthDate: string, on: Date) {
   const b = new Date(`${birthDate}T12:00:00`);
   let age = on.getFullYear() - b.getFullYear();
@@ -74,13 +94,12 @@ export function entryProblem(e: Division, startsOn: string, p: PlayerFacts): str
     let rating = num(e.kind === 'singles' ? p.dupr_singles : p.dupr_doubles);
     if (rating === null && e.rating_source === 'dupr_or_self') rating = num(p.self_rating);
     if (rating === null) return e.rating_source === 'dupr' ? 'needs your DUPR rating' : 'needs your rating';
-    const { low, high } = skillBounds(e);
-    const tolerance = Number(e.rating_tolerance ?? 0);
-    if (high !== null && rating >= high + tolerance) return `is for players rated under ${(high + tolerance).toFixed(2)}`;
+    const { low } = skillBounds(e);
+    const { under, playUpFrom } = ratingLimits(e);
+    if (under !== null && rating >= under) return `is for players rated under ${ratingText(under)}`;
     if (low !== null && rating < low) {
-      if (!e.allow_play_up) return `is for players rated ${low.toFixed(1)} and up`;
-      const limit = num(e.play_up_limit ?? null);
-      if (limit !== null && rating < low - limit) return `lets players rated ${(low - limit).toFixed(1)} and up play up`;
+      if (!e.allow_play_up) return `is for players rated ${ratingText(low)} and up`;
+      if (playUpFrom !== null && rating < playUpFrom) return `lets players rated ${ratingText(playUpFrom)} and up play up`;
     }
   }
   return null;

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Icon } from '@/components/Icon';
@@ -26,7 +27,8 @@ import {
   updateTournament,
 } from '@/lib/api';
 import { DemoClock } from '@/components/DemoTools';
-import { championshipModes, isPlayable } from '@/lib/format';
+import { divisionDay, divisionState } from '@/components/DivisionStatus';
+import { championshipModes, isPlayable, toZonedInput } from '@/lib/format';
 import { rulesOf } from '@/lib/scoring';
 import { useAction, useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import type { ChampionshipMode, CourtBoardRow } from '@/lib/types';
@@ -66,15 +68,42 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
   // control the day: going live, courts, the queue order, moves and forfeits.
   const admin = !!staff.data;
 
-  const { tournament: t, courts, queue, matches, events, teams, holds } = data;
-  const states = courts.map((c) => courtState(c));
-  const count = (s: string) => states.filter((x) => x === s).length;
+  const { tournament: t, courts, holds } = data;
+  // The desk is for divisions in play: started ones still going, and today's
+  // finished ones (for their results). Other days' divisions stay off it.
+  const today = toZonedInput(new Date(now).toISOString(), t.time_zone).slice(0, 10);
+  const states = new Map(data.events.map((e) => [e.id, divisionState(e, data.matches.filter((m) => m.event_id === e.id))]));
+  const events = data.events.filter((e) => e.started_at && (states.get(e.id) === 'live' || divisionDay(e, t) === today));
+  const shown = new Set(events.map((e) => e.id));
+  const matches = data.matches.filter((m) => shown.has(m.event_id));
+  const queue = data.queue.filter((q) => shown.has(q.event_id));
+  const teams = data.teams.filter((x) => shown.has(x.event_id));
+  const waitingToday = data.events.filter((e) => states.get(e.id) === 'not_started' && divisionDay(e, t) === today);
+  if (events.length === 0) {
+    return (
+      <div className="flex flex-col gap-4">
+        {t.is_demo && admin && <DemoClock tournamentId={id} now={now} timeZone={t.time_zone} onChanged={reload} />}
+        <Card className="flex flex-col gap-2 p-5">
+          <h2 className="text-2xl">No division in play</h2>
+          <p className="text-muted">
+            The court desk opens when a division starts. Start {waitingToday.length ? 'today’s divisions' : 'a division'} from{' '}
+            <Link href={`/t/${id}/checkin`} className="font-semibold underline">
+              Check-in
+            </Link>{' '}
+            or the division’s page.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+  const courtStates = courts.map((c) => courtState(c));
+  const count = (s: string) => courtStates.filter((x) => x === s).length;
   const ready = queue.filter((q) => !q.blocked_reason).length;
   // Court sections in force: divisions with matches still to play hold their courts.
-  const unfinished = new Set(matches.filter((m) => ['waiting', 'queued', 'assigned', 'in_progress'].includes(m.status)).map((m) => m.event_id));
+  const unfinished = new Set(data.matches.filter((m) => ['waiting', 'queued', 'assigned', 'in_progress'].includes(m.status)).map((m) => m.event_id));
   // Championship courts kept free for a championship match about to be ready.
   const keptFor = (courtId: string) => [
-    ...events.filter((e) => unfinished.has(e.id) && e.court_ids.includes(courtId)).map((e) => e.name),
+    ...data.events.filter((e) => unfinished.has(e.id) && e.court_ids.includes(courtId)).map((e) => e.name),
     ...holds.filter((h) => h.court_id === courtId).map((h) => `${h.event_name} ${h.label}`),
   ];
   const playable = matches.filter(isPlayable);
@@ -188,6 +217,14 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
       {live && !t.auto_assign && (
         <p className="rounded-lg bg-called-soft px-3 py-2 text-sm text-called">
           Assigning is paused. Courts won’t get new matches until you resume (or send matches by hand).
+        </p>
+      )}
+      {waitingToday.length > 0 && (
+        <p className="rounded-lg bg-surface-2 px-3 py-2 text-sm">
+          Not started yet today: {waitingToday.map((e) => e.name).join(', ')}.{' '}
+          <Link href={`/t/${id}/checkin`} className="font-semibold underline">
+            Start from Check-in
+          </Link>
         </p>
       )}
       {!live && (

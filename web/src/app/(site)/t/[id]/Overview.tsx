@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { CourtStatus } from '@/components/desk/CourtCard';
+import { DivisionStatus, dayHeading, divisionDay, divisionState } from '@/components/DivisionStatus';
 import { Expandable } from '@/components/Expandable';
 import { Icon } from '@/components/Icon';
 import { useMyTeam } from '@/components/MatchDay';
@@ -157,29 +158,44 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
           {events.length === 0 ? (
             <Empty>No events yet.</Empty>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {events.map((e) => {
-                const ms = matches.filter((m) => m.event_id === e.id && isPlayable(m));
-                const done = ms.filter((m) => m.status === 'completed').length;
-                const pct = ms.length ? Math.round((done / ms.length) * 100) : 0;
-                return (
-                  <Link key={e.id} href={`/t/${id}/events/${e.id}`}>
-                    <Card className="p-4 transition hover:border-accent">
-                      <div className="font-semibold">{e.name}</div>
-                      <div className="text-sm text-muted">
-                        {describeDivision(e)} · {teams.filter((t) => t.event_id === e.id).length} teams
-                        {e.not_before && tournament.times_published_at ? ` · starts ${formatTime(e.not_before, tournament.time_zone)}` : ''}
-                      </div>
-                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-2">
-                        <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className="mt-1 text-xs text-muted">
-                        {ms.length ? `${done} of ${ms.length} matches played` : 'Schedule not built yet'}
-                      </div>
-                    </Card>
-                  </Link>
-                );
-              })}
+            <div className="flex flex-col gap-5">
+              {[...new Set(events.map((e) => divisionDay(e, tournament)))].sort().map((day, _, days) => (
+                <div key={day}>
+                  {days.length > 1 && <h3 className="mb-2 text-2xl">{dayHeading(day)}</h3>}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {events
+                      .filter((e) => divisionDay(e, tournament) === day)
+                      .map((e) => {
+                        const all = matches.filter((m) => m.event_id === e.id);
+                        const ms = all.filter(isPlayable);
+                        const done = ms.filter((m) => m.status === 'completed').length;
+                        const pct = ms.length ? Math.round((done / ms.length) * 100) : 0;
+                        return (
+                          <Link key={e.id} href={`/t/${id}/events/${e.id}`}>
+                            <Card className="p-4 transition hover:border-accent">
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="font-semibold">{e.name}</div>
+                                <DivisionStatus state={divisionState(e, all)} startedAt={e.started_at} timeZone={tournament.time_zone} />
+                              </div>
+                              <div className="text-sm text-muted">
+                                {describeDivision(e)} · {teams.filter((t) => t.event_id === e.id).length} teams
+                                {e.not_before && tournament.times_published_at && !e.started_at
+                                  ? ` · starts ${formatTime(e.not_before, tournament.time_zone)}`
+                                  : ''}
+                              </div>
+                              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-2">
+                                <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
+                              </div>
+                              <div className="mt-1 text-xs text-muted">
+                                {ms.length ? `${done} of ${ms.length} matches played` : 'Schedule not built yet'}
+                              </div>
+                            </Card>
+                          </Link>
+                        );
+                      })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </Expandable>

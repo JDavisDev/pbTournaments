@@ -136,6 +136,9 @@ describe('DUPR results', () => {
     await generate(db, eventId);
     const [m] = await liveMatches(db, tournamentId);
     await reportScore(db, m.id, [[11, 7]]);
+    // Only final divisions go to DUPR.
+    expect(await rows(db, 'select * from public.dupr_results($1)', [tournamentId])).toEqual([]);
+    await db.query('select public.finalize_event($1)', [eventId]);
 
     const [r] = await rows(db, 'select * from public.dupr_results($1)', [tournamentId]);
     expect(r).toMatchObject({

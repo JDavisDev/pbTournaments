@@ -12,31 +12,32 @@ import type {
   DemoText,
   DiscountCode,
   DivisionCheckin,
-  LedgerEntry,
-  ListingFields,
-  PaymentMethod,
-  PlayerBalance,
-  RegistrationAnswer,
-  RegistrationQuestion,
-  PlatformPricing,
-  StaffMember,
-  TournamentFees,
-  StaffRole,
   DuprResultRow,
   EligibilityRow,
-  MessageScope,
-  TeamRosterRow,
+  LedgerEntry,
+  ListingFields,
   MatchDetails,
+  MessageScope,
   Organization,
+  PaymentMethod,
+  PlatformPricing,
+  PlayerBalance,
   QueueRow,
+  RegistrationAnswer,
   RegistrationForm,
+  RegistrationQuestion,
   RegistrationRow,
   RegistrationView,
+  StaffMember,
+  StaffRole,
   StandingRow,
+  StartedEvent,
   Team,
+  TeamRosterRow,
   TextLogRow,
   Tournament,
   TournamentEvent,
+  TournamentFees,
   TournamentListing,
   TournamentStatus,
   WithdrawalRow,
@@ -243,6 +244,12 @@ export const setAdvancePerPool = (eventId: string, advance: number) =>
 /** Before seeding: change how many teams go to the bracket; it's rebuilt to match. */
 export const setBracketSize = (eventId: string, size: number) =>
   rpc<number>('set_bracket_size', { p_event: eventId, p_size: size });
+/** Officially starts a division: its matches go on court, and teams not checked in get a text and a deadline. */
+export const startEvent = (eventId: string) => rpc<StartedEvent>('start_event', { p_event: eventId });
+/** Marks a finished division's results final: scores lock and it can go to DUPR. */
+export const finalizeEvent = (eventId: string) => rpc<TournamentEvent>('finalize_event', { p_event: eventId });
+/** Unlocks a final division so a result can be fixed. */
+export const reopenEvent = (eventId: string) => rpc<TournamentEvent>('reopen_event', { p_event: eventId });
 export const startBracket = (eventId: string) => rpc<void>('start_bracket', { p_event: eventId });
 export const swapBracketTeams = (eventId: string, teamA: string, teamB: string) =>
   rpc<void>('swap_bracket_teams', { p_event: eventId, p_team_a: teamA, p_team_b: teamB });

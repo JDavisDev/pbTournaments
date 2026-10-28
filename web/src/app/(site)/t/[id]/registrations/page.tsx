@@ -1,13 +1,7 @@
-import { Suspense } from 'react';
-import { Spinner } from '@/components/ui';
-import { Registrations } from './Registrations';
+import { redirect } from 'next/navigation';
 
-export const metadata = { title: 'Registrations' };
-
-export default function RegistrationsPage({ params }: PageProps<'/t/[id]/registrations'>) {
-  return (
-    <Suspense fallback={<Spinner />}>
-      <Registrations params={params} />
-    </Suspense>
-  );
+// Registrations are part of the Players page now.
+export default async function RegistrationsPage({ params }: PageProps<'/t/[id]/registrations'>) {
+  const { id } = await params;
+  redirect(`/t/${id}/players`);
 }

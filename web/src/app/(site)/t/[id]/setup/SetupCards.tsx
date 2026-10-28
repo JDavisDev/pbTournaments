@@ -378,7 +378,7 @@ export function QuestionsCard({ tournament }: { tournament: Tournament }) {
     <Card className="flex flex-col gap-3 p-4">
       <div>
         <h2 className="text-xl">Registration questions</h2>
-        <p className="text-sm text-muted">Anything you need from players: T-shirt size, home club, lunch. Answers show on Registrations.</p>
+        <p className="text-sm text-muted">Anything you need from players: T-shirt size, home club, lunch. Answers show on the Players page.</p>
       </div>
       {list.length > 0 && (
         <ol className="flex flex-col divide-y divide-border text-sm">

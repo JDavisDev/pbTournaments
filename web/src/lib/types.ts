@@ -27,6 +27,7 @@ export interface RoundFormat {
 }
 export type BlockedReason =
   | 'on_hold'
+  | 'division_not_started'
   | 'event_not_started'
   | 'not_checked_in'
   | 'player_on_court'
@@ -51,6 +52,8 @@ export interface Tournament {
   time_zone: string;
   status: TournamentStatus;
   no_show_minutes: number;
+  /** Minutes after a division starts for its teams to check in before they forfeit; null = never. */
+  checkin_grace_minutes: number | null;
   overdue_after_minutes: number;
   match_slot_minutes: number;
   auto_assign: boolean;
@@ -453,6 +456,17 @@ export interface DivisionCheckin {
   teams_ready: number;
   players: number;
   players_in: number;
+  started_at: string | null;
+  no_shows: number;
+}
+
+/** start_event's result. */
+export interface StartedEvent {
+  not_checked_in: number;
+  /** Teams not checked in moved to their pool's round-1 sit-out. */
+  sitting_out: number;
+  /** When teams still not checked in forfeit; null when the tournament doesn't forfeit them. */
+  deadline: string | null;
 }
 
 export type MessageScope = 'player' | 'team' | 'event' | 'everyone' | 'not_checked_in';
@@ -474,6 +488,10 @@ export interface TournamentEvent {
   not_before: string | null;
   sort_order: number;
   playoffs_seeded_at: string | null;
+  /** When a director started the division (start_event); its matches go on court only after. */
+  started_at: string | null;
+  /** When a director marked the results final (finalize_event): scores are locked and it can go to DUPR. */
+  finalized_at: string | null;
   gender: 'open' | 'mens' | 'womens' | 'mixed';
   min_age: number | null;
   max_age: number | null;
@@ -518,6 +536,8 @@ export interface Team {
   pool: number | null;
   checked_in_at: string | null;
   withdrawn_at: string | null;
+  /** Missed check-in after the division started: its matches are forfeited until it checks in. */
+  no_show_at: string | null;
 }
 
 export interface CourtBoardRow {
