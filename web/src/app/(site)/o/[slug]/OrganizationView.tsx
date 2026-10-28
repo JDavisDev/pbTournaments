@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
-import { Badge, Button, Card, Empty, ErrorText, Field, Input, PageTitle, Spinner } from '@/components/ui';
-import { addOrganizationMember, createTournament, getOrganizationBySlug, getOrganizationTournaments } from '@/lib/api';
+import { Badge, Button, Card, Empty, ErrorText, Input, PageTitle, Spinner } from '@/components/ui';
+import { addOrganizationMember, getOrganizationBySlug, getOrganizationTournaments, newTournament } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useAction, useLoad, useSession } from '@/lib/hooks';
 import { isBackendConfigured } from '@/lib/config';
@@ -22,9 +22,6 @@ export function OrganizationView({ params }: { params: Promise<{ slug: string }>
     [org.data?.id, session?.id],
   );
 
-  const [name, setName] = useState('');
-  const [startsOn, setStartsOn] = useState('');
-  const [courts, setCourts] = useState(11);
   const create = useAction();
   const [email, setEmail] = useState('');
   const invite = useAction();
@@ -64,38 +61,24 @@ export function OrganizationView({ params }: { params: Promise<{ slug: string }>
 
         {session && (
           <aside className="flex flex-col gap-4">
-            <Card className="p-5">
-              <h2 className="mb-3 text-xl">New tournament</h2>
-              <form
-                className="flex flex-col gap-3"
-                onSubmit={(e) => {
-                  e.preventDefault();
+            <Card className="flex flex-col gap-3 p-5">
+              <div>
+                <h2 className="text-xl">New tournament</h2>
+                <p className="text-sm text-muted">Starts as a draft with one division. Name it, set the date, and add divisions in Setup.</p>
+              </div>
+              <ErrorText>{create.error}</ErrorText>
+              <Button
+                variant="primary"
+                disabled={create.busy}
+                onClick={() =>
                   create.run(async () => {
-                    const t = await createTournament(organization.id, name, startsOn, courts);
+                    const t = await newTournament(organization.id);
                     router.push(`/t/${t.id}/setup`);
-                  });
-                }}
+                  })
+                }
               >
-                <Field label="Name">
-                  <Input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Fall Classic" />
-                </Field>
-                <Field label="Date">
-                  <Input type="date" required value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
-                </Field>
-                <Field label="Courts" hint="You can change this any time, even during play.">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={200}
-                    value={courts}
-                    onChange={(e) => setCourts(Number(e.target.value))}
-                  />
-                </Field>
-                <ErrorText>{create.error}</ErrorText>
-                <Button variant="primary" type="submit" disabled={create.busy || !name || !startsOn}>
-                  Create tournament
-                </Button>
-              </form>
+                {create.busy ? 'Creating…' : 'New tournament'}
+              </Button>
             </Card>
 
             <Card className="p-5">

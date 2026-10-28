@@ -51,6 +51,26 @@ describe('planner', () => {
     expect(de.matches.filter((m) => m.optional)).toHaveLength(1);
   });
 
+  it('plays each Swiss round after the whole round before it, then the bracket', () => {
+    // 8 teams, 3 rounds on 2 courts: each round takes two slots of 15 minutes.
+    const plan = planDay([division({ format: 'pools_to_bracket', swiss: true, maxRounds: 3, advancePerPool: 4 })], { courts: 2 });
+    expect(count(plan)).toBe(3 * 4 + 3);
+    const roundStarts = [2, 3].map((r) => Math.min(...plan.matches.filter((m) => m.label === `Round ${r}`).map((m) => m.start)));
+    expect(roundStarts.map((t) => (t - T0) / MIN)).toEqual([30, 60]);
+    const bracketStart = Math.min(...plan.matches.filter((m) => m.stage === 'bracket').map((m) => m.start));
+    expect((bracketStart - T0) / MIN).toBe(90);
+  });
+
+  it('counts any bracket size and straight-to-medal matches', () => {
+    const settings = { courts: 6 };
+    const wildcards = division({ format: 'pools_to_bracket', teams: 15, poolCount: 3, bracketSize: 8 });
+    expect(count(planDay([wildcards], settings))).toBe(3 * 10 + 7);
+    const medal = division({ format: 'pools_to_bracket', poolCount: 2, advancePerPool: 2, bracketType: 'medal' });
+    const plan = planDay([medal], settings);
+    expect(count(plan)).toBe(2 * 6 + 2);
+    expect(plan.matches.filter((m) => m.stage === 'bracket').map((m) => m.label).sort()).toEqual(['Bronze', 'Final']);
+  });
+
   it('starts the bracket after pool play, and late divisions at their start time', () => {
     const plan = planDay(
       [

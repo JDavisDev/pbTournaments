@@ -3,7 +3,10 @@
 export type TournamentStatus = 'draft' | 'registration' | 'live' | 'complete';
 export type EventFormat = 'round_robin' | 'pools_to_bracket' | 'single_elim';
 export type MatchStatus = 'waiting' | 'queued' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
-export type BracketType = 'single' | 'double';
+/** 'medal': straight to the medal matches, seeds 1 v 2 for gold and 3 v 4 for bronze. */
+export type BracketType = 'single' | 'double' | 'medal';
+/** How pool play is drawn: everyone in a pool plays each other, or Swiss rounds. */
+export type PoolPlay = 'round_robin' | 'swiss';
 /** Which format a match uses (see TournamentEvent.round_formats). */
 export type RoundKey =
   | 'pool'
@@ -76,6 +79,8 @@ export interface Tournament {
   waiver_text: string | null;
   /** One image (logo or banner) as a data URL. */
   image_data: string | null;
+  /** Shown before players register and before they withdraw. */
+  refund_policy: string | null;
   /** Division start times show to players only once published. */
   times_published_at: string | null;
   /** Off: no texts (and no texting fee); emails still go out. */
@@ -122,6 +127,32 @@ export interface DiscountCode {
   expires_at: string | null;
 }
 
+/** A tournament that takes sign-ups on another site, listed so players can find it. */
+export interface TournamentListing {
+  id: string;
+  name: string;
+  starts_on: string;
+  /** Null for a one-day tournament. */
+  ends_on: string | null;
+  /** The listing shows until this day is over. */
+  last_day: string;
+  venue: string | null;
+  city: string;
+  /** Two-letter code, e.g. 'TX'. */
+  state: string;
+  signup_url: string;
+  /** A logo or flyer as a data URL. */
+  image_data: string | null;
+  refund_policy: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export type ListingFields = Pick<
+  TournamentListing,
+  'name' | 'starts_on' | 'ends_on' | 'venue' | 'city' | 'state' | 'signup_url' | 'image_data' | 'refund_policy'
+>;
+
 /** demo_inbox(): a text sent to a demo team's player; links are paths (/s/<code>). */
 export interface DemoText {
   id: number;
@@ -145,8 +176,9 @@ export interface RegistrationForm {
     dupr_id?: string | null;
     discount_code?: string | null;
     waiver_accepted?: boolean;
+    answers?: { question_id: string; answer: string | string[] }[];
   };
-  entries: { event_id: string; partner_name?: string; partner_email?: string }[];
+  entries: { event_id: string; partner_name?: string; partner_email?: string; pay_for_partner?: boolean }[];
 }
 
 /** What a player sees about their own registration. */
@@ -154,6 +186,8 @@ export interface RegistrationView {
   id: string;
   tournament_id: string;
   tournament_name: string;
+  tournament_status: TournamentStatus;
+  refund_policy: string | null;
   status: 'pending' | 'paid' | 'cancelled' | 'refunded' | 'waitlisted';
   amount_cents: number;
   discount_cents?: number;
@@ -167,7 +201,81 @@ export interface RegistrationView {
     team_name: string | null;
     waitlisted?: boolean;
     offered?: boolean;
+    /** What this player paid toward their partner's entry here. */
+    partner_paid_cents: number;
+    /** That partner has registered (so their entry fee is used). */
+    partner_registered: boolean;
+    /** Who paid this player's entry, if their partner did. */
+    paid_by_name: string | null;
   }[];
+  withdrawals: {
+    event_name: string;
+    withdrawn_at: string;
+    withdrawn_by: 'player' | 'director';
+    credit_cents: number;
+    partner_paid_cents: number;
+  }[];
+  answers: { label: string; answer: string[] }[];
+  /** Null until they've paid anything. */
+  balance: Omit<PlayerBalance, 'tournament_id' | 'player_id'> | null;
+  /** What withdrawing from one event (not the last) credits. */
+  extra_event_fee_cents: number;
+}
+
+export type LedgerKind = 'entry_fees' | 'discount' | 'payment' | 'withdrawal' | 'refund' | 'fee' | 'credit';
+export type PaymentMethod = 'stripe' | 'test' | 'cash' | 'check' | 'other';
+
+/** One money event for a player (ledger_entries). Positive adds to what they owe. */
+export interface LedgerEntry {
+  id: number;
+  tournament_id: string;
+  player_id: string;
+  registration_id: string | null;
+  event_id: string | null;
+  kind: LedgerKind;
+  amount_cents: number;
+  method: PaymentMethod | null;
+  /** The Stripe Checkout session, for checkout payments. */
+  payment_ref: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+/** player_balances: amounts are positive; balance_cents > 0 the player owes, < 0 the tournament owes them. */
+export interface PlayerBalance {
+  tournament_id: string;
+  player_id: string;
+  entry_fees_cents: number;
+  discount_cents: number;
+  paid_cents: number;
+  withdrawal_credit_cents: number;
+  refunded_cents: number;
+  fees_cents: number;
+  credits_cents: number;
+  balance_cents: number;
+}
+
+/** withdrawal_details: an entry a player (or an admin) withdrew. */
+export interface WithdrawalRow {
+  id: number;
+  registration_id: string;
+  event_id: string | null;
+  event_name: string;
+  partner_name: string | null;
+  team_name: string | null;
+  was_waitlisted: boolean;
+  withdrawn_by: 'player' | 'director';
+  credit_cents: number;
+  withdrawn_at: string;
+  tournament_id: string;
+  player_id: string;
+  status: RegistrationView['status'];
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string | null;
+  partner_paid_cents: number;
+  cover_credit_cents: number;
 }
 
 /** One row per registration entry (registration_details view), for directors. */
@@ -201,6 +309,29 @@ export interface RegistrationRow {
   offered_at: string | null;
   discount_code: string | null;
   discount_cents: number;
+  partner_paid_cents: number;
+  partner_registered: boolean;
+  paid_by_registration_id: string | null;
+  paid_by_cents: number;
+  paid_by_name: string | null;
+}
+
+/** A tournament's own question at registration. */
+export interface RegistrationQuestion {
+  id: string;
+  tournament_id: string;
+  label: string;
+  /** text: a short answer; choice: one option; choices: any of them. */
+  kind: 'text' | 'choice' | 'choices';
+  options: string[];
+  required: boolean;
+  sort_order: number;
+}
+
+export interface RegistrationAnswer {
+  registration_id: string;
+  question_id: string;
+  answer: string[];
 }
 
 export interface TextLogRow {
@@ -360,9 +491,15 @@ export interface TournamentEvent {
   rating_tolerance: number;
   play_up_limit: number | null;
   require_dupr_id: boolean;
+  /** Results go to DUPR (Results to DUPR leaves the rest out). */
+  dupr_rated: boolean;
   team_rating_max: number | null;
   team_age_min: number | null;
+  /** Round robin: stop after this many rounds (null = everyone plays everyone). Swiss: the number of rounds. */
   max_rounds: number | null;
+  pool_play: PoolPlay;
+  /** Teams in the bracket; null = pool_count × advance_per_pool. */
+  bracket_size: number | null;
   bracket_type: BracketType;
   third_place_match: boolean;
   grand_final_reset: boolean;

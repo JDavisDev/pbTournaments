@@ -120,7 +120,7 @@ export function suggestEventName(e: Division) {
 }
 
 /** "Men's doubles · 3.5 (DUPR) · ages 50+ · up to 16 teams" */
-export function describeDivision(e: Division) {
+export function describeDivision(e: Division & { dupr_rated?: boolean }) {
   const skill = skillText(e);
   return [
     `${genderText[e.gender] ? `${genderText[e.gender]} ` : ''}${e.kind === 'singles' ? 'singles' : 'doubles'}`,
@@ -129,6 +129,7 @@ export function describeDivision(e: Division) {
     e.team_rating_max ? `team rating under ${Number(e.team_rating_max).toFixed(1)}` : '',
     e.team_age_min ? `combined age ${e.team_age_min}+` : '',
     e.require_dupr_id ? 'DUPR ID required' : '',
+    e.dupr_rated === false ? 'not DUPR rated' : '',
     e.max_teams ? `up to ${e.max_teams} ${e.kind === 'singles' ? 'players' : 'teams'}` : '',
   ]
     .filter(Boolean)

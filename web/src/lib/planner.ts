@@ -15,8 +15,13 @@ export interface PlanDivision {
   format: 'round_robin' | 'pools_to_bracket' | 'single_elim';
   poolCount: number;
   advancePerPool: number;
+  /** Teams in the bracket after pool play; null = poolCount × advancePerPool. */
+  bracketSize?: number | null;
+  /** Swiss rounds instead of a round robin: maxRounds rounds, each drawn when the last one ends. */
+  swiss?: boolean;
   maxRounds: number | null;
-  bracketType: 'single' | 'double';
+  /** 'medal': seeds 1 v 2 for gold and 3 v 4 for bronze, nothing else. */
+  bracketType: 'single' | 'double' | 'medal';
   thirdPlace: boolean;
   gfReset: boolean;
   /** Minutes per match, court changeover included. */
@@ -59,13 +64,16 @@ export interface Plan {
   end: number;
 }
 
-type Source = { seed: number } | { winnerOf: string } | { loserOf: string } | { team: string };
+/** afterRound: any team of the division's pool round (Swiss: drawn once that round is over). */
+type Source = { seed: number } | { winnerOf: string } | { loserOf: string } | { team: string } | { afterRound: number };
 
 interface Node {
   id: string;
   divisionId: string;
   label: string;
   stage: 'pool' | 'bracket';
+  /** Pool play round. */
+  round?: number;
   optional: boolean;
   sources: [Source, Source];
   /** Queue order: expected start, then division, pool, position. */
@@ -89,6 +97,10 @@ const seedOrder = (size: number) => {
   return order;
 };
 
+/** Teams in the bracket. */
+const seedsOf = (d: PlanDivision) =>
+  d.format === 'single_elim' ? d.teams : (d.bracketSize ?? (d.swiss ? 1 : Math.max(1, d.poolCount)) * d.advancePerPool);
+
 /** Every match of a division (byes resolved later), with how each slot gets its team. */
 function buildDivision(d: PlanDivision, divisionIndex: number): Node[] {
   const nodes: Node[] = [];
@@ -96,7 +108,30 @@ function buildDivision(d: PlanDivision, divisionIndex: number): Node[] {
     (d.start / MIN + wave * minutes) * 1e6 + divisionIndex * 1000 + pool * 36 + position;
   let poolRounds = 0;
 
-  if (d.format !== 'single_elim') {
+  if (d.format !== 'single_elim' && d.swiss) {
+    // Round 1 by seed (top half v bottom half); later rounds wait for the whole round before.
+    const perRound = Math.floor(d.teams / 2);
+    poolRounds = d.maxRounds ?? 0;
+    for (let round = 1; round <= poolRounds; round++) {
+      for (let position = 1; position <= perRound; position++) {
+        nodes.push({
+          id: `${d.id}:s${round}m${position}`,
+          divisionId: d.id,
+          label: `Round ${round}`,
+          stage: 'pool',
+          round,
+          optional: false,
+          sources:
+            round === 1
+              ? [{ team: `${d.id}:t${position}` }, { team: `${d.id}:t${position + perRound}` }]
+              : [{ afterRound: round - 1 }, { afterRound: round - 1 }],
+          priority: priority(round, d.poolMinutes, 1, position),
+          afterPools: false,
+          minutes: d.poolMinutes,
+        });
+      }
+    }
+  } else if (d.format !== 'single_elim') {
     const pools = Math.max(1, d.poolCount);
     for (let pool = 1; pool <= pools; pool++) {
       // Snake seeding, as generate_pools does.
@@ -136,7 +171,7 @@ function buildDivision(d: PlanDivision, divisionIndex: number): Node[] {
   }
   if (d.format === 'round_robin') return nodes;
 
-  const seeds = d.format === 'single_elim' ? d.teams : Math.max(1, d.poolCount) * d.advancePerPool;
+  const seeds = seedsOf(d);
   if (seeds < 2) return nodes;
   let size = 1;
   let k = 0;
@@ -159,6 +194,12 @@ function buildDivision(d: PlanDivision, divisionIndex: number): Node[] {
       afterPools,
       minutes: d.bracketMinutes,
     });
+
+  if (d.bracketType === 'medal') {
+    add('w1m1', 'Final', 1, [{ seed: 1 }, { seed: 2 }]);
+    if (seeds >= 4) add('bronze', 'Bronze', 1, [{ seed: 3 }, { seed: 4 }], false, 2);
+    return nodes;
+  }
   const winnersName = (round: number, position: number) =>
     d.bracketType === 'double'
       ? k - round === 0
@@ -221,12 +262,11 @@ export function planDay(divisions: PlanDivision[], settings: PlanSettings): Plan
   const all = divisions.flatMap((d, i) => buildDivision(d, i));
   const byId = new Map(all.map((n) => [n.id, n]));
   const division = new Map(divisions.map((d) => [d.id, d]));
-  const seedsOf = (d: PlanDivision) => (d.format === 'single_elim' ? d.teams : Math.max(1, d.poolCount) * d.advancePerPool);
 
   // Which matches really get played: both slots must get a team.
   const real = new Map<string, boolean>();
   const sourceReal = (s: Source, d: PlanDivision): boolean => {
-    if ('team' in s) return true;
+    if ('team' in s || 'afterRound' in s) return true;
     if ('seed' in s) return s.seed <= seedsOf(d);
     if ('loserOf' in s) return isReal(s.loserOf);
     const feeder = byId.get(s.winnerOf)!;
@@ -251,6 +291,11 @@ export function planDay(divisions: PlanDivision[], settings: PlanSettings): Plan
   const sourceReady = (s: Source, n: Node): number | null => {
     const d = division.get(n.divisionId)!;
     if ('team' in s) return teamFree.get(s.team) ?? d.start;
+    if ('afterRound' in s) {
+      const before = all.filter((x) => x.divisionId === d.id && x.stage === 'pool' && x.round === s.afterRound);
+      if (before.some((x) => !scheduled.has(x.id))) return null;
+      return Math.max(d.start, ...before.map((x) => scheduled.get(x.id)!.end));
+    }
     if ('seed' in s) {
       if (!n.afterPools) return d.start;
       return (poolsLeft.get(d.id) ?? 0) > 0 ? null : (poolsEnd.get(d.id) ?? d.start);

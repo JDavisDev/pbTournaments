@@ -25,7 +25,7 @@ import {
   reportScore,
   reportScoreByCode,
 } from '@/lib/api';
-import { isPlayable, minutesSince, ordinal, poolName } from '@/lib/format';
+import { bracketSeeds, isPlayable, minutesSince, ordinal, poolName } from '@/lib/format';
 import { useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import { rulesOf } from '@/lib/scoring';
 import { estimateWait, formatWaitRange } from '@/lib/waitTime';
@@ -159,7 +159,7 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
           <StandingsTable
             rows={standings}
             tournamentId={id}
-            advance={event.format === 'pools_to_bracket' ? event.advance_per_pool : 0}
+            advance={event.format === 'pools_to_bracket' ? Math.floor(bracketSeeds(event) / event.pool_count) : 0}
             highlightTeamId={teamId}
           />
         </Expandable>

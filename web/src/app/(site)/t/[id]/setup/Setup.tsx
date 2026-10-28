@@ -4,8 +4,10 @@ import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Badge, Button, Card, Empty, ErrorText, Field, Input, Select, Spinner, Textarea } from '@/components/ui';
 import {
+  addMockTeams,
   addTeamsFromText,
   clearMatches,
+  copyEvent,
   deleteEvent,
   deleteTeam,
   generateMatches,
@@ -16,8 +18,9 @@ import {
   getTournament,
   renameCourt,
   saveEvent,
-  setAdvancePerPool,
+  setBracketSize,
   setCourtChampionshipRank,
+  setCourtCount,
   setCourtStream,
   setTournamentStatus,
   updateTournament,
@@ -27,6 +30,8 @@ import {
   championshipModes,
   championshipRankLabel,
   courtsLabel,
+  advanceRule,
+  bracketSeeds,
   defaultRoundFormats,
   formatSummary,
   fromZonedInput,
@@ -35,13 +40,14 @@ import {
   toZonedInput,
 } from '@/lib/format';
 import { isYoutubeUrl } from '@/lib/youtube';
-import { DiscountCodesCard, FeesCard, RegistrationCard, SharingCard } from './SetupCards';
+import { DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SharingCard } from './SetupCards';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import type {
   BracketType,
   CourtBoardRow,
   EventFormat,
   MatchDetails,
+  PoolPlay,
   RoundFormat,
   RoundKey,
   Team,
@@ -72,14 +78,26 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
   if (!data || staff.data === undefined) return <Spinner />;
   if (!staff.data) return <Empty>Setup is for this tournament’s directors.</Empty>;
 
+  // A draft starts here: its name, date and venue come first.
+  const draft = data.tournament.status === 'draft';
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
       <section className="flex flex-col gap-4">
+        {draft && (
+          <SettingsCard
+            key={`start-${data.tournament.id}`}
+            tournament={data.tournament}
+            courtCount={data.courts.length}
+            startHere
+            onChanged={reload}
+          />
+        )}
         <div className="flex items-center justify-between">
-          <h2 className="text-3xl">Events</h2>
+          <h2 className="text-3xl">Divisions</h2>
           {!adding && (
             <Button variant="primary" onClick={() => setAdding(true)}>
-              Add event
+              Add division
             </Button>
           )}
         </div>
@@ -88,7 +106,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             <EventForm tournamentId={id} timeZone={data.tournament.time_zone} courts={data.courts} onDone={() => (setAdding(false), reload())} onCancel={() => setAdding(false)} />
           </Card>
         )}
-        {data.events.length === 0 && !adding && <Empty>Add your first event, e.g. “Men’s Doubles 3.5”.</Empty>}
+        {data.events.length === 0 && !adding && <Empty>Add your first division, e.g. “Men’s Doubles 3.5”.</Empty>}
         {data.events.map((e) => (
           <EventCard
             key={e.id}
@@ -97,6 +115,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             courts={data.courts}
             teams={data.teams.filter((t) => t.event_id === e.id)}
             matches={data.matches.filter((m) => m.event_id === e.id)}
+            isDemo={data.tournament.is_demo}
             onChanged={reload}
           />
         ))}
@@ -104,11 +123,12 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
 
       <aside className="flex flex-col gap-4">
         <StatusCard tournament={data.tournament} onChanged={reload} />
-        <SettingsCard key={data.tournament.id} tournament={data.tournament} onChanged={reload} />
+        {!draft && <SettingsCard key={data.tournament.id} tournament={data.tournament} onChanged={reload} />}
         <PricesCard key={`prices-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
         <FeesCard tournament={data.tournament} onChanged={reload} />
         <SharingCard tournament={data.tournament} />
         <RegistrationCard key={`reg-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
+        <QuestionsCard tournament={data.tournament} />
         <DiscountCodesCard tournament={data.tournament} />
         <StreamsCard tournament={data.tournament} courts={data.courts} onChanged={reload} />
         <ChampionshipCard key={`champ-${data.tournament.id}`} tournament={data.tournament} courts={data.courts} onChanged={reload} />
@@ -149,9 +169,23 @@ function StatusCard({ tournament, onChanged }: { tournament: Tournament; onChang
   );
 }
 
-function SettingsCard({ tournament, onChanged }: { tournament: Tournament; onChanged: () => void }) {
+/** The tournament's settings. `startHere`: a draft's first card, with its number of courts. */
+function SettingsCard({
+  tournament,
+  courtCount,
+  startHere = false,
+  onChanged,
+}: {
+  tournament: Tournament;
+  courtCount?: number;
+  startHere?: boolean;
+  onChanged: () => void;
+}) {
+  // new_tournament's placeholder name: ask for the real one.
+  const unnamed = tournament.name === 'New tournament';
+  const [courts, setCourts] = useState(courtCount ?? 0);
   const [form, setForm] = useState({
-    name: tournament.name,
+    name: unnamed ? '' : tournament.name,
     starts_on: tournament.starts_on,
     time_zone: tournament.time_zone,
     no_show_minutes: tournament.no_show_minutes,
@@ -170,25 +204,44 @@ function SettingsCard({ tournament, onChanged }: { tournament: Tournament; onCha
   });
 
   return (
-    <Card className="p-4">
-      <h2 className="mb-3 text-xl">Settings</h2>
+    <Card className={startHere ? 'border-2 border-text p-5' : 'p-4'}>
+      {startHere ? (
+        <div className="mb-4">
+          <h2 className="text-3xl">Start here</h2>
+          <p className="text-muted">
+            {tournament.is_demo
+              ? 'A practice tournament dated today, so you can run it right away. Rename it if you like, then fill the division with mock players and build its schedule.'
+              : 'Name your tournament and set its date and venue. Everything else is filled in; change it below or in the cards beside.'}
+          </p>
+        </div>
+      ) : (
+        <h2 className="mb-3 text-xl">Settings</h2>
+      )}
       <form
-        className="flex flex-col gap-3"
+        className={startHere ? 'grid gap-3 sm:grid-cols-2' : 'flex flex-col gap-3'}
         onSubmit={(e) => {
           e.preventDefault();
           setSaved(false);
           run(
-            () => updateTournament(tournament.id, { ...form, location: form.location.trim() || null }),
+            async () => {
+              await updateTournament(tournament.id, { ...form, name: form.name.trim(), location: form.location.trim() || null });
+              if (startHere && courts !== courtCount) await setCourtCount(tournament.id, courts);
+            },
             () => (setSaved(true), onChanged()),
           );
         }}
       >
         <Field label="Name">
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input required value={form.name} placeholder="Fall Classic" onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
-        <Field label="Date">
-          <Input type="date" value={form.starts_on} onChange={(e) => setForm({ ...form, starts_on: e.target.value })} />
+        <Field label="Date" hint={startHere && !tournament.is_demo ? 'Filled in four weeks out. Check it.' : undefined}>
+          <Input type="date" required value={form.starts_on} onChange={(e) => setForm({ ...form, starts_on: e.target.value })} />
         </Field>
+        {startHere && (
+          <Field label="Courts" hint="You can change this any time, even during play.">
+            <Input type="number" min={0} max={200} value={courts} onChange={(e) => setCourts(Number(e.target.value))} />
+          </Field>
+        )}
         <Field label="Venue" hint="Sent to DUPR with results">
           <Input placeholder="Club name, street, city" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
         </Field>
@@ -210,7 +263,7 @@ function SettingsCard({ tournament, onChanged }: { tournament: Tournament; onCha
             )}
           </Select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid grid-cols-2 gap-3 ${startHere ? 'sm:col-span-2 sm:grid-cols-3' : ''}`}>
           <Field label="No-show (min)" hint="Flag a court after">
             <Input {...num('no_show_minutes')} />
           </Field>
@@ -221,11 +274,13 @@ function SettingsCard({ tournament, onChanged }: { tournament: Tournament; onCha
             <Input {...num('match_slot_minutes')} />
           </Field>
         </div>
-        <ErrorText>{error}</ErrorText>
-        {saved && <p className="text-sm text-accent">Saved.</p>}
-        <Button type="submit" disabled={busy}>
-          Save settings
-        </Button>
+        <div className={`flex flex-col gap-2 ${startHere ? 'sm:col-span-2' : ''}`}>
+          <ErrorText>{error}</ErrorText>
+          {saved && <p className="text-sm text-accent">Saved.</p>}
+          <Button type="submit" variant={startHere ? 'primary' : 'secondary'} disabled={busy}>
+            {startHere ? 'Save tournament details' : 'Save settings'}
+          </Button>
+        </div>
       </form>
     </Card>
   );
@@ -608,8 +663,9 @@ function EventForm({
     max_teams: event?.max_teams?.toString() ?? '',
     partner_required: event?.partner_required ?? true,
     format: event?.format ?? ('pools_to_bracket' as EventFormat),
+    pool_play: event?.pool_play ?? ('round_robin' as PoolPlay),
     pool_count: event?.pool_count ?? 2,
-    advance_per_pool: event?.advance_per_pool ?? 2,
+    bracket_size: event ? bracketSeeds(event) : 4,
     games_to: event?.games_to ?? 11,
     best_of: event?.best_of ?? 1,
     point_cap: event?.point_cap ?? null,
@@ -619,6 +675,7 @@ function EventForm({
     rating_tolerance: event ? Number(event.rating_tolerance) : 0,
     play_up_limit: event?.play_up_limit != null ? String(Number(event.play_up_limit)) : '',
     require_dupr_id: event?.require_dupr_id ?? false,
+    dupr_rated: event?.dupr_rated ?? true,
     team_rating_max: event?.team_rating_max != null ? String(Number(event.team_rating_max)) : '',
     team_age_min: event?.team_age_min?.toString() ?? '',
     max_rounds: event?.max_rounds?.toString() ?? '',
@@ -634,6 +691,9 @@ function EventForm({
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
   const hasPools = form.format !== 'single_elim';
   const hasBracket = form.format !== 'round_robin';
+  const swiss = hasPools && form.pool_play === 'swiss';
+  // Swiss rounds play as one group.
+  const pools = hasPools && !swiss ? Math.max(1, form.pool_count) : 1;
   const division = {
     kind: form.kind,
     gender: form.gender,
@@ -660,9 +720,9 @@ function EventForm({
       onSubmit={(e) => {
         e.preventDefault();
         run(async () => {
-          // After the schedule is built, a new advance count rebuilds the bracket.
-          if (scheduled && event && form.advance_per_pool !== event.advance_per_pool) {
-            await setAdvancePerPool(event.id, form.advance_per_pool);
+          // After the schedule is built, a new bracket size rebuilds the bracket.
+          if (scheduled && event && form.format === 'pools_to_bracket' && form.bracket_size !== bracketSeeds(event)) {
+            await setBracketSize(event.id, form.bracket_size);
           }
           await saveEvent({
               id: event?.id,
@@ -670,12 +730,15 @@ function EventForm({
               name: form.name || suggested,
               ...division,
               partner_required: form.partner_required,
+              dupr_rated: form.dupr_rated,
               ...(scheduled
                 ? {}
                 : {
                     format: form.format,
-                    pool_count: hasPools ? form.pool_count : 1,
-                    advance_per_pool: form.advance_per_pool,
+                    pool_play: hasPools ? form.pool_play : 'round_robin',
+                    pool_count: pools,
+                    advance_per_pool: Math.max(1, Math.floor(form.bracket_size / pools)),
+                    bracket_size: form.format === 'pools_to_bracket' ? form.bracket_size : null,
                     max_rounds: hasPools ? optionalNumber(form.max_rounds) : null,
                     bracket_type: form.bracket_type,
                     third_place_match: form.bracket_type === 'single' && form.third_place_match,
@@ -696,7 +759,7 @@ function EventForm({
       }}
     >
       <div className="flex flex-col gap-1">
-        <Field label="Event name">
+        <Field label="Division name">
           <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder={suggested} />
         </Field>
         {form.name !== suggested && (
@@ -814,6 +877,11 @@ function EventForm({
           </>
         )}
         <Check
+          label="Results go to DUPR (rated division)"
+          checked={form.dupr_rated}
+          onChange={(v) => set('dupr_rated', v)}
+        />
+        <Check
           label="Every player must give a DUPR ID"
           checked={form.require_dupr_id}
           onChange={(v) => set('require_dupr_id', v)}
@@ -852,13 +920,32 @@ function EventForm({
 
       <Section title="Format">
         <Field label="Format" hint={scheduled ? 'Clear the schedule to change the format.' : undefined}>
-          <Select value={form.format} disabled={scheduled} onChange={(e) => set('format', e.target.value as EventFormat)}>
-            <option value="pools_to_bracket">Pools, then bracket</option>
-            <option value="round_robin">Round robin only</option>
+          <Select
+            value={form.format}
+            disabled={scheduled}
+            onChange={(e) => {
+              const format = e.target.value as EventFormat;
+              // Medal matches only follow pool play.
+              setForm((f) => ({ ...f, format, bracket_type: format !== 'pools_to_bracket' && f.bracket_type === 'medal' ? 'single' : f.bracket_type }));
+            }}
+          >
+            <option value="pools_to_bracket">Pool play, then bracket</option>
+            <option value="round_robin">Pool play only</option>
             <option value="single_elim">Bracket only</option>
           </Select>
         </Field>
         {hasPools && (
+          <Field
+            label="Pool play"
+            hint={swiss ? 'Each round pairs teams with similar records who haven’t played yet.' : 'Everyone in a pool plays each other.'}
+          >
+            <Select value={form.pool_play} disabled={scheduled} onChange={(e) => set('pool_play', e.target.value as PoolPlay)}>
+              <option value="round_robin">Round robin</option>
+              <option value="swiss">Swiss rounds</option>
+            </Select>
+          </Field>
+        )}
+        {hasPools && !swiss && (
           <Field label="Pools" hint="Teams are snake-seeded into pools">
             <Input
               type="number"
@@ -871,12 +958,20 @@ function EventForm({
           </Field>
         )}
         {hasPools && (
-          <Field label="Max rounds" hint="Optional. E.g. 8 teams can play 6 rounds instead of 7.">
+          <Field
+            label={swiss ? 'Swiss rounds' : 'Max rounds'}
+            hint={
+              swiss
+                ? 'Each round is drawn when the one before it finishes. 3 to 5 is typical.'
+                : 'Optional. E.g. one pool of 15 can play 6 rounds instead of 15.'
+            }
+          >
             <Input
               type="number"
               min={1}
+              required={swiss}
               disabled={scheduled}
-              placeholder="Everyone plays everyone"
+              placeholder={swiss ? 'e.g. 4' : 'Everyone plays everyone'}
               value={form.max_rounds}
               onChange={(e) => set('max_rounds', e.target.value)}
             />
@@ -884,21 +979,19 @@ function EventForm({
         )}
         {form.format === 'pools_to_bracket' && (
           <Field
-            label="Advance per pool"
+            label="Teams in the bracket"
             hint={
               event?.playoffs_seeded_at
                 ? 'The bracket is seeded, so this is set.'
-                : scheduled
-                  ? 'Changing it rebuilds the bracket. Possible until pool play ends.'
-                  : undefined
+                : `${advanceRule(pools, form.bracket_size)}${scheduled ? ' Changing it rebuilds the bracket, until pool play ends.' : ''}`
             }
           >
             <Input
               type="number"
-              min={1}
+              min={2}
               disabled={!!event?.playoffs_seeded_at}
-              value={form.advance_per_pool}
-              onChange={(e) => set('advance_per_pool', Number(e.target.value))}
+              value={form.bracket_size}
+              onChange={(e) => set('bracket_size', Number(e.target.value))}
             />
           </Field>
         )}
@@ -916,12 +1009,26 @@ function EventForm({
       {hasBracket && (
         <Section title="Bracket">
           <Field label="Elimination">
-            <Select value={form.bracket_type} disabled={scheduled} onChange={(e) => set('bracket_type', e.target.value as BracketType)}>
+            <Select
+              value={form.bracket_type}
+              disabled={scheduled}
+              onChange={(e) => {
+                const bracket_type = e.target.value as BracketType;
+                // Medal matches are 1 v 2 for gold and 3 v 4 for bronze.
+                setForm((f) => ({ ...f, bracket_type, bracket_size: bracket_type === 'medal' && f.bracket_size !== 2 ? 4 : f.bracket_size }));
+              }}
+            >
               <option value="single">Single elimination</option>
               <option value="double">Double elimination</option>
+              {form.format === 'pools_to_bracket' && <option value="medal">Straight to medal matches</option>}
             </Select>
           </Field>
-          {form.bracket_type === 'single' ? (
+          {form.bracket_type === 'medal' ? (
+            <p className="self-end pb-2 text-sm text-muted">
+              Seeds 1 and 2 play for gold, 3 and 4 for bronze.
+              {pools === 2 ? ' With 2 pools: the pool winners play for gold and the runners-up for bronze.' : ''}
+            </p>
+          ) : form.bracket_type === 'single' ? (
             <Check
               label="Bronze match (semifinal losers play for 3rd)"
               checked={form.third_place_match}
@@ -970,7 +1077,7 @@ function EventForm({
         {hasBracket && (
           <RoundFormatsEditor
             bracketType={form.bracket_type}
-            bronze={form.bracket_type === 'single' && form.third_place_match}
+            bronze={form.bracket_type === 'medal' ? form.bracket_size !== 2 : form.bracket_type === 'single' && form.third_place_match}
             value={form.round_formats}
             fallback={{
               games_to: form.playoff_games_to ?? form.games_to,
@@ -1015,7 +1122,7 @@ function EventForm({
           Cancel
         </Button>
         <Button variant="primary" type="submit" disabled={busy}>
-          {event ? 'Save event' : 'Add event'}
+          {event ? 'Save division' : 'Add division'}
         </Button>
       </div>
     </form>
@@ -1048,7 +1155,9 @@ function Check({
 }
 
 const roundKeys = (type: BracketType, bronze: boolean): [RoundKey, string][] =>
-  type === 'double'
+  type === 'medal'
+    ? [['final', 'Gold'], ...(bronze ? ([['bronze', 'Bronze']] as [RoundKey, string][]) : [])]
+    : type === 'double'
     ? [
         ['winners', 'Winners bracket'],
         ['losers', 'Losers bracket'],
@@ -1133,6 +1242,7 @@ function EventCard({
   courts,
   teams,
   matches,
+  isDemo,
   onChanged,
 }: {
   event: TournamentEvent;
@@ -1140,6 +1250,8 @@ function EventCard({
   courts: CourtBoardRow[];
   teams: Team[];
   matches: MatchDetails[];
+  /** A practice tournament: mock players can fill the division. */
+  isDemo: boolean;
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -1187,6 +1299,9 @@ function EventCard({
           )}
           <Button size="sm" onClick={() => setEditing(true)}>
             Edit
+          </Button>
+          <Button size="sm" disabled={busy} onClick={() => run(() => copyEvent(event.id), onChanged)}>
+            Copy division
           </Button>
         </div>
       </div>
@@ -1238,6 +1353,11 @@ function EventCard({
           <Button disabled={busy || !text.trim()} onClick={() => run(() => addTeamsFromText(event.id, text, nextSeed), () => (setText(''), onChanged()))}>
             {scheduled ? 'Add alternates' : 'Add teams'}
           </Button>
+          {isDemo && !scheduled && (
+            <Button variant="primary" disabled={busy} onClick={() => run(() => addMockTeams(event.id, 4), onChanged)}>
+              Fill division with mock players
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1263,7 +1383,7 @@ function EventCard({
             disabled={busy}
             onClick={() => confirm(`Delete ${event.name} and its teams?`) && run(() => deleteEvent(event.id), onChanged)}
           >
-            Delete event
+            Delete division
           </Button>
         )}
       </div>

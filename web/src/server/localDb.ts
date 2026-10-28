@@ -118,6 +118,8 @@ async function open(dir: string, files: string[], migrations: string[]): Promise
       }
     }
   }
+  const { seedMockListings } = await import('./mockListings');
+  await seedMockListings(db);
   startTick();
   return db;
 }

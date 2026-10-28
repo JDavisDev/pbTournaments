@@ -57,9 +57,12 @@ const EVENT_COLUMNS = [
   'rating_tolerance',
   'play_up_limit',
   'require_dupr_id',
+  'dupr_rated',
   'team_rating_max',
   'team_age_min',
   'max_rounds',
+  'pool_play',
+  'bracket_size',
   'bracket_type',
   'third_place_match',
   'grand_final_reset',
@@ -68,6 +71,8 @@ const EVENT_COLUMNS = [
   'not_before',
   'sort_order',
 ];
+
+const LISTING_COLUMNS = ['name', 'starts_on', 'ends_on', 'venue', 'city', 'state', 'signup_url', 'image_data', 'refund_policy'];
 
 async function addTeams(tx: Transaction, eventId: string, text: string, firstSeed: number) {
   const teams = parseTeams(text);
@@ -127,6 +132,10 @@ const ops: Record<string, Op> = {
     tx.query('select public.add_organization_member($1, $2, $3)', [org, email, role]).then(() => null),
   createTournament: (tx, org: string, name: string, startsOn: string, courts: number) =>
     one(tx, 'select * from public.create_tournament($1, $2, $3, $4)', [org, name, startsOn, courts]),
+  newTournament: (tx, org: string | null) => one(tx, 'select * from public.new_tournament($1)', [org]),
+  copyEvent: (tx, id: string) => one(tx, 'select * from public.copy_event($1)', [id]),
+  addMockTeams: async (tx, id: string, count = 4) =>
+    (await one<{ n: number }>(tx, 'select public.add_mock_teams($1, $2) as n', [id, count])).n,
   setTournamentStatus: (tx, id: string, status: string) =>
     one(tx, 'select * from public.set_tournament_status($1, $2::public.tournament_status)', [id, status]),
   setAutoAssign: (tx, id: string, on: boolean) => one(tx, 'select * from public.set_auto_assign($1, $2)', [id, on]),
@@ -153,6 +162,7 @@ const ops: Record<string, Op> = {
       'registration_closes_at',
       'waiver_text',
       'image_data',
+      'refund_policy',
       'times_published_at',
       'texts_enabled',
       'championship_mode',
@@ -176,6 +186,8 @@ const ops: Record<string, Op> = {
   endPoolPlay: async (tx, id: string) => (await one<{ n: number }>(tx, 'select public.end_pool_play($1) as n', [id])).n,
   setAdvancePerPool: async (tx, id: string, advance: number) =>
     (await one<{ n: number }>(tx, 'select public.set_advance_per_pool($1, $2) as n', [id, advance])).n,
+  setBracketSize: async (tx, id: string, size: number) =>
+    (await one<{ n: number }>(tx, 'select public.set_bracket_size($1, $2) as n', [id, size])).n,
   startBracket: (tx, id: string) => tx.query('select public.start_bracket($1)', [id]).then(() => null),
   swapBracketTeams: (tx, eventId: string, a: string, b: string) =>
     tx.query('select public.swap_bracket_teams($1, $2, $3)', [eventId, a, b]).then(() => null),
@@ -260,9 +272,42 @@ const ops: Record<string, Op> = {
     (await one<{ r: unknown }>(tx, 'select public.offer_waitlist_spot($1, $2) as r', [reg, event])).r,
   removeWaitlistEntry: (tx, reg: string, event: string) =>
     tx.query('select public.remove_waitlist_entry($1, $2)', [reg, event]).then(() => null),
+  getMoney: async (tx, id: string) => ({
+    balances: await all(tx, 'select * from public.player_balances where tournament_id = $1 order by player_id', [id]),
+    ledger: await all(tx, 'select * from public.ledger_entries where tournament_id = $1 order by id', [id]),
+    withdrawals: await all(tx, 'select * from public.withdrawal_details where tournament_id = $1 order by id', [id]),
+  }),
+  withdrawRegistration: async (tx, reg: string, event: string | null) =>
+    (await one<{ r: unknown }>(tx, 'select public.withdraw_registration($1, $2) as r', [reg, event])).r,
+  moveRegistrationEntry: (tx, reg: string, from: string, to: string) =>
+    tx.query('select public.move_registration_entry($1, $2, $3)', [reg, from, to]).then(() => null),
+  recordLedgerEntry: (tx, tournamentId: string, playerId: string, kind: string, cents: number, method: string | null, note: string | null) =>
+    one(tx, 'select * from public.record_ledger_entry($1, $2, $3, $4, $5, $6)', [tournamentId, playerId, kind, cents, method, note]),
   getRegistrationAvailability: (tx, id: string) => all(tx, 'select * from public.registration_availability($1)', [id]),
   checkDiscountCode: async (tx, id: string, code: string, amount: number) =>
     (await one<{ r: unknown }>(tx, 'select public.check_discount_code($1, $2, $3) as r', [id, code, amount])).r,
+  getRegistrationQuestions: (tx, id: string) =>
+    all(tx, 'select * from public.registration_questions where tournament_id = $1 order by sort_order, created_at', [id]),
+  saveRegistrationQuestion: (tx, q: Row) =>
+    q.id
+      ? updateColumns(tx, 'registration_questions', q.id as string, q, ['label', 'kind', 'options', 'required', 'sort_order'])
+      : one(
+          tx,
+          `insert into public.registration_questions (tournament_id, label, kind, options, required, sort_order)
+           values ($1, $2, $3, $4, $5, $6) returning *`,
+          [q.tournament_id, q.label, q.kind, q.options, q.required, q.sort_order],
+        ),
+  deleteRegistrationQuestion: (tx, id: string) =>
+    tx.query('delete from public.registration_questions where id = $1', [id]).then(() => null),
+  getRegistrationAnswers: (tx, id: string) =>
+    all(
+      tx,
+      `select a.registration_id, a.question_id, a.answer from public.registration_answers a
+       join public.registrations r on r.id = a.registration_id where r.tournament_id = $1 order by a.registration_id`,
+      [id],
+    ),
+  getPartnerPaidEvents: async (tx, id: string, email: string) =>
+    (await all<{ event_id: string }>(tx, 'select * from public.partner_paid_events($1, $2)', [id, email])).map((r) => r.event_id),
   getDiscountCodes: (tx, id: string) => all(tx, 'select * from public.discount_codes where tournament_id = $1 order by code', [id]),
   addDiscountCode: (tx, c: Row) =>
     tx
@@ -273,6 +318,31 @@ const ops: Record<string, Op> = {
       )
       .then(() => null),
   deleteDiscountCode: (tx, id: string) => tx.query('delete from public.discount_codes where id = $1', [id]).then(() => null),
+  getListings: (tx, state: string | null, today: string, limit = 200) =>
+    all(
+      tx,
+      `select * from public.tournament_listings where last_day >= $2 and ($1::text is null or state = $1)
+       order by starts_on, name limit $3`,
+      [state, today, limit],
+    ),
+  getRecentListings: (tx, today: string, limit: number) =>
+    all(
+      tx,
+      'select * from public.tournament_listings where last_day >= $1 order by created_at desc limit $2',
+      [today, limit],
+    ),
+  getListing: (tx, id: string) => one(tx, 'select * from public.tournament_listings where id = $1', [id]),
+  saveListing: async (tx, id: string | null, fields: Row) => {
+    if (id) return updateColumns(tx, 'tournament_listings', id, fields, LISTING_COLUMNS);
+    const columns = LISTING_COLUMNS.filter((c) => c in fields);
+    const params = columns.map((_, i) => `$${i + 1}`).join(', ');
+    return one(
+      tx,
+      `insert into public.tournament_listings (${columns.join(', ')}) values (${params}) returning *`,
+      columns.map((c) => fields[c]),
+    );
+  },
+  deleteListing: (tx, id: string) => tx.query('delete from public.tournament_listings where id = $1', [id]).then(() => null),
   getPlatformPricing: async (tx) => (await one<{ r: unknown }>(tx, 'select public.platform_pricing() as r')).r,
   getTournamentFees: async (tx, id: string) => (await one<{ r: unknown }>(tx, 'select public.tournament_fees($1) as r', [id])).r,
   getMyRole: async (tx, id: string) => (await one<{ r: string | null }>(tx, 'select public.my_tournament_role($1) as r', [id])).r,

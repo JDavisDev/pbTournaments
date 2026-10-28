@@ -183,6 +183,12 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
             </div>
           )}
         </Expandable>
+
+        {tournament.refund_policy?.trim() && (
+          <Expandable id="refund-policy" title="Refund policy" summary="If you need to withdraw">
+            <p className="whitespace-pre-wrap">{tournament.refund_policy}</p>
+          </Expandable>
+        )}
       </div>
 
       <aside>

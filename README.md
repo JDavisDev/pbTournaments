@@ -32,7 +32,7 @@ cp web/.env.example web/.env.local
 
 With `NEXT_PUBLIC_DATA_MODE=local`, the dev server runs its own Postgres (PGlite) with the same migrations, engine and access rules as Supabase. Data is kept in `web/.local-db/`. It's rebuilt from scratch whenever a migration file changes, so delete that folder any time you want a clean start.
 
-Local mode is always a demo: **Sign in** signs you in as the shared guest in one click, or use **Start one in play** or **Start at check-in** on the home page. On the court desk, **fast-forward** (+5 min, +15 min, +1 hr) plays the tournament forward: players arrive, matches finish and scores go in.
+Local mode is always a demo: **Sign in** signs you in as the shared guest in one click, or use **Start one in play** or **Start at check-in** on the home page. A dozen sample tournament listings across several states fill the home page and `/tournaments`; they're posted again with new dates once they've all passed. On the court desk, **fast-forward** (+5 min, +15 min, +1 hr) plays the tournament forward: players arrive, matches finish and scores go in.
 
 ### Payments and texts (test mode by default)
 
@@ -75,19 +75,22 @@ npm run simulate     # 200-player simulation; --seed N, --players N, --courts N,
 
 | Path | Who | What |
 |---|---|---|
-| `/` | Everyone | Live tournaments; your organizations (demo sites: practice tournaments instead) |
-| `/o/<slug>` | Directors | Organization's tournaments, new tournament, add directors |
+| `/` | Everyone | Create a tournament (straight to its Setup; on demo sites a practice one dated today) or find one; listings coming up in the state you last browsed (else the newest); live tournaments; your organizations (demo sites: practice tournaments instead) |
+| `/tournaments` | Everyone | Tournament listings by state and search, grouped by month; each links out to its own sign-up page |
+| `/tournaments/new` | Signed in | List a tournament that takes sign-ups elsewhere (name, dates, place, sign-up link, image), free. Its poster edits or removes it at `/tournaments/<id>/edit` |
+| `/o/<slug>` | Directors | Organization's tournaments, New tournament (a draft with one division, opened in Setup), add directors |
 | `/t/<id>` | Everyone | Events and progress, who's on court, find your team |
-| `/t/<id>/events/<event>` | Everyone | Division dashboard: stage, stats, standings, bracket (single/double, bronze), medals. Directors: end pool play, arrange seeds, start the bracket, division queue |
+| `/t/<id>/events/<event>` | Everyone | Division dashboard: stage, stats, standings (Swiss round), bracket (single/double, bronze, medal matches), medals. Directors: end pool play, arrange seeds, start the bracket, division queue |
 | `/t/<id>/teams/<team>` | Players | Match day in four steps (check in → wait → go to your court and play → enter the score), the court, format, place in line, schedule, standings. "This is my team" remembers it on the phone |
-| `/t/<id>/register` | Players | Register and pay (no account) |
+| `/t/<id>/register` | Players | Register and pay (no account): pay a doubles partner's entry too (they still register, free for that event), the tournament's own questions, the waiver and refund policy |
+| `/t/<id>/register/done?r=<registration>` | Players | Their registration (the link is emailed when they pay): events, teams, who paid for whom (with a partner's sign-up link to send), their answers, what they paid and are owed; withdraw from one event or all |
 | `/s/<code>` | Players | The link in their text: the same match-day steps, the court, the format, enter the score (which frees the court) |
 | `/t/<id>/desk` | Directors | Court desk: courts, queue, check-in, results, all controls |
-| `/t/<id>/registrations` | Directors | Payments, teams, pair players whose partner details didn't match |
+| `/t/<id>/registrations` | Directors | Payments, teams, pair players whose partner details didn't match; totals owed both ways, counts for each answer (T-shirt sizes to order). Each registrant's details: their answers, Stripe and other payments, cost after discounts and withdrawals, refunds, the balance; withdraw them, move them to another division, record a refund, keep the money under the refund policy, take a payment at the desk |
 | `/t/<id>/messages` | Directors | Send texts/emails; texting health (Twilio setup, delivery counts, failure reasons) and the full log |
 | `/t/<id>/dupr` | Directors | Results to DUPR: missing DUPR IDs, a CSV per division for DUPR's club import, sent marks; paste confirmed ratings ([docs/dupr.md](docs/dupr.md)) |
 | `/t/<id>/planner` | Directors | Plan the day: each division's start time and match lengths; every match laid onto the courts; who waits for courts and who runs past closing. Saving sets the divisions' start times and match lengths |
-| `/t/<id>/setup` | Directors | Settings, prices, YouTube streams (event and per court), events (max rounds, bracket type, bronze, seed review, format per round), teams, build schedules |
+| `/t/<id>/setup` | Directors | Start here (a draft's name, date, venue and courts), divisions each with their own settings (copy one to start the next; DUPR rated or not; on practice tournaments, fill with mock players), settings, prices, registration questions (short answer, one choice or several), refund policy, YouTube streams (event and per court), events (round robin or Swiss, pools, max rounds, teams in the bracket, single/double elimination or straight to medal matches, bronze, seed review, format per round), teams, build schedules |
 | `/tv/<id>` | Gym TV | Full-screen court board |
 
 ## Design

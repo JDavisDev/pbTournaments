@@ -2,17 +2,35 @@
 
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
-import { Badge, Button, Card, Empty, ErrorText, Input, Select, Spinner } from '@/components/ui';
-import { getEvents, getRegistrations, offerWaitlistSpot, pairRegistrations, removeWaitlistEntry } from '@/lib/api';
+import { Badge, Button, Card, Empty, ErrorText, Input, Modal, Select, Spinner } from '@/components/ui';
+import {
+  getEvents,
+  getMoney,
+  getRegistrationAnswers,
+  getRegistrationQuestions,
+  getRegistrations,
+  getTournament,
+  offerWaitlistSpot,
+  pairRegistrations,
+  removeWaitlistEntry,
+} from '@/lib/api';
 import { formatMoney, formatTime } from '@/lib/format';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
-import type { RegistrationRow } from '@/lib/types';
+import type { RegistrationAnswer, RegistrationQuestion, RegistrationRow } from '@/lib/types';
+import { BalanceBadge, RegistrantDetails, type Registrant } from './RegistrantDetails';
 
 const statusTone = { paid: 'live', pending: 'called', cancelled: 'neutral', refunded: 'neutral', waitlisted: 'info' } as const;
 
 async function load(id: string) {
-  const [rows, events] = await Promise.all([getRegistrations(id), getEvents(id)]);
-  return { rows, events };
+  const [rows, events, money, tournament, questions, answers] = await Promise.all([
+    getRegistrations(id),
+    getEvents(id),
+    getMoney(id),
+    getTournament(id),
+    getRegistrationQuestions(id),
+    getRegistrationAnswers(id),
+  ]);
+  return { rows, events, money, tournament, questions, answers };
 }
 
 export function Registrations({ params }: { params: Promise<{ id: string }> }) {
@@ -20,27 +38,62 @@ export function Registrations({ params }: { params: Promise<{ id: string }> }) {
   const staff = useStaffAccess(id);
   const { data, error, reload } = useLiveTournament(id, () => load(id));
   const [search, setSearch] = useState('');
+  // The registrant whose details are open, by player.
+  const [openPlayer, setOpenPlayer] = useState<string | null>(null);
 
   if (error === 'not-configured') return <ConnectNotice />;
   if (error) return <Empty>{error}</Empty>;
   if (!data || staff.data === undefined) return <Spinner />;
   if (!staff.data) return <Empty>Registrations are for this tournament’s directors.</Empty>;
 
-  // One card per registration, with its events.
+  // One card per registration, with its events. Registrations withdrawn from
+  // every event have no entries left; they stay listed (they may be owed money).
   const byRegistration = new Map<string, RegistrationRow[]>();
   for (const r of data.rows) byRegistration.set(r.registration_id, [...(byRegistration.get(r.registration_id) ?? []), r]);
-  const registrations = [...byRegistration.values()].filter((entries) =>
-    `${entries[0].first_name} ${entries[0].last_name} ${entries[0].email}`.toLowerCase().includes(search.toLowerCase()),
+  const withdrawnOnly = new Map(
+    data.money.withdrawals.filter((w) => !byRegistration.has(w.registration_id)).map((w) => [w.registration_id, w]),
   );
+  const balanceOf = (playerId: string) => data.money.balances.find((b) => b.player_id === playerId) ?? null;
+  const matches = (first: string, last: string, email: string) =>
+    `${first} ${last} ${email}`.toLowerCase().includes(search.toLowerCase());
+  const registrations = [...byRegistration.values()].filter((e) => matches(e[0].first_name, e[0].last_name, e[0].email));
+  const withdrawn = [...withdrawnOnly.values()].filter((w) => matches(w.first_name, w.last_name, w.email));
   const paid = [...byRegistration.values()].filter((e) => e[0].status === 'paid');
-  const collected = paid.reduce((sum, e) => sum + e[0].amount_cents, 0);
+  const collected = data.money.balances.reduce((sum, b) => sum + b.paid_cents - b.refunded_cents, 0);
+  const owedToPlayers = data.money.balances.reduce((sum, b) => sum + Math.max(0, -b.balance_cents), 0);
+  const playersOwe = data.money.balances.reduce((sum, b) => sum + Math.max(0, b.balance_cents), 0);
+
+  const registrant = (playerId: string): Registrant | null => {
+    const entries = data.rows.filter((r) => r.player_id === playerId);
+    const withdrawals = data.money.withdrawals.filter((w) => w.player_id === playerId);
+    const who = entries[0] ?? withdrawals[0];
+    if (!who) return null;
+    const registrationIds = new Set([...entries.map((e) => e.registration_id), ...withdrawals.map((w) => w.registration_id)]);
+    return {
+      playerId,
+      answers: data.questions.flatMap((q) => {
+        const a = data.answers.find((x) => x.question_id === q.id && registrationIds.has(x.registration_id));
+        return a ? [{ label: q.label, answer: a.answer }] : [];
+      }),
+      name: `${who.first_name} ${who.last_name}`,
+      email: who.email,
+      phone: who.phone,
+      entries,
+      withdrawals,
+      ledger: data.money.ledger.filter((l) => l.player_id === playerId),
+      balance: balanceOf(playerId),
+    };
+  };
+  const details = openPlayer ? registrant(openPlayer) : null;
 
   return (
     <div className="flex flex-col gap-6">
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {[
           ['Paid players', paid.length],
-          ['Collected', formatMoney(collected)],
+          ['Collected, less refunds', formatMoney(collected)],
+          ['Owed to players', formatMoney(owedToPlayers)],
+          ['Players owe', formatMoney(playersOwe)],
           ['Waiting for partner', data.rows.filter((r) => r.status === 'paid' && !r.team_id && !r.waitlisted).length],
           ['On the waitlist', data.rows.filter((r) => r.waitlisted && r.status !== 'cancelled').length],
         ].map(([label, value]) => (
@@ -51,6 +104,7 @@ export function Registrations({ params }: { params: Promise<{ id: string }> }) {
         ))}
       </dl>
 
+      <AnswerCounts questions={data.questions} answers={data.answers} live={new Set(data.rows.map((r) => r.registration_id))} />
       <Waitlist rows={data.rows} events={data.events} onChanged={reload} />
       <Unpaired rows={data.rows} events={data.events} onChanged={reload} />
 
@@ -59,20 +113,26 @@ export function Registrations({ params }: { params: Promise<{ id: string }> }) {
           <h2 className="text-3xl">All registrations</h2>
           <Input className="w-48" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        {registrations.length === 0 ? (
+        {registrations.length === 0 && withdrawn.length === 0 ? (
           <Empty>No registrations yet. Share the Register link when the tournament is open for registration.</Empty>
         ) : (
           <div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface">
             {registrations.map((entries) => {
               const r = entries[0];
               return (
-                <div key={r.registration_id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                // The whole row opens the details; the name is the button for keyboards.
+                <div
+                  key={r.registration_id}
+                  onClick={() => setOpenPlayer(r.player_id)}
+                  className="flex cursor-pointer flex-col gap-2 px-4 py-3 hover:bg-surface-2 sm:flex-row sm:items-start sm:justify-between"
+                >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">
+                      <button type="button" className="min-h-11 text-left font-medium underline underline-offset-4">
                         {r.first_name} {r.last_name}
-                      </span>
+                      </button>
                       <Badge tone={statusTone[r.status]}>{r.status}</Badge>
+                      <BalanceBadge balance={balanceOf(r.player_id)} />
                       {r.payment_provider === 'test' && <Badge>test payment</Badge>}
                       {r.discount_code && <Badge tone="info">{r.discount_code} −{formatMoney(r.discount_cents)}</Badge>}
                     </div>
@@ -105,9 +165,29 @@ export function Registrations({ params }: { params: Promise<{ id: string }> }) {
                 </div>
               );
             })}
+            {withdrawn.map((w) => (
+              <div
+                key={w.registration_id}
+                onClick={() => setOpenPlayer(w.player_id)}
+                className="flex cursor-pointer flex-col gap-1 px-4 py-3 hover:bg-surface-2"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" className="min-h-11 text-left font-medium underline underline-offset-4">
+                    {w.first_name} {w.last_name}
+                  </button>
+                  <Badge>withdrawn</Badge>
+                  <BalanceBadge balance={balanceOf(w.player_id)} />
+                </div>
+                <p className="truncate text-sm text-muted">{w.email}</p>
+              </div>
+            ))}
           </div>
         )}
       </section>
+
+      <Modal open={!!details} onClose={() => setOpenPlayer(null)} title={details?.name ?? ''}>
+        {details && <RegistrantDetails who={details} tournament={data.tournament} events={data.events} onChanged={reload} />}
+      </Modal>
     </div>
   );
 }
@@ -268,6 +348,43 @@ function Waitlist({
         </div>
       )}
       <ErrorText>{error}</ErrorText>
+    </Card>
+  );
+}
+
+/** How many registrants picked each answer (T-shirt sizes to order, lunches), counting players still entered. */
+function AnswerCounts({
+  questions,
+  answers,
+  live,
+}: {
+  questions: RegistrationQuestion[];
+  answers: RegistrationAnswer[];
+  live: Set<string>;
+}) {
+  const choices = questions.filter((q) => q.kind !== 'text');
+  if (choices.length === 0) return null;
+  return (
+    <Card className="flex flex-col gap-3 p-4">
+      <h2 className="text-xl">Answers</h2>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {choices.map((q) => {
+          const picks = answers.filter((a) => a.question_id === q.id && live.has(a.registration_id)).flatMap((a) => a.answer);
+          return (
+            <div key={q.id}>
+              <h3 className="text-lg">{q.label}</h3>
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {q.options.map((o) => (
+                  <li key={o} className="flex justify-between gap-3">
+                    <span>{o}</span>
+                    <span className="tnum font-semibold">{picks.filter((p) => p === o).length}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
     </Card>
   );
 }

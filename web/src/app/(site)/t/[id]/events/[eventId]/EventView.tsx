@@ -24,7 +24,7 @@ import {
   swapBracketTeams,
 } from '@/lib/api';
 import { describeDivision } from '@/lib/eligibility';
-import { formatSummary, isPlayable, podium, poolName, shortFormat } from '@/lib/format';
+import { advanceRule, bracketSeeds, formatSummary, isPlayable, podium, poolName, shortFormat } from '@/lib/format';
 import { useAction, useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import type { MatchDetails, QueueRow } from '@/lib/types';
 
@@ -73,7 +73,11 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
     .sort((a, b) => a.pool - b.pool || a.round - b.round || a.position - b.position);
   const queue = data.queue.filter((q) => q.event_id === eventId);
   const queueById = new Map(queue.map((q) => [q.match_id, q]));
-  const advance = event.format === 'pools_to_bracket' ? event.advance_per_pool : 0;
+  // Marked in each pool's standings: the places that go to the bracket outright.
+  const seeds = event.format === 'pools_to_bracket' ? bracketSeeds(event) : 0;
+  const advance = Math.floor(seeds / Math.max(1, pools.length));
+  const swiss = event.pool_play === 'swiss';
+  const swissRound = Math.max(0, ...poolMatches.map((m) => m.round));
   const onCourt = data.courts.filter((c) => c.event_id === eventId && c.match_id);
 
   // Where the division is.
@@ -131,7 +135,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={stage === 'Complete' ? 'neutral' : stage === 'Not scheduled' ? 'neutral' : stage === 'Seeds under review' ? 'called' : 'live'}>
-              {stage}
+              {stage === 'Pool play' && swiss ? 'Swiss rounds' : stage}
             </Badge>
             {onCourt.length > 0 && <Badge tone="live">{onCourt.length} on court</Badge>}
           </div>
@@ -178,6 +182,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
                     `End pool play now? ${poolUnstarted.length} unplayed pool match${poolUnstarted.length === 1 ? '' : 'es'} will be cancelled. ` +
                     `Standings use win percentage over the matches played.` +
                     (poolLeft.length > poolUnstarted.length ? ' Matches on court now finish first.' : '') +
+                    (swiss ? ' No more Swiss rounds are drawn.' : '') +
                     (event.format === 'pools_to_bracket' ? ' The bracket is seeded once they do.' : '');
                   if (confirm(msg)) control.run(() => endPoolPlay(eventId), reload);
                 }}
@@ -242,6 +247,13 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
             ))}
           </div>
 
+          {swiss && (active === 'standings' || active === 'matches') && (
+            <p className="text-muted">
+              Swiss round {swissRound} of {event.max_rounds}.
+              {swissRound < (event.max_rounds ?? 0) ? ' The next round is drawn from the standings when this one finishes.' : ''}
+            </p>
+          )}
+
           {active === 'standings' && (
             <section>
               <div className="grid gap-4 lg:grid-cols-2">
@@ -253,7 +265,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
                 ))}
               </div>
               <p className="mt-2 text-xs text-muted">
-                {advance > 0 ? `Top ${advance} in each pool advance. ` : ''}
+                {seeds > 0 ? `${advanceRule(pools.length, seeds)} ` : ''}
                 Ranked by win percentage, then head-to-head, point differential and points scored.
               </p>
             </section>
@@ -273,7 +285,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
               {pools.map((pool) => (
                 <MatchList
                   key={pool}
-                  title={pools.length > 1 ? poolName(pool) : 'Pool play'}
+                  title={pools.length > 1 ? poolName(pool) : swiss ? 'Swiss rounds' : 'Pool play'}
                   matches={poolMatches.filter((m) => m.pool === pool && isPlayable(m))}
                   queueById={queueById}
                   timeZone={data.tournament.time_zone}
@@ -321,7 +333,8 @@ function MatchList({
 function formatShort(event: { format: string; bracket_type: string; games_to: number; best_of: number; point_cap: number | null }, matches: MatchDetails[]) {
   if (event.format === 'round_robin') return shortFormat(event);
   const final = matches.find((m) => m.round_key === 'final' || m.round_key === 'grand_final');
-  return `${event.bracket_type === 'double' ? 'Double' : 'Single'} elim${final ? ` · final ${shortFormat(final)}` : ''}`;
+  const kind = event.bracket_type === 'medal' ? 'Medal matches' : `${event.bracket_type === 'double' ? 'Double' : 'Single'} elim`;
+  return `${kind}${final ? ` · final ${shortFormat(final)}` : ''}`;
 }
 
 function Tile({ label, value, tone = '', bar, small }: { label: string; value: number | string; tone?: string; bar?: number; small?: boolean }) {
@@ -339,10 +352,11 @@ function Tile({ label, value, tone = '', bar, small }: { label: string; value: n
 }
 
 /** Pool play → bracket → medals, with the current step lit. */
-function StageTrack({ event, pools, stage }: { event: { format: string; bracket_type: string }; pools: boolean; stage: string }) {
+function StageTrack({ event, pools, stage }: { event: { format: string; bracket_type: string; pool_play: string }; pools: boolean; stage: string }) {
+  const bracket = event.bracket_type === 'double' ? 'Double-elim bracket' : event.bracket_type === 'medal' ? 'Medal matches' : 'Bracket';
   const steps = [
-    ...(pools || event.format !== 'single_elim' ? ['Pool play'] : []),
-    ...(event.format !== 'round_robin' ? [event.bracket_type === 'double' ? 'Double-elim bracket' : 'Bracket'] : []),
+    ...(pools || event.format !== 'single_elim' ? [event.pool_play === 'swiss' ? 'Swiss rounds' : 'Pool play'] : []),
+    ...(event.format !== 'round_robin' ? [bracket] : []),
     'Complete',
   ];
   const current =
@@ -354,7 +368,7 @@ function StageTrack({ event, pools, stage }: { event: { format: string; bracket_
   return (
     <ol className="flex items-center gap-2 text-sm">
       {steps.map((s, i) => (
-        <li key={s} className="flex flex-1 items-center gap-2">
+        <li key={s} className="flex min-w-0 flex-1 items-center gap-2">
           <span
             className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${
               i < current || stage === 'Complete' ? 'bg-brand text-white' : i === current ? 'bg-accent text-accent-text' : 'bg-surface-2 text-muted'
@@ -362,7 +376,7 @@ function StageTrack({ event, pools, stage }: { event: { format: string; bracket_
           >
             {i < current || stage === 'Complete' ? <Icon name="check" className="h-4 w-4" /> : i + 1}
           </span>
-          <span className={`whitespace-nowrap ${i === current ? 'font-semibold' : 'text-muted'}`}>{s}</span>
+          <span className={`leading-tight sm:whitespace-nowrap ${i === current ? 'font-semibold' : 'text-muted'}`}>{s}</span>
           {i < steps.length - 1 && <span className="h-px flex-1 bg-border" />}
         </li>
       ))}

@@ -88,6 +88,8 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
       format: e.format,
       poolCount: e.pool_count,
       advancePerPool: e.advance_per_pool,
+      bracketSize: e.bracket_size,
+      swiss: e.pool_play === 'swiss',
       maxRounds: e.max_rounds,
       bracketType: e.bracket_type,
       thirdPlace: e.third_place_match,

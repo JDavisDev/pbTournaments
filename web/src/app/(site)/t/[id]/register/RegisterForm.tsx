@@ -4,7 +4,15 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Badge, Button, Card, Empty, ErrorText, Field, Input, Select, Spinner } from '@/components/ui';
-import { checkDiscountCode, getEvents, getRegistrationAvailability, getTournament, startRegistration } from '@/lib/api';
+import {
+  checkDiscountCode,
+  getEvents,
+  getPartnerPaidEvents,
+  getRegistrationAvailability,
+  getRegistrationQuestions,
+  getTournament,
+  startRegistration,
+} from '@/lib/api';
 import { describeDivision, entryProblem, type PlayerFacts } from '@/lib/eligibility';
 import { formatMoney, formatTime, registrationPrice } from '@/lib/format';
 import { useAction, useLoad, useNow } from '@/lib/hooks';
@@ -12,7 +20,11 @@ import { useAction, useLoad, useNow } from '@/lib/hooks';
 interface Choice {
   partner_name: string;
   partner_email: string;
+  /** Pay the partner's entry too. */
+  pay_for_partner: boolean;
 }
+
+const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 const optionalNumber = (v: string) => (v.trim() === '' ? null : Number(v));
 
@@ -24,12 +36,13 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   // A division's sign-up link (?event=) opens with that division picked.
   const linkedEvent = searchParams.get('event');
   const data = useLoad(async () => {
-    const [tournament, events, availability] = await Promise.all([
+    const [tournament, events, availability, questions] = await Promise.all([
       getTournament(id),
       getEvents(id),
       getRegistrationAvailability(id),
+      getRegistrationQuestions(id),
     ]);
-    return { tournament, events, availability };
+    return { tournament, events, availability, questions };
   }, [id]);
   const [me, setMe] = useState({ first_name: '', last_name: '', email: '', phone: '', sms_opt_in: true });
   const [facts, setFacts] = useState<PlayerFacts>({
@@ -41,8 +54,12 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
     dupr_id: '',
   });
   const [chosen, setChosen] = useState<Record<string, Choice>>(() =>
-    linkedEvent ? { [linkedEvent]: { partner_name: '', partner_email: '' } } : {},
+    linkedEvent ? { [linkedEvent]: { partner_name: '', partner_email: '', pay_for_partner: false } } : {},
   );
+  // Events whose entry fee a partner already paid for this email.
+  const myEmail = emailPattern.test(me.email.trim()) ? me.email.trim().toLowerCase() : '';
+  const partnerPaid = useLoad(() => (myEmail ? getPartnerPaidEvents(id, myEmail) : Promise.resolve([])), [id, myEmail]);
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const submit = useAction();
   const now = useNow(60_000);
   const [code, setCode] = useState('');
@@ -53,7 +70,8 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   if (data.error === 'not-configured') return <ConnectNotice />;
   if (data.error) return <Empty>{data.error}</Empty>;
   if (!data.data) return <Spinner />;
-  const { tournament: t, events, availability } = data.data;
+  const { tournament: t, events, availability, questions } = data.data;
+  const paidByPartner = new Set(partnerPaid.data ?? []);
   const full = new Set(availability.filter((a) => a.full).map((a) => a.event_id));
   const spotsLeft = new Map(availability.map((a) => [a.event_id, a.spots_left]));
   const closesAt = t.registration_closes_at ? new Date(t.registration_closes_at).getTime() : null;
@@ -74,15 +92,20 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   // Ignore a linked division that isn't in this tournament.
   const picks = Object.entries(chosen).filter(([eventId]) => events.some((e) => e.id === eventId));
   // Full divisions go on the waitlist and cost nothing until a spot opens.
-  const paidPicks = picks.filter(([eventId]) => !full.has(eventId));
-  const waitlistPicks = picks.filter(([eventId]) => full.has(eventId));
+  // An event a partner already paid for holds its spot, even in a full division.
+  const coveredPicks = picks.filter(([eventId]) => paidByPartner.has(eventId));
+  const waitlistPicks = picks.filter(([eventId]) => full.has(eventId) && !paidByPartner.has(eventId));
+  const paidPicks = picks.filter(([eventId]) => !full.has(eventId) && !paidByPartner.has(eventId));
+  const payingFor = paidPicks.filter(([, c]) => c.pay_for_partner);
   const count = paidPicks.length;
-  const price = registrationPrice(t, count, now);
-  const total = Math.max(0, price - (discount?.cents ?? 0));
-  const needsWaiver = !!t.waiver_text?.trim();
   const early = t.early_until && new Date(t.early_until).getTime() > now;
   const firstPrice = early ? (t.early_entry_fee_cents ?? t.entry_fee_cents) : t.entry_fee_cents;
   const extraPrice = early ? (t.early_extra_event_fee_cents ?? t.extra_event_fee_cents) : t.extra_event_fee_cents;
+  // Same as start_registration: with an event a partner paid, each of yours is an extra event.
+  const price =
+    (coveredPicks.length > 0 ? count * extraPrice : registrationPrice(t, count, now)) + payingFor.length * firstPrice;
+  const total = Math.max(0, price - (discount?.cents ?? 0));
+  const needsWaiver = !!t.waiver_text?.trim();
   const problems = Object.fromEntries(events.map((e) => [e.id, entryProblem(e, t.starts_on, facts)]));
   // Only ask for what some event needs.
   const needsAge = events.some((e) => e.min_age !== null || e.max_age !== null);
@@ -94,10 +117,10 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
     setChosen((c) => {
       const next = { ...c };
       if (next[eventId]) delete next[eventId];
-      else next[eventId] = { partner_name: '', partner_email: '' };
+      else next[eventId] = { partner_name: '', partner_email: '', pay_for_partner: false };
       return next;
     });
-  const setPartner = (eventId: string, field: keyof Choice, value: string) =>
+  const setPartner = <K extends keyof Choice>(eventId: string, field: K, value: Choice[K]) =>
     setChosen((c) => ({ ...c, [eventId]: { ...c[eventId], [field]: value } }));
 
   return (
@@ -106,6 +129,8 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
       onSubmit={(e) => {
         e.preventDefault();
         submit.run(async () => {
+          const unanswered = questions.find((q) => q.required && q.kind === 'choices' && !(answers[q.id] as string[] | undefined)?.length);
+          if (unanswered) throw new Error(`Please answer “${unanswered.label}”`);
           const reg = await startRegistration(id, {
             player: {
               ...me,
@@ -117,8 +142,13 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
               dupr_id: facts.dupr_id.trim() || null,
               discount_code: discount?.code ?? (code.trim() || null),
               waiver_accepted: needsWaiver ? waiverOk : undefined,
+              answers: Object.entries(answers).map(([question_id, answer]) => ({ question_id, answer })),
             },
-            entries: picks.map(([event_id, c]) => ({ event_id, ...c })),
+            entries: picks.map(([event_id, c]) => ({
+              event_id,
+              ...c,
+              pay_for_partner: c.pay_for_partner && !full.has(event_id) && !paidByPartner.has(event_id),
+            })),
           });
           if (reg.status === 'paid' || reg.status === 'waitlisted') {
             router.push(`/t/${id}/register/done?r=${reg.registration_id}`);
@@ -315,7 +345,9 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
                     {e.not_before && t.times_published_at ? ` · starts ${formatTime(e.not_before, t.time_zone)}` : ''}
                   </span>
                   <span className="mt-1 flex flex-wrap gap-1.5">
-                    {full.has(e.id) ? (
+                    {paidByPartner.has(e.id) ? (
+                      <Badge tone="live">Your partner paid your entry</Badge>
+                    ) : full.has(e.id) ? (
                       <Badge tone="called">Full: you’ll join the waitlist</Badge>
                     ) : spotsLeft.get(e.id) != null && spotsLeft.get(e.id)! <= 6 ? (
                       <Badge tone="info">{Math.ceil(spotsLeft.get(e.id)! / (e.kind === 'doubles' ? 2 : 1))} spots left</Badge>
@@ -337,21 +369,53 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
                   </Field>
                   <Field
                     label={e.partner_required ? 'Partner’s email' : 'Partner’s email (optional)'}
-                    hint={e.partner_required ? 'They register and pay separately' : 'No partner yet? Leave blank and the desk will pair you.'}
+                    hint={
+                      picked.pay_for_partner
+                        ? 'We email you their sign-up link'
+                        : e.partner_required
+                          ? 'They register separately'
+                          : 'No partner yet? Leave blank and the desk will pair you.'
+                    }
                   >
                     <Input
                       type="email"
-                      required={e.partner_required}
+                      required={e.partner_required || picked.pay_for_partner}
                       value={picked.partner_email}
                       onChange={(ev) => setPartner(e.id, 'partner_email', ev.target.value)}
                     />
                   </Field>
+                  {!full.has(e.id) && !paidByPartner.has(e.id) && (
+                    <label className="flex items-start gap-3 rounded-xl bg-surface-2 p-3 sm:col-span-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-5 w-5 accent-[var(--accent)]"
+                        checked={picked.pay_for_partner}
+                        onChange={(ev) => setPartner(e.id, 'pay_for_partner', ev.target.checked)}
+                      />
+                      <span>
+                        <span className="font-medium">Pay for my partner too (+{formatMoney(firstPrice)})</span>
+                        <span className="block text-sm text-muted">
+                          Their spot is held. They still register to add their own details and agree to the waiver, and
+                          this event costs them nothing.
+                        </span>
+                      </span>
+                    </label>
+                  )}
                 </div>
               )}
             </div>
           );
         })}
       </Card>
+
+      {(payingFor.length > 0 || coveredPicks.length > 0) && (
+        <p className="rounded-lg bg-live-soft px-3 py-2 text-live">
+          {payingFor.length > 0 &&
+            `Includes ${payingFor.map(([, c]) => c.partner_name.trim() || c.partner_email.trim()).join(' and ')}’s entry (${formatMoney(firstPrice)} each). `}
+          {coveredPicks.length > 0 &&
+            `Your partner already paid for ${coveredPicks.map(([eventId]) => events.find((e) => e.id === eventId)?.name).join(', ')}.`}
+        </p>
+      )}
 
       {count > 0 && (
         <Card className="flex flex-col gap-2 p-5">
@@ -393,6 +457,69 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
         </Card>
       )}
 
+      {questions.length > 0 && (
+        <Card className="flex flex-col gap-4 p-5">
+          <h3 className="text-xl">A few questions</h3>
+          {questions.map((q) => {
+            const label = q.required ? q.label : `${q.label} (optional)`;
+            if (q.kind === 'text') {
+              return (
+                <Field key={q.id} label={label}>
+                  <Input
+                    required={q.required}
+                    maxLength={500}
+                    value={(answers[q.id] as string | undefined) ?? ''}
+                    onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                  />
+                </Field>
+              );
+            }
+            if (q.kind === 'choice') {
+              return (
+                <Field key={q.id} label={label}>
+                  <Select
+                    required={q.required}
+                    value={(answers[q.id] as string | undefined) ?? ''}
+                    onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                  >
+                    <option value="">Choose…</option>
+                    {q.options.map((o) => (
+                      <option key={o}>{o}</option>
+                    ))}
+                  </Select>
+                </Field>
+              );
+            }
+            const picked = (answers[q.id] as string[] | undefined) ?? [];
+            return (
+              <fieldset key={q.id} className="flex flex-col gap-1">
+                <legend className="mb-1 text-sm font-medium">{label} · choose any</legend>
+                {q.options.map((o) => (
+                  <label key={o} className="flex min-h-11 items-center gap-3">
+                    <input
+                      type="checkbox"
+                      className="h-5 w-5 accent-[var(--accent)]"
+                      checked={picked.includes(o)}
+                      onChange={(e) =>
+                        setAnswers({ ...answers, [q.id]: e.target.checked ? [...picked, o] : picked.filter((x) => x !== o) })
+                      }
+                    />
+                    {o}
+                  </label>
+                ))}
+              </fieldset>
+            );
+          })}
+        </Card>
+      )}
+
+      {t.refund_policy?.trim() && (
+        <Card className="flex flex-col gap-2 p-5">
+          <h3 className="text-xl">Refund policy</h3>
+          <p className="whitespace-pre-wrap text-muted">{t.refund_policy}</p>
+        </Card>
+      )}
+
       {waitlistPicks.length > 0 && (
         <p className="rounded-lg bg-called-soft px-3 py-2 text-called">
           You’ll join the waitlist for {waitlistPicks.map(([eventId]) => events.find((e) => e.id === eventId)?.name).join(', ')}.
@@ -412,7 +539,7 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
             ? 'Starting checkout…'
             : picks.length === 0
               ? 'Choose an event'
-              : count === 0
+              : count === 0 && coveredPicks.length === 0
                 ? 'Join the waitlist'
                 : total === 0
                   ? 'Register'

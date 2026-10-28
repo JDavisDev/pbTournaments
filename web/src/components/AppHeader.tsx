@@ -33,13 +33,17 @@ export function AppHeader() {
           <Wordmark />
         </Link>
         <nav className="flex items-center gap-1 text-sm sm:gap-2">
+          {/* Small screens don’t have room (with larger text); there, Find a tournament on the home page leads here. */}
+          <Link href="/tournaments" className="hidden h-11 items-center rounded-full px-3 font-medium text-muted hover:text-text md:inline-flex">
+            Tournaments
+          </Link>
           <Link href="/pricing" className="hidden h-11 items-center rounded-full px-3 font-medium text-muted hover:text-text sm:inline-flex">
             Pricing
           </Link>
           <TextSizeButton />
           {user === undefined ? null : user ? (
             <>
-              <span className="hidden text-muted md:inline">{isGuest(user) ? 'Guest' : user.email}</span>
+              <span className="hidden text-muted lg:inline">{isGuest(user) ? 'Guest' : user.email}</span>
               <button className="h-11 rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2" onClick={() => auth.signOut()}>
                 Sign out
               </button>

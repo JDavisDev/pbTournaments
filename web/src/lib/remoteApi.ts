@@ -12,6 +12,12 @@ import type {
   DemoText,
   DiscountCode,
   DivisionCheckin,
+  LedgerEntry,
+  ListingFields,
+  PaymentMethod,
+  PlayerBalance,
+  RegistrationAnswer,
+  RegistrationQuestion,
   PlatformPricing,
   StaffMember,
   TournamentFees,
@@ -31,7 +37,9 @@ import type {
   TextLogRow,
   Tournament,
   TournamentEvent,
+  TournamentListing,
   TournamentStatus,
+  WithdrawalRow,
 } from './types';
 
 function toError(error: { message: string }) {
@@ -155,6 +163,16 @@ export const createTournament = (organizationId: string, name: string, startsOn:
     p_court_count: courts,
   });
 
+/** A draft with everything filled in and one division, ready for Setup. On demo sites organizationId may be null. */
+export const newTournament = (organizationId: string | null) =>
+  rpc<Tournament>('new_tournament', { p_organization: organizationId });
+
+/** A new division with every setting of this one (not its teams). */
+export const copyEvent = (eventId: string) => rpc<TournamentEvent>('copy_event', { p_event: eventId });
+
+/** Practice tournaments: made-up teams who fit the division. */
+export const addMockTeams = (eventId: string, count = 4) => rpc<number>('add_mock_teams', { p_event: eventId, p_count: count });
+
 export const setTournamentStatus = (tournamentId: string, status: TournamentStatus) =>
   rpc<Tournament>('set_tournament_status', { p_tournament: tournamentId, p_status: status });
 
@@ -222,6 +240,9 @@ export const endPoolPlay = (eventId: string) => rpc<number>('end_pool_play', { p
 /** Before seeding: change how many advance per pool; the bracket is rebuilt to match. */
 export const setAdvancePerPool = (eventId: string, advance: number) =>
   rpc<number>('set_advance_per_pool', { p_event: eventId, p_advance: advance });
+/** Before seeding: change how many teams go to the bracket; it's rebuilt to match. */
+export const setBracketSize = (eventId: string, size: number) =>
+  rpc<number>('set_bracket_size', { p_event: eventId, p_size: size });
 export const startBracket = (eventId: string) => rpc<void>('start_bracket', { p_event: eventId });
 export const swapBracketTeams = (eventId: string, teamA: string, teamB: string) =>
   rpc<void>('swap_bracket_teams', { p_event: eventId, p_team_a: teamA, p_team_b: teamB });
@@ -284,6 +305,53 @@ export const offerWaitlistSpot = (registrationId: string, eventId: string) =>
 export const removeWaitlistEntry = (registrationId: string, eventId: string) =>
   rpc<void>('remove_waitlist_entry', { p_registration: registrationId, p_event: eventId });
 
+// Money and withdrawals ---------------------------------------------------------
+
+/** Admin: each registrant's ledger, balance and withdrawals. */
+export async function getMoney(tournamentId: string) {
+  const [balances, ledger, withdrawals] = await Promise.all([
+    selectAll<PlayerBalance>((from, to) =>
+      supabase().from('player_balances').select('*').eq('tournament_id', tournamentId).order('player_id').range(from, to),
+    ),
+    selectAll<LedgerEntry>((from, to) =>
+      supabase().from('ledger_entries').select('*').eq('tournament_id', tournamentId).order('id').range(from, to),
+    ),
+    selectAll<WithdrawalRow>((from, to) =>
+      supabase().from('withdrawal_details').select('*').eq('tournament_id', tournamentId).order('id').range(from, to),
+    ),
+  ]);
+  return { balances, ledger, withdrawals };
+}
+
+/** Withdraw from one event, or all of them (null). The player (with their registration link) or an admin. */
+export const withdrawRegistration = (registrationId: string, eventId: string | null) =>
+  rpc<{ credit_cents: number; withdrawn: string[] }>('withdraw_registration', {
+    p_registration: registrationId,
+    p_event: eventId,
+  });
+
+/** Admin: move an entry (and its team) to another division. */
+export const moveRegistrationEntry = (registrationId: string, fromEventId: string, toEventId: string) =>
+  rpc<void>('move_registration_entry', { p_registration: registrationId, p_from_event: fromEventId, p_to_event: toEventId });
+
+/** Admin: a payment at the desk, a refund, a fee kept, or a credit. `cents` is positive. */
+export const recordLedgerEntry = (
+  tournamentId: string,
+  playerId: string,
+  kind: 'payment' | 'refund' | 'fee' | 'credit',
+  cents: number,
+  method: PaymentMethod | null,
+  note: string | null,
+) =>
+  rpc<LedgerEntry>('record_ledger_entry', {
+    p_tournament: tournamentId,
+    p_player: playerId,
+    p_kind: kind,
+    p_amount_cents: cents,
+    p_method: method,
+    p_note: note,
+  });
+
 /** Per division: spots left (null = no limit) and whether new entries join the waitlist. */
 export const getRegistrationAvailability = (tournamentId: string) =>
   rpc<{ event_id: string; spots_left: number | null; full: boolean }[]>('registration_availability', { p_tournament: tournamentId });
@@ -294,6 +362,43 @@ export const checkDiscountCode = (tournamentId: string, code: string, amountCent
     p_code: code,
     p_amount_cents: amountCents,
   });
+// Registration questions -------------------------------------------------------
+
+export const getRegistrationQuestions = (tournamentId: string) =>
+  select<RegistrationQuestion[]>(
+    supabase().from('registration_questions').select('*').eq('tournament_id', tournamentId).order('sort_order').order('created_at'),
+  );
+
+/** Admin: add a question (no id) or change one. */
+export function saveRegistrationQuestion(q: Omit<RegistrationQuestion, 'id'> & { id?: string }) {
+  const { id, tournament_id, ...fields } = q;
+  const table = supabase().from('registration_questions');
+  return select<RegistrationQuestion>(
+    (id ? table.update(fields).eq('id', id) : table.insert({ tournament_id, ...fields })).select().single(),
+  );
+}
+
+export async function deleteRegistrationQuestion(id: string) {
+  await select(supabase().from('registration_questions').delete().eq('id', id).select('id'));
+}
+
+/** Admin: every registration's answers in a tournament. */
+export async function getRegistrationAnswers(tournamentId: string) {
+  const rows = await selectAll<RegistrationAnswer & { registrations: unknown }>((from, to) =>
+    supabase()
+      .from('registration_answers')
+      .select('registration_id, question_id, answer, registrations!inner(tournament_id)')
+      .eq('registrations.tournament_id', tournamentId)
+      .order('registration_id')
+      .range(from, to),
+  );
+  return rows.map(({ registration_id, question_id, answer }) => ({ registration_id, question_id, answer }));
+}
+
+/** The events where a partner already paid this email's entry. */
+export const getPartnerPaidEvents = async (tournamentId: string, email: string) =>
+  (await rpc<{ event_id: string }[]>('partner_paid_events', { p_tournament: tournamentId, p_email: email })).map((r) => r.event_id);
+
 export const getDiscountCodes = (tournamentId: string) =>
   select<DiscountCode[]>(supabase().from('discount_codes').select('*').eq('tournament_id', tournamentId).order('code'));
 export async function addDiscountCode(code: Omit<DiscountCode, 'id'>) {
@@ -301,6 +406,34 @@ export async function addDiscountCode(code: Omit<DiscountCode, 'id'>) {
 }
 export async function deleteDiscountCode(id: string) {
   await select(supabase().from('discount_codes').delete().eq('id', id).select('id'));
+}
+
+// Tournament listings (sign-ups on other sites) --------------------------------
+
+/** Listings that haven't ended by `today` (the viewer's date), in one state or all of them. */
+export function getListings(state: string | null, today: string, limit = 200) {
+  let query = supabase().from('tournament_listings').select('*').gte('last_day', today);
+  if (state) query = query.eq('state', state);
+  return select<TournamentListing[]>(query.order('starts_on').order('name').limit(limit));
+}
+
+/** The newest listings that haven't ended by `today`. */
+export const getRecentListings = (today: string, limit: number) =>
+  select<TournamentListing[]>(
+    supabase().from('tournament_listings').select('*').gte('last_day', today).order('created_at', { ascending: false }).limit(limit),
+  );
+
+export const getListing = (id: string) =>
+  select<TournamentListing>(supabase().from('tournament_listings').select('*').eq('id', id).single());
+
+/** Posts a new listing (the caller becomes its poster) or updates one of theirs. */
+export function saveListing(id: string | null, fields: ListingFields) {
+  const table = supabase().from('tournament_listings');
+  return select<TournamentListing>((id ? table.update(fields).eq('id', id) : table.insert(fields)).select().single());
+}
+
+export async function deleteListing(id: string) {
+  await select(supabase().from('tournament_listings').delete().eq('id', id).select('id'));
 }
 
 // Platform fees ----------------------------------------------------------------

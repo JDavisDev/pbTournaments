@@ -1,14 +1,18 @@
 'use client';
 
 // Setup sidebar cards: who runs the tournament, registration limits and
-// extras (waiver, image, close date), and discount codes.
+// extras (waiver, image, close date, refund policy), your own registration
+// questions, and discount codes.
 import { useState } from 'react';
 import { Badge, Button, Card, ErrorText, Field, Input, Select, Textarea } from '@/components/ui';
 import {
   addDiscountCode,
   addTournamentStaff,
   deleteDiscountCode,
+  deleteRegistrationQuestion,
   getDiscountCodes,
+  getRegistrationQuestions,
+  saveRegistrationQuestion,
   getTournamentFees,
   getTournamentTeam,
   removeTournamentStaff,
@@ -16,7 +20,8 @@ import {
 } from '@/lib/api';
 import { formatMoney, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
-import type { StaffRole, Tournament } from '@/lib/types';
+import { shrinkImage } from '@/lib/image';
+import type { RegistrationQuestion, StaffRole, Tournament } from '@/lib/types';
 
 const roleText: Record<StaffRole, string> = { admin: 'Admin', monitor: 'Court monitor' };
 
@@ -96,27 +101,6 @@ export function SharingCard({ tournament }: { tournament: Tournament }) {
   );
 }
 
-/** Downscales an image file to a JPEG data URL (max 1200 px wide). */
-async function shrinkImage(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error('That file isn’t an image we can read'));
-      i.src = url;
-    });
-    const scale = Math.min(1, 1200 / img.width);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(img.width * scale);
-    canvas.height = Math.round(img.height * scale);
-    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.82);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 /** Registration limits and extras. */
 export function RegistrationCard({ tournament, onChanged }: { tournament: Tournament; onChanged: () => void }) {
   const tz = tournament.time_zone;
@@ -124,6 +108,7 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
     max_players: tournament.max_players?.toString() ?? '',
     closes: toZonedInput(tournament.registration_closes_at, tz),
     waiver: tournament.waiver_text ?? '',
+    refundPolicy: tournament.refund_policy ?? '',
   });
   const { busy, error, run } = useAction();
   const [saved, setSaved] = useState(false);
@@ -170,6 +155,7 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
                 max_players: form.max_players ? Number(form.max_players) : null,
                 registration_closes_at: form.closes ? new Date(fromZonedInput(form.closes, tz)).toISOString() : null,
                 waiver_text: form.waiver.trim() || null,
+                refund_policy: form.refundPolicy.trim() || null,
               }),
             () => (setSaved(true), onChanged()),
           );
@@ -186,6 +172,18 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
         <p className="-mt-1 text-xs text-muted">Each division’s own limit is “Max teams” in its settings. Full divisions take a waitlist too.</p>
         <Field label="Waiver" hint="Optional. Players must agree to it to register.">
           <Textarea rows={5} value={form.waiver} onChange={(e) => setForm({ ...form, waiver: e.target.value })} placeholder="I understand pickleball involves risk of injury…" />
+        </Field>
+        <Field
+          label="Refund policy"
+          hint="Shown on the tournament page, at registration and when a player withdraws. Withdrawals credit what the entry cost; you decide the refund."
+        >
+          <Textarea
+            rows={4}
+            maxLength={5000}
+            value={form.refundPolicy}
+            onChange={(e) => setForm({ ...form, refundPolicy: e.target.value })}
+            placeholder="Full refund less a $5 processing fee until 7 days before the tournament. No refunds after that."
+          />
         </Field>
         <ErrorText>{error}</ErrorText>
         {saved && <p className="text-sm text-live">Saved.</p>}
@@ -338,6 +336,149 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
       </label>
       <p className="text-xs text-muted">Tip: build these into your entry price so players see one all-in price.</p>
       <ErrorText>{error}</ErrorText>
+    </Card>
+  );
+}
+
+const kindText: Record<RegistrationQuestion['kind'], string> = {
+  text: 'Short answer',
+  choice: 'One choice',
+  choices: 'Multiple choices',
+};
+
+const blankQuestion = { id: undefined as string | undefined, label: '', kind: 'choice' as RegistrationQuestion['kind'], options: '', required: false };
+
+/** Your own questions at registration: T-shirt size, home club, lunch… */
+export function QuestionsCard({ tournament }: { tournament: Tournament }) {
+  const questions = useLoad(() => getRegistrationQuestions(tournament.id), [tournament.id]);
+  const [form, setForm] = useState(blankQuestion);
+  const { busy, error, run } = useAction();
+  const list = questions.data ?? [];
+  const options = form.options.split('\n').map((o) => o.trim()).filter(Boolean);
+
+  const save = (q: RegistrationQuestion | (Omit<RegistrationQuestion, 'id'> & { id?: string })) =>
+    saveRegistrationQuestion({
+      id: q.id,
+      tournament_id: tournament.id,
+      label: q.label,
+      kind: q.kind,
+      options: q.options,
+      required: q.required,
+      sort_order: q.sort_order,
+    });
+  /** Swaps a question with its neighbor, numbering the whole list again. */
+  const move = (i: number, by: -1 | 1) =>
+    run(async () => {
+      const order = [...list];
+      [order[i], order[i + by]] = [order[i + by], order[i]];
+      for (const [n, q] of order.entries()) if (q.sort_order !== n) await save({ ...q, sort_order: n });
+    }, questions.reload);
+
+  return (
+    <Card className="flex flex-col gap-3 p-4">
+      <div>
+        <h2 className="text-xl">Registration questions</h2>
+        <p className="text-sm text-muted">Anything you need from players: T-shirt size, home club, lunch. Answers show on Registrations.</p>
+      </div>
+      {list.length > 0 && (
+        <ol className="flex flex-col divide-y divide-border text-sm">
+          {list.map((q, i) => (
+            <li key={q.id} className="flex flex-col gap-1 py-2">
+              <span className="flex flex-wrap items-center gap-1.5">
+                <span className="font-medium">{q.label}</span>
+                <Badge>{kindText[q.kind]}</Badge>
+                {q.required && <Badge tone="info">Required</Badge>}
+              </span>
+              {q.kind !== 'text' && <span className="text-muted">{q.options.join(' · ')}</span>}
+              <span className="flex flex-wrap gap-1">
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => setForm({ ...q, options: q.options.join('\n') })}>
+                  Edit
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy || i === 0} aria-label={`Move ${q.label} up`} onClick={() => move(i, -1)}>
+                  Up
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy || i === list.length - 1} aria-label={`Move ${q.label} down`} onClick={() => move(i, 1)}>
+                  Down
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-late"
+                  disabled={busy}
+                  onClick={() =>
+                    confirm(`Delete “${q.label}”? Answers players already gave to it are deleted too.`) &&
+                    run(() => deleteRegistrationQuestion(q.id), questions.reload)
+                  }
+                >
+                  Delete
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <form
+        className="flex flex-col gap-3 rounded-xl bg-surface p-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(
+            () =>
+              save({
+                id: form.id,
+                tournament_id: tournament.id,
+                label: form.label.trim(),
+                kind: form.kind,
+                options: form.kind === 'text' ? [] : options,
+                required: form.required,
+                sort_order: form.id ? (list.find((q) => q.id === form.id)?.sort_order ?? 0) : list.length,
+              }),
+            () => (setForm(blankQuestion), questions.reload()),
+          );
+        }}
+      >
+        <h3 className="font-medium">{form.id ? 'Edit question' : 'Add a question'}</h3>
+        <Field label="Question">
+          <Input required maxLength={200} value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="T-shirt size" />
+        </Field>
+        <Field label="Answer">
+          <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as RegistrationQuestion['kind'] })}>
+            <option value="choice">Pick one from a list</option>
+            <option value="choices">Pick any from a list</option>
+            <option value="text">Short answer (they type it)</option>
+          </Select>
+        </Field>
+        {form.kind !== 'text' && (
+          <Field label="Choices" hint="One per line.">
+            <Textarea
+              rows={4}
+              required
+              value={form.options}
+              onChange={(e) => setForm({ ...form, options: e.target.value })}
+              placeholder={'S\nM\nL\nXL'}
+            />
+          </Field>
+        )}
+        <label className="flex min-h-11 items-center gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="h-5 w-5 accent-[var(--accent)]"
+            checked={form.required}
+            onChange={(e) => setForm({ ...form, required: e.target.checked })}
+          />
+          Players must answer
+        </label>
+        <ErrorText>{error}</ErrorText>
+        <div className="flex gap-2">
+          <Button type="submit" disabled={busy || !form.label.trim() || (form.kind !== 'text' && options.length === 0)}>
+            {form.id ? 'Save question' : 'Add question'}
+          </Button>
+          {form.id && (
+            <Button type="button" variant="ghost" onClick={() => setForm(blankQuestion)}>
+              Cancel
+            </Button>
+          )}
+        </div>
+      </form>
     </Card>
   );
 }

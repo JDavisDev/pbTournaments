@@ -1,4 +1,4 @@
-import type { BracketType, ChampionshipMode, EventFormat, MatchDetails, RoundFormat, RoundKey } from './types';
+import type { BracketType, ChampionshipMode, EventFormat, MatchDetails, PoolPlay, RoundFormat, RoundKey } from './types';
 
 export function formatTime(iso: string | null | undefined, timeZone?: string) {
   if (!iso) return '';
@@ -12,6 +12,24 @@ export function formatDate(date: string) {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+/** "Sat, Nov 14, 2026", or "Sat, Nov 14 – Sun, Nov 15, 2026" across days. */
+export function formatDateRange(start: string, end: string | null) {
+  if (!end || end === start) return formatDate(start);
+  const first = new Date(`${start}T12:00:00`).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(start.slice(0, 4) !== end.slice(0, 4) && { year: 'numeric' }),
+  });
+  return `${first} – ${formatDate(end)}`;
+}
+
+/** Today in the viewer's time zone, as 'YYYY-MM-DD'. */
+export function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function minutesSince(iso: string | null | undefined, now: number) {
@@ -29,15 +47,35 @@ export function formatSummary(e: {
   format: EventFormat;
   pool_count: number;
   advance_per_pool: number;
+  bracket_size?: number | null;
   bracket_type?: BracketType;
   max_rounds?: number | null;
+  pool_play?: PoolPlay;
 }) {
-  const bracket = e.bracket_type === 'double' ? 'double elimination' : 'single elimination';
+  const bracket =
+    e.bracket_type === 'double' ? 'double elimination' : e.bracket_type === 'medal' ? 'medal matches' : 'single elimination';
   if (e.format === 'single_elim') return bracket[0].toUpperCase() + bracket.slice(1);
-  const pools = e.pool_count === 1 ? '1 pool' : `${e.pool_count} pools`;
-  const rounds = e.max_rounds ? ` · ${e.max_rounds} rounds max` : '';
-  if (e.format === 'round_robin') return `Round robin · ${pools}${rounds}`;
-  return `${pools}${rounds} → top ${e.advance_per_pool} to ${bracket}`;
+  const play =
+    e.pool_play === 'swiss'
+      ? `${e.max_rounds ?? '?'} Swiss rounds`
+      : `${e.pool_count === 1 ? '1 pool' : `${e.pool_count} pools`}${e.max_rounds ? ` · ${e.max_rounds} rounds max` : ''}`;
+  if (e.format === 'round_robin') return e.pool_play === 'swiss' ? play : `Round robin · ${play}`;
+  return `${play} → ${e.bracket_type === 'medal' ? 'gold and bronze matches' : `top ${bracketSeeds(e)} to ${bracket}`}`;
+}
+
+/** Teams that go from pool play to the bracket. */
+export const bracketSeeds = (e: { pool_count: number; advance_per_pool: number; bracket_size?: number | null }) =>
+  e.bracket_size ?? e.pool_count * e.advance_per_pool;
+
+/** Who goes to the bracket: "Top 2 in each pool, plus the 2 best third-place teams." */
+export function advanceRule(pools: number, size: number) {
+  if (pools <= 1) return `The top ${size} go to the bracket.`;
+  const each = Math.floor(size / pools);
+  const extra = size % pools;
+  const place = ordinal(each + 1);
+  if (each === 0) return `The best ${size} of the ${pools} pool winners go to the bracket.`;
+  const plus = extra === 0 ? '' : extra === 1 ? `, plus the best ${place}-place team` : `, plus the ${extra} best ${place}-place teams`;
+  return `Top ${each} in each pool${plus}.`;
 }
 
 /** Matches that are (or will be) played: not byes, not cancelled. */
