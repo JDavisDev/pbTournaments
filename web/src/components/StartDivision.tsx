@@ -3,7 +3,9 @@
 import { Icon } from '@/components/Icon';
 import { Button, Card, ErrorText } from '@/components/ui';
 import { startEvent } from '@/lib/api';
-import { useAction } from '@/lib/hooks';
+import { formatTime, toZonedInput } from '@/lib/format';
+import { useAction, useNow } from '@/lib/hooks';
+import { dayHeading } from './DivisionStatus';
 
 /**
  * The director's "Start division" button, with what happens to teams that
@@ -15,6 +17,8 @@ export function StartDivision({
   teams,
   teamsReady,
   graceMinutes,
+  scheduledFor = null,
+  timeZone,
   onStarted,
 }: {
   eventId: string;
@@ -23,9 +27,17 @@ export function StartDivision({
   teamsReady: number;
   /** tournaments.checkin_grace_minutes: null = nobody forfeits automatically. */
   graceMinutes: number | null;
+  /** events.not_before: starting before it is fine, and play begins right away. */
+  scheduledFor?: string | null;
+  timeZone: string;
   onStarted: () => void;
 }) {
   const { busy, error, run } = useAction();
+  const now = useNow(60_000);
+  const early =
+    scheduledFor && new Date(scheduledFor).getTime() > now
+      ? `It’s scheduled for ${dayHeading(toZonedInput(scheduledFor, timeZone).slice(0, 10))}, ${formatTime(scheduledFor, timeZone)}; starting now puts its matches on court right away.`
+      : '';
   const missing = teams - teamsReady;
   const late =
     missing === 0
@@ -41,13 +53,14 @@ export function StartDivision({
         <p className="text-muted">
           No matches go on court until you start it. {teamsReady} of {teams} teams are checked in. {late}
         </p>
+        {early && <p className="mt-1 text-sm text-called">{early}</p>}
       </div>
       <Button
         variant="primary"
         className="self-start"
         disabled={busy}
         onClick={() => {
-          if (confirm(`Start ${eventName} now?${late ? `\n\n${late}` : ''}`)) run(() => startEvent(eventId), onStarted);
+          if (confirm(`Start ${eventName} now?${early ? `\n\n${early}` : ''}${late ? `\n\n${late}` : ''}`)) run(() => startEvent(eventId), onStarted);
         }}
       >
         <Icon name="play" /> {busy ? 'Starting…' : 'Start division'}

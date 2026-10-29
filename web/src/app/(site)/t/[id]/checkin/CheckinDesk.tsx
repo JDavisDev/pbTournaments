@@ -97,6 +97,8 @@ export function CheckinDesk({ params }: { params: Promise<{ id: string }> }) {
               teams={selected.teams}
               teamsReady={selected.teams_ready}
               graceMinutes={data.graceMinutes}
+              scheduledFor={selected.not_before}
+              timeZone={data.timeZone}
               onStarted={reload}
             />
           </div>

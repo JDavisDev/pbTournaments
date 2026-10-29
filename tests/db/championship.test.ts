@@ -5,6 +5,7 @@ import {
   addEvent,
   addMinutes,
   addPair,
+  buildSchedule,
   asRole,
   checkIn,
   createDb,
@@ -299,11 +300,13 @@ describe('championship courts', () => {
     const { tournamentId } = await createLiveTournament(db, { courts: 2, start: START });
     await rank(tournamentId, 'Court 1', 1);
     const pool = await eventWithTeams(tournamentId, 'P', 8);
-    const open = await eventWithTeams(tournamentId, 'O', 4, { format: 'single_elim', notBefore: addMinutes(START, 60) });
+    const open = await eventWithTeams(tournamentId, 'O', 4, { format: 'single_elim' });
     await generate(db, pool.eventId);
-    await generate(db, open.eventId);
+    await buildSchedule(db, open.eventId);
 
-    // An hour later the semis can play, but they've only just become ready: they wait.
+    // Started an hour later, the semis can play, but they've only just become ready: they wait.
+    await setClock(db, addMinutes(START, 60));
+    await db.query('select public.start_event($1)', [open.eventId]);
     await setClock(db, addMinutes(START, 62));
     await reportScore(db, (await liveOn(tournamentId, 'Court 2'))!.id, [[11, 5]]);
     expect(await onCourt(tournamentId, open.eventId)).toEqual([]);

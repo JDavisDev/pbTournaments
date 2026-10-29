@@ -188,6 +188,8 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
             teams={teams.length}
             teamsReady={teams.filter((t) => t.checked_in_at).length}
             graceMinutes={grace}
+            scheduledFor={event.not_before}
+            timeZone={data.tournament.time_zone}
             onStarted={reload}
           />
         ) : (

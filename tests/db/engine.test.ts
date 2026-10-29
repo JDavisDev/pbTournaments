@@ -5,6 +5,7 @@ import {
   addEvent,
   addMinutes,
   addPair,
+  buildSchedule,
   addPlayer,
   addTeam,
   asRole,
@@ -111,14 +112,17 @@ describe('court assignment', () => {
     expect(await liveMatches(db, tournamentId)).toHaveLength(1);
   });
 
-  it('holds an event until its start time', async () => {
+  it('holds an event until a director starts it, not until its scheduled time', async () => {
     const { tournamentId } = await createLiveTournament(db, { courts: 1, start: START });
     const { eventId } = await eventWithTeams(tournamentId, 'Mixed 3.5', 2, { notBefore: addMinutes(START, 120) });
-    await generate(db, eventId);
-    expect((await upNext(db, tournamentId))[0].blocked_reason).toBe('event_not_started');
-
+    await buildSchedule(db, eventId);
     await setClock(db, addMinutes(START, 120));
     await tick(db);
+    expect((await upNext(db, tournamentId))[0].blocked_reason).toBe('division_not_started');
+
+    // Started ahead of its scheduled time: it plays now.
+    await setClock(db, START);
+    await db.query('select public.start_event($1)', [eventId]);
     expect(await liveMatches(db, tournamentId)).toHaveLength(1);
   });
 

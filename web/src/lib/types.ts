@@ -28,7 +28,6 @@ export interface RoundFormat {
 export type BlockedReason =
   | 'on_hold'
   | 'division_not_started'
-  | 'event_not_started'
   | 'not_checked_in'
   | 'player_on_court'
   | 'player_needed_elsewhere'

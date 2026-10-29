@@ -58,6 +58,13 @@ describe('starting a division', () => {
     await expect(start(eventId)).rejects.toThrow(/already started/);
   });
 
+  it('plays as soon as it starts, even ahead of its scheduled time', async () => {
+    const { tournamentId, eventId } = await division(4);
+    await db.query('update public.events set not_before = $2 where id = $1', [eventId, addMinutes(START, 2 * 24 * 60)]);
+    await start(eventId);
+    expect(await liveMatches(db, tournamentId)).toHaveLength(2);
+  });
+
   it('needs a schedule, and opens the tournament if it isn’t live yet', async () => {
     const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START });
     await db.query(`update public.tournaments set status = 'registration', setup_paid_at = now() where id = $1`, [tournamentId]);
