@@ -45,6 +45,8 @@ function useLoader<T>(load: () => Promise<T>) {
 // countdowns use the server's clock.
 let clockOffset = 0;
 
+let channelCount = 0;
+
 /**
  * Loads data for a tournament and reloads it whenever anything in the
  * tournament changes. Screens watch one row (tournament_live): over Realtime
@@ -82,8 +84,10 @@ export function useLiveTournament<T>(tournamentId: string, load: () => Promise<T
       clearTimeout(timer);
       timer = setTimeout(() => refresh(), 250);
     };
+    // Several components on one page watch the same tournament, and supabase-js
+    // hands back an existing channel of the same name, already subscribed.
     const channel = supabase()
-      .channel(`tournament-${tournamentId}`)
+      .channel(`tournament-${tournamentId}-${++channelCount}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tournament_live', filter: `tournament_id=eq.${tournamentId}` },

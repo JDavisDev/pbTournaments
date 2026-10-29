@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   // Local mode's database (Postgres compiled to WebAssembly) loads its own files at runtime.
   serverExternalPackages: ['@electric-sql/pglite'],
   partialPrefetching: true,
+  async redirects() {
+    // Registrations are part of the Players page now.
+    return [{ source: '/t/:id/registrations', destination: '/t/:id/players', permanent: false }];
+  },
   turbopack: {
     // The repo root has its own package.json (DB tests, simulator); the app lives here.
     root: __dirname,

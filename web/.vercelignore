@@ -1,0 +1,7 @@
+# Never upload local data, builds or secrets; Vercel builds from source.
+.local-db
+.next
+node_modules
+.env*
+!.env.example
+*.tsbuildinfo
