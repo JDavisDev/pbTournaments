@@ -76,7 +76,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 }
 
 const inputClass =
-  'h-12 rounded-lg border-2 border-border bg-surface px-3 text-text outline-none transition focus:border-text';
+  'h-12 rounded-lg border-2 border-border bg-surface px-3 text-text outline-none transition focus:border-text disabled:cursor-not-allowed disabled:opacity-50';
 
 export function Input({ className = '', ...props }: ComponentProps<'input'>) {
   return <input className={`${inputClass} ${className}`} {...props} />;
@@ -84,6 +84,32 @@ export function Input({ className = '', ...props }: ComponentProps<'input'>) {
 
 export function Select({ className = '', ...props }: ComponentProps<'select'>) {
   return <select className={`${inputClass} ${className}`} {...props} />;
+}
+
+/** A checkbox that lines up with the bottom of the Fields beside it. */
+export function Check({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className={`flex items-center gap-2 self-end pb-2 text-sm ${disabled ? 'opacity-60' : ''}`}>
+      <input
+        type="checkbox"
+        className="h-5 w-5 shrink-0 accent-[var(--accent)]"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      {label}
+    </label>
+  );
 }
 
 export function Textarea({ className = '', ...props }: ComponentProps<'textarea'>) {

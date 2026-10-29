@@ -5,7 +5,7 @@ import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { DivisionStatus, divisionState } from '@/components/DivisionStatus';
 import { Icon } from '@/components/Icon';
-import { Badge, Button, Card, Empty, ErrorText, Field, Input, Select, Spinner, Textarea } from '@/components/ui';
+import { Badge, Button, Card, Check, Empty, ErrorText, Field, Input, Select, Spinner, Textarea } from '@/components/ui';
 import {
   addMockTeams,
   addTeamsFromText,
@@ -1290,31 +1290,6 @@ function EventForm({
         </Button>
       </div>
     </form>
-  );
-}
-
-function Check({
-  label,
-  checked,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className={`flex items-center gap-2 self-end pb-2 text-sm ${disabled ? 'opacity-60' : ''}`}>
-      <input
-        type="checkbox"
-        className="h-5 w-5 shrink-0 accent-[var(--accent)]"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      {label}
-    </label>
   );
 }
 

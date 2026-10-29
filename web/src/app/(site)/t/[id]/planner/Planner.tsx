@@ -1,17 +1,28 @@
 'use client';
 
-// Plan the day before it happens: set each division's start time and how long
-// its matches take, see every match laid onto the courts, and catch divisions
-// that would wait for courts or run past closing. Saving writes the start
-// times and match lengths to the divisions; the queue uses them on the day.
-import { use, useState } from 'react';
+// Plan the day before it happens: set each division's start time, format and
+// how long its matches take, see every match laid onto the courts, and catch
+// divisions that would wait for courts or run past closing. Saving writes the
+// start times, match lengths and formats to the divisions; the queue uses them
+// on the day.
+import { Fragment, use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
-import { Badge, Button, Card, Empty, ErrorText, Field, Input, Spinner } from '@/components/ui';
-import { getCourtBoard, getEvents, getMatches, getTeams, getTournament, rebuildQueue, saveEvent, updateTournament } from '@/lib/api';
-import { formatTime, fromZonedInput, toZonedInput } from '@/lib/format';
+import { Badge, Button, Card, Check, Empty, ErrorText, Field, Input, Select, Spinner } from '@/components/ui';
+import {
+  getCourtBoard,
+  getEvents,
+  getMatches,
+  getTeams,
+  getTournament,
+  rebuildQueue,
+  saveEvent,
+  setBracketSize,
+  updateTournament,
+} from '@/lib/api';
+import { advanceRule, bracketSeeds, formatSummary, formatTime, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import { type Plan, type PlanDivision, planDay, suggestMinutes } from '@/lib/planner';
-import type { RoundKey, Tournament, TournamentEvent } from '@/lib/types';
+import type { BracketType, EventFormat, PoolPlay, RoundKey, Tournament, TournamentEvent } from '@/lib/types';
 
 async function load(id: string) {
   const [tournament, events, teams, courts, matches] = await Promise.all([
@@ -35,14 +46,44 @@ interface Draft {
   bracketMinutes: string;
   goldMinutes: string;
   bronzeMinutes: string;
+  format: EventFormat;
+  poolPlay: PoolPlay;
+  pools: string;
+  maxRounds: string;
+  bracketSize: string;
+  bracketType: BracketType;
+  thirdPlace: boolean;
+  gfReset: boolean;
 }
 
+/** The format fields of a division, as Setup saves them. */
+function formatOf(d: Draft) {
+  const hasPools = d.format !== 'single_elim';
+  const swiss = hasPools && d.poolPlay === 'swiss';
+  // Swiss rounds play as one group.
+  const pools = hasPools && !swiss ? Math.max(1, Math.floor(Number(d.pools)) || 1) : 1;
+  const size = Math.max(2, Math.floor(Number(d.bracketSize)) || 2);
+  const rounds = Math.floor(Number(d.maxRounds));
+  return {
+    format: d.format,
+    pool_play: hasPools ? d.poolPlay : ('round_robin' as PoolPlay),
+    pool_count: pools,
+    advance_per_pool: Math.max(1, Math.floor(size / pools)),
+    bracket_size: d.format === 'pools_to_bracket' ? size : null,
+    max_rounds: hasPools && rounds > 0 ? rounds : null,
+    bracket_type: d.bracketType,
+    third_place_match: d.bracketType === 'single' && d.thirdPlace,
+    grand_final_reset: d.bracketType === 'double' && d.gfReset,
+  };
+}
+type Format = ReturnType<typeof formatOf>;
+
 /** Whether a division has a gold match (a final) and a bronze match. */
-function medalMatches(e: TournamentEvent) {
-  const bracket = e.format !== 'round_robin';
+function medalMatches(f: Format) {
+  const bracket = f.format !== 'round_robin';
   return {
     gold: bracket,
-    bronze: bracket && (e.bracket_type === 'medal' || (e.bracket_type === 'single' && e.third_place_match)),
+    bronze: bracket && (f.bracket_type === 'medal' || f.third_place_match),
   };
 }
 
@@ -57,6 +98,14 @@ function initialDraft(e: TournamentEvent, t: Tournament, teamCount: number): Dra
     // From the medal rounds' own formats when they have one (e.g. gold best of 3).
     goldMinutes: String(e.gold_match_minutes ?? roundMinutes(e, e.bracket_type === 'double' ? 'grand_final' : 'final')),
     bronzeMinutes: String(e.bronze_match_minutes ?? roundMinutes(e, 'bronze')),
+    format: e.format,
+    poolPlay: e.pool_play,
+    pools: String(e.pool_count),
+    maxRounds: e.max_rounds?.toString() ?? '',
+    bracketSize: String(bracketSeeds(e)),
+    bracketType: e.bracket_type,
+    thirdPlace: e.third_place_match,
+    gfReset: e.grand_final_reset,
   };
 }
 
@@ -73,6 +122,8 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [settings, setSettings] = useState<{ courts: string; closes: string } | null>(null);
   const [day, setDay] = useState<string | null>(null);
+  // The division whose format settings are open.
+  const [open, setOpen] = useState<string | null>(null);
   const save = useAction();
   const [saved, setSaved] = useState(false);
 
@@ -97,23 +148,28 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
 
   // Court numbers as the planner counts them: courts in use, in order.
   const courtNumber = new Map(courts.filter((c) => !c.out_of_service).map((c, i) => [c.court_id, i + 1]));
+  // Once a division's schedule is built, its format is set (as in Setup).
+  const scheduledEvent = (eventId: string) => matches.some((m) => m.event_id === eventId);
   const divisions: PlanDivision[] = events.map((e) => {
     const d = draftOf(e);
+    const f = formatOf(d);
+    const teamCount = Math.max(0, Number(d.teams) || 0);
     return {
       id: e.id,
       name: e.name,
       // A half-typed date falls back to the tournament day at 8:00.
       start: fromZonedInput(d.start, t.time_zone) || fromZonedInput(`${t.starts_on}T08:00`, t.time_zone),
-      teams: Math.max(0, Number(d.teams) || 0),
-      format: e.format,
-      poolCount: e.pool_count,
-      advancePerPool: e.advance_per_pool,
-      bracketSize: e.bracket_size,
-      swiss: e.pool_play === 'swiss',
-      maxRounds: e.max_rounds,
-      bracketType: e.bracket_type,
-      thirdPlace: e.third_place_match,
-      gfReset: e.grand_final_reset,
+      teams: teamCount,
+      format: f.format,
+      poolCount: f.pool_count,
+      advancePerPool: f.advance_per_pool,
+      // A bracket can't hold more teams than the division has.
+      bracketSize: f.bracket_size === null ? null : Math.min(f.bracket_size, teamCount),
+      swiss: f.pool_play === 'swiss',
+      maxRounds: f.max_rounds,
+      bracketType: f.bracket_type,
+      thirdPlace: f.third_place_match,
+      gfReset: f.grand_final_reset,
       poolMinutes: Math.max(5, Number(d.poolMinutes) || 15),
       bracketMinutes: Math.max(5, Number(d.bracketMinutes) || 20),
       goldMinutes: Math.max(5, Number(d.goldMinutes) || 20),
@@ -138,7 +194,14 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
     for (const e of events) {
       const d = drafts[e.id];
       if (!d) continue;
+      const f = formatOf(d);
+      const scheduledHere = scheduledEvent(e.id);
+      // After the schedule is built, only the bracket size can change, until the bracket is seeded.
+      if (scheduledHere && e.format === 'pools_to_bracket' && !e.playoffs_seeded_at && f.bracket_size !== bracketSeeds(e)) {
+        await setBracketSize(e.id, f.bracket_size!);
+      }
       await saveEvent({
+        ...(scheduledHere ? {} : f),
         id: e.id,
         tournament_id: e.tournament_id,
         not_before: new Date(fromZonedInput(d.start, t.time_zone)).toISOString(),
@@ -158,8 +221,9 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
         <div>
           <h2 className="text-4xl">Planner</h2>
           <p className="max-w-prose text-muted">
-            Set when each division starts and how long its matches take. Every match is laid onto the courts the way the
-            queue will run them, so you can see when divisions finish and whether anyone waits for a court.
+            Set when each division starts and how long its matches take, and try formats with Format. Every match is laid
+            onto the courts the way the queue will run them, so you can see when divisions finish and whether anyone waits
+            for a court.
           </p>
         </div>
         <div className="flex items-end gap-2">
@@ -203,56 +267,88 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
           <tbody>
             {events.map((e) => {
               const d = draftOf(e);
+              const f = formatOf(d);
               const p = plan.divisions.find((x) => x.id === e.id)!;
               const late = p.end !== null && p.end > closesAt(p.end);
+              const isOpen = open === e.id;
               return (
-                <tr key={e.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2">
-                    <span className="flex items-center gap-2 font-semibold">
-                      <span className="h-3.5 w-3.5 shrink-0 rounded-sm" style={{ background: color.get(e.id) }} aria-hidden />
-                      {e.name}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input type="datetime-local" className="h-10 w-52" value={d.start} onChange={(ev) => setDraft(e, { start: ev.target.value })} />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input
-                      type="number"
-                      min={2}
-                      className="h-10 w-20"
-                      value={d.teams}
-                      title={activeTeams(e.id) ? `${activeTeams(e.id)} entered` : 'Expected teams'}
-                      onChange={(ev) => setDraft(e, { teams: ev.target.value })}
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input type="number" min={5} className="h-10 w-20" value={d.poolMinutes} disabled={e.format === 'single_elim'} onChange={(ev) => setDraft(e, { poolMinutes: ev.target.value })} />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input type="number" min={5} className="h-10 w-20" value={d.bracketMinutes} disabled={e.format === 'round_robin'} onChange={(ev) => setDraft(e, { bracketMinutes: ev.target.value })} />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input type="number" min={5} className="h-10 w-20" aria-label={`${e.name} gold match minutes`} value={medalMatches(e).gold ? d.goldMinutes : ''} placeholder="—" disabled={!medalMatches(e).gold} onChange={(ev) => setDraft(e, { goldMinutes: ev.target.value })} />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input type="number" min={5} className="h-10 w-20" aria-label={`${e.name} bronze match minutes`} value={medalMatches(e).bronze ? d.bronzeMinutes : ''} placeholder="—" disabled={!medalMatches(e).bronze} onChange={(ev) => setDraft(e, { bronzeMinutes: ev.target.value })} />
-                  </td>
-                  <td className="px-2 py-2 text-right">{p.matches}</td>
-                  <td className="px-2 py-2">
-                    {p.firstStart ? formatTime(new Date(p.firstStart).toISOString(), t.time_zone) : '—'}
-                    {p.startDelayMinutes > 10 && (
-                      <span className="mt-0.5 block">
-                        <Badge tone="called">Waits {p.startDelayMinutes} min</Badge>
+                <Fragment key={e.id}>
+                  <tr className={`border-b border-border ${isOpen ? 'bg-surface-2' : ''}`}>
+                    <td className="px-3 py-2">
+                      <span className="flex items-center gap-2 font-semibold">
+                        <span className="h-3.5 w-3.5 shrink-0 rounded-sm" style={{ background: color.get(e.id) }} aria-hidden />
+                        {e.name}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-2 py-2">{p.poolsEnd ? formatTime(new Date(p.poolsEnd).toISOString(), t.time_zone) : '—'}</td>
-                  <td className={`px-3 py-2 font-semibold ${late ? 'text-late' : ''}`}>
-                    {p.end ? formatTime(new Date(p.end).toISOString(), t.time_zone) : '—'}
-                    {late && <span className="block text-xs font-normal">after closing</span>}
-                  </td>
-                </tr>
+                      <span className="mt-1 flex items-center gap-2">
+                        <span className="text-xs text-muted">{formatSummary(f)}</span>
+                        <button
+                          type="button"
+                          aria-expanded={isOpen}
+                          aria-controls={`format-${e.id}`}
+                          onClick={() => setOpen(isOpen ? null : e.id)}
+                          className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-xs font-medium hover:border-text"
+                        >
+                          {isOpen ? 'Close' : 'Format'}
+                        </button>
+                      </span>
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input type="datetime-local" className="h-10 w-52" value={d.start} onChange={(ev) => setDraft(e, { start: ev.target.value })} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input
+                        type="number"
+                        min={2}
+                        className="h-10 w-20"
+                        value={d.teams}
+                        title={activeTeams(e.id) ? `${activeTeams(e.id)} entered` : 'Expected teams'}
+                        onChange={(ev) => setDraft(e, { teams: ev.target.value })}
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input type="number" min={5} className="h-10 w-20" value={d.poolMinutes} disabled={f.format === 'single_elim'} onChange={(ev) => setDraft(e, { poolMinutes: ev.target.value })} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input type="number" min={5} className="h-10 w-20" value={d.bracketMinutes} disabled={f.format === 'round_robin'} onChange={(ev) => setDraft(e, { bracketMinutes: ev.target.value })} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input type="number" min={5} className="h-10 w-20" aria-label={`${e.name} gold match minutes`} value={medalMatches(f).gold ? d.goldMinutes : ''} placeholder="—" disabled={!medalMatches(f).gold} onChange={(ev) => setDraft(e, { goldMinutes: ev.target.value })} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input type="number" min={5} className="h-10 w-20" aria-label={`${e.name} bronze match minutes`} value={medalMatches(f).bronze ? d.bronzeMinutes : ''} placeholder="—" disabled={!medalMatches(f).bronze} onChange={(ev) => setDraft(e, { bronzeMinutes: ev.target.value })} />
+                    </td>
+                    <td className="px-2 py-2 text-right">{p.matches}</td>
+                    <td className="px-2 py-2">
+                      {p.firstStart ? formatTime(new Date(p.firstStart).toISOString(), t.time_zone) : '—'}
+                      {p.startDelayMinutes > 10 && (
+                        <span className="mt-0.5 block">
+                          <Badge tone="called">Waits {p.startDelayMinutes} min</Badge>
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">{p.poolsEnd ? formatTime(new Date(p.poolsEnd).toISOString(), t.time_zone) : '—'}</td>
+                    <td className={`px-3 py-2 font-semibold ${late ? 'text-late' : ''}`}>
+                      {p.end ? formatTime(new Date(p.end).toISOString(), t.time_zone) : '—'}
+                      {late && <span className="block text-xs font-normal">after closing</span>}
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr id={`format-${e.id}`} className="border-b border-border bg-surface-2">
+                      <td colSpan={11} className="px-3 pb-4">
+                        <FormatSettings
+                          draft={d}
+                          teams={Math.max(0, Number(d.teams) || 0)}
+                          scheduled={scheduledEvent(e.id)}
+                          seeded={!!e.playoffs_seeded_at}
+                          plan={plan}
+                          divisionId={e.id}
+                          timeZone={t.time_zone}
+                          onChange={(patch) => setDraft(e, patch)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -268,7 +364,7 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
             save.run(saveAll, () => (setDrafts({}), setSaved(true), reload()));
           }}
         >
-          Save start times to events
+          Save to divisions
         </Button>
         {changed && (
           <Button variant="ghost" onClick={() => setDrafts({})}>
@@ -400,6 +496,162 @@ function PublishTimes({
       </div>
       <ErrorText>{action.error}</ErrorText>
     </Card>
+  );
+}
+
+/**
+ * A division's format, for trying options against the plan: the timeline and
+ * finish times update as it changes. Set once the schedule is built, except
+ * the bracket size until the bracket is seeded (as in Setup).
+ */
+function FormatSettings({
+  draft: d,
+  teams,
+  scheduled,
+  seeded,
+  plan,
+  divisionId,
+  timeZone,
+  onChange,
+}: {
+  draft: Draft;
+  teams: number;
+  scheduled: boolean;
+  seeded: boolean;
+  plan: Plan;
+  divisionId: string;
+  timeZone: string;
+  onChange: (patch: Partial<Draft>) => void;
+}) {
+  const f = formatOf(d);
+  const hasPools = f.format !== 'single_elim';
+  const hasBracket = f.format !== 'round_robin';
+  const swiss = f.pool_play === 'swiss';
+  const time = (ms: number) => formatTime(new Date(ms).toISOString(), timeZone);
+  const stage = (s: 'pool' | 'bracket') => {
+    const ms = plan.matches.filter((m) => m.divisionId === divisionId && m.stage === s && !m.optional);
+    return ms.length ? `${ms.length} matches, done by ${time(Math.max(...ms.map((m) => m.end)))}` : null;
+  };
+  const smallest = Math.floor(teams / f.pool_count);
+  const pools =
+    f.pool_count === 1
+      ? `One pool of ${teams}`
+      : `${f.pool_count} pools of ${teams % f.pool_count ? `${smallest}–${smallest + 1}` : smallest}`;
+  const poolPlay = stage('pool');
+  const bracket = stage('bracket');
+  const problems = [
+    hasPools && !swiss && smallest < 2 && 'Some pools would have fewer than 2 teams.',
+    hasPools && swiss && !f.max_rounds && 'Set how many Swiss rounds.',
+    f.bracket_size !== null && f.bracket_size > teams && `Only ${teams} teams: the bracket is planned with ${teams}.`,
+  ].filter(Boolean);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {scheduled && (
+        <p className="text-sm text-muted">
+          The schedule is built, so the format is set{f.format === 'pools_to_bracket' && !seeded ? ' (the bracket size can still change)' : ''}. Clear
+          the schedule in Settings to change it.
+        </p>
+      )}
+      <div className="flex flex-wrap items-start gap-3">
+        <Field label="Format">
+          <Select
+            className="h-10"
+            value={d.format}
+            disabled={scheduled}
+            onChange={(ev) => {
+              const format = ev.target.value as EventFormat;
+              // Medal matches only follow pool play.
+              onChange({ format, bracketType: format !== 'pools_to_bracket' && d.bracketType === 'medal' ? 'single' : d.bracketType });
+            }}
+          >
+            <option value="pools_to_bracket">Pool play, then bracket</option>
+            <option value="round_robin">Pool play only</option>
+            <option value="single_elim">Bracket only</option>
+          </Select>
+        </Field>
+        {hasPools && (
+          <Field label="Pool play">
+            <Select
+              className="h-10"
+              value={d.poolPlay}
+              disabled={scheduled}
+              onChange={(ev) => {
+                const poolPlay = ev.target.value as PoolPlay;
+                // Swiss needs a round count; a round robin goes back to everyone playing everyone.
+                onChange({ poolPlay, maxRounds: poolPlay === 'swiss' ? d.maxRounds || '4' : '' });
+              }}
+            >
+              <option value="round_robin">Round robin</option>
+              <option value="swiss">Swiss rounds</option>
+            </Select>
+          </Field>
+        )}
+        {hasPools && !swiss && (
+          <Field label="Pools">
+            <Input type="number" min={1} max={26} className="h-10 w-20" value={d.pools} disabled={scheduled} onChange={(ev) => onChange({ pools: ev.target.value })} />
+          </Field>
+        )}
+        {hasPools && (
+          <Field label={swiss ? 'Swiss rounds' : 'Max rounds'}>
+            <Input
+              type="number"
+              min={1}
+              className="h-10 w-28"
+              placeholder={swiss ? 'e.g. 4' : 'All'}
+              value={d.maxRounds}
+              disabled={scheduled}
+              onChange={(ev) => onChange({ maxRounds: ev.target.value })}
+            />
+          </Field>
+        )}
+        {f.format === 'pools_to_bracket' && (
+          <Field label="Teams in the bracket">
+            <Input type="number" min={2} className="h-10 w-20" value={d.bracketSize} disabled={seeded} onChange={(ev) => onChange({ bracketSize: ev.target.value })} />
+          </Field>
+        )}
+        {hasBracket && (
+          <Field label="Elimination">
+            <Select
+              className="h-10"
+              value={d.bracketType}
+              disabled={scheduled}
+              onChange={(ev) => {
+                const bracketType = ev.target.value as BracketType;
+                // Medal matches are 1 v 2 for gold and 3 v 4 for bronze.
+                onChange({ bracketType, bracketSize: bracketType === 'medal' && d.bracketSize !== '2' ? '4' : d.bracketSize });
+              }}
+            >
+              <option value="single">Single elimination</option>
+              <option value="double">Double elimination</option>
+              {f.format === 'pools_to_bracket' && <option value="medal">Straight to medal matches</option>}
+            </Select>
+          </Field>
+        )}
+        {hasBracket && d.bracketType === 'single' && (
+          <Check label="Bronze match" checked={d.thirdPlace} disabled={scheduled} onChange={(thirdPlace) => onChange({ thirdPlace })} />
+        )}
+        {hasBracket && d.bracketType === 'double' && (
+          <Check label="Reset final" checked={d.gfReset} disabled={scheduled} onChange={(gfReset) => onChange({ gfReset })} />
+        )}
+      </div>
+      <p className="text-sm">
+        {[
+          `${teams} teams`,
+          hasPools && (swiss ? `${f.max_rounds ?? '?'} Swiss rounds` : pools),
+          poolPlay && `Pool play: ${poolPlay}`,
+          f.format === 'pools_to_bracket' && f.bracket_type !== 'medal' && advanceRule(f.pool_count, Math.min(f.bracket_size!, teams)).replace(/\.$/, ''),
+          bracket && `Bracket: ${bracket}`,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      </p>
+      {problems.map((p) => (
+        <p key={p as string} className="text-sm text-late">
+          {p}
+        </p>
+      ))}
+    </div>
   );
 }
 
