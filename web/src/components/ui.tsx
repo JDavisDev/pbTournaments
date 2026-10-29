@@ -156,6 +156,12 @@ export function Modal({
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
   }, [open]);
+  // Following a link keeps the page it left mounted but hidden; an open modal
+  // there would leave the new page unclickable.
+  useEffect(() => {
+    const dialog = ref.current;
+    return () => dialog?.close();
+  }, []);
   return (
     <dialog
       ref={ref}

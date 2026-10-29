@@ -3,6 +3,7 @@
 // Everyone in the tournament, one row per player: their profile, their
 // registration and money, and their teams. Fix names and contact details,
 // swap a player, drop a team, put in an alternate, or message them.
+import Link from 'next/link';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Icon } from '@/components/Icon';
@@ -455,6 +456,15 @@ function TeamSummary({ team, eligibility }: { team: TeamRosterRow; eligibility?:
           ))}
         </ul>
       )}
+      {/* For questions about the division when the player doesn't know which one they're in. */}
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-border pt-3 text-sm">
+        <Link href={`/t/${team.tournament_id}/events/${team.event_id}`} className="inline-flex min-h-10 items-center gap-1 font-medium underline">
+          {team.event_name} <Icon name="arrow" className="h-4 w-4" />
+        </Link>
+        <Link href={`/t/${team.tournament_id}/teams/${team.team_id}`} className="inline-flex min-h-10 items-center gap-1 font-medium underline">
+          Team’s matches <Icon name="arrow" className="h-4 w-4" />
+        </Link>
+      </div>
     </Card>
   );
 }
