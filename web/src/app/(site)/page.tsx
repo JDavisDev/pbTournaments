@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { LogoStacked } from '@/components/Logo';
 import { Badge, Button, Card, Empty, ErrorText, LinkButton, Spinner } from '@/components/ui';
 import { getLiveTournaments, getMyOrganizations, newTournament } from '@/lib/api';
 import { auth } from '@/lib/auth';
@@ -26,10 +27,8 @@ export default function Home() {
   return (
     <>
       <section className="mb-12 pt-6 pb-4 sm:pt-12">
-        <h1 className="max-w-4xl text-6xl sm:text-8xl lg:text-9xl">
-          Every court.
-          <br />
-          Always full.
+        <h1>
+          <LogoStacked className="h-auto w-full max-w-[34rem]" />
         </h1>
         <p className="mt-5 max-w-xl text-lg text-muted">
           Registration, brackets and live court assignment. Players get a text when they’re up, and the next match goes

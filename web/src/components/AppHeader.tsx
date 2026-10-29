@@ -5,16 +5,8 @@ import { auth, isGuest } from '@/lib/auth';
 import { BRAND } from '@/lib/brand';
 import { isDemoMode, isLocalMode } from '@/lib/config';
 import { useAction, useSession } from '@/lib/hooks';
+import { LogoHorizontal } from './Logo';
 import { TextSizeButton } from './TextSizeButton';
-
-export function Wordmark({ className = '' }: { className?: string }) {
-  return (
-    <span className={`inline-flex items-center gap-2 ${className}`}>
-      <span aria-hidden className="h-5 w-2.5 -skew-x-12 rounded-[2px] bg-brand" />
-      <span className="font-display text-2xl leading-none font-extrabold tracking-tight whitespace-nowrap uppercase">{BRAND.name}</span>
-    </span>
-  );
-}
 
 export function AppHeader() {
   const user = useSession();
@@ -29,9 +21,12 @@ export function AppHeader() {
         </p>
       )}
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-        <Link href="/" aria-label={`${BRAND.name} home`}>
-          <Wordmark />
-        </Link>
+        {/* The logo shrinks to fit beside the menu (phones, larger text). */}
+        <div className="mr-3 min-w-0 flex-1">
+          <Link href="/" aria-label={`${BRAND.name} home`} className="block max-w-64">
+            <LogoHorizontal className="block h-auto w-full" />
+          </Link>
+        </div>
         <nav className="flex items-center gap-1 text-sm sm:gap-2">
           {/* Small screens don’t have room (with larger text); there, Find a tournament on the home page leads here. */}
           <Link href="/tournaments" className="hidden h-11 items-center rounded-full px-3 font-medium text-muted hover:text-text md:inline-flex">

@@ -21,6 +21,8 @@
   --accent-text: #ffffff;
   --accent-soft: #f2f2f2;
   --brand: #1d6b44;
+  /* The logo's deep green (components/Logo.tsx). */
+  --logo: #0f2a20;
   --live: #1d6b44;
   --live-soft: #e3f1e9;
   --called: #b25a00;
@@ -48,6 +50,7 @@
   --accent-text: #000000;
   --accent-soft: #1f1f1f;
   --brand: #43b97a;
+  --logo: #ffffff;
   --live: #43b97a;
   --live-soft: #0f2a1c;
   --called: #f2a33a;
@@ -73,6 +76,7 @@
   --accent-text: #000000;
   --accent-soft: #1a1a1a;
   --brand: #43b97a;
+  --logo: #ffffff;
   --live: #43b97a;
   --live-soft: #0d2418;
   --called: #ffb547;
@@ -92,6 +96,7 @@
   --color-accent-text: var(--accent-text);
   --color-accent-soft: var(--accent-soft);
   --color-brand: var(--brand);
+  --color-logo: var(--logo);
   --color-live: var(--live);
   --color-live-soft: var(--live-soft);
   --color-called: var(--called);
