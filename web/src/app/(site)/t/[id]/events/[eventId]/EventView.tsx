@@ -11,6 +11,7 @@ import { QueuePanel } from '@/components/desk/QueuePanel';
 import { MatchRow } from '@/components/MatchRow';
 import { Podium } from '@/components/Podium';
 import { StandingsTable } from '@/components/StandingsTable';
+import { SchedulePreview } from '@/components/SchedulePreview';
 import { StartDivision } from '@/components/StartDivision';
 import { WatchChip } from '@/components/StreamEmbed';
 import { Badge, Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
@@ -212,6 +213,8 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         <Tile label="Avg match" value={avgLength !== null ? `${avgLength}m` : '—'} />
         <Tile label={event.format === 'round_robin' ? 'Format' : 'Bracket'} value={formatShort(event, matches)} small />
       </dl>
+
+      {state === 'not_started' && all.length === 0 && <SchedulePreview event={event} teams={teams} />}
 
       {medals && (
         <section>

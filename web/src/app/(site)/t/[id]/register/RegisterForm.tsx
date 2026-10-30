@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
@@ -14,8 +15,8 @@ import {
   startRegistration,
 } from '@/lib/api';
 import { describeDivision, entryProblem, type PlayerFacts } from '@/lib/eligibility';
-import { formatMoney, formatTime, registrationPrice } from '@/lib/format';
-import { useAction, useLoad, useNow } from '@/lib/hooks';
+import { entryCost, formatMoney, formatTime, priceAt, priceSummary, registrationOpen } from '@/lib/format';
+import { useAction, useLoad, useNow, useStaffAccess } from '@/lib/hooks';
 
 interface Choice {
   partner_name: string;
@@ -66,6 +67,9 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   const [discount, setDiscount] = useState<{ code: string; cents: number } | null>(null);
   const codeCheck = useAction();
   const [waiverOk, setWaiverOk] = useState(false);
+  const [termsOk, setTermsOk] = useState(false);
+  // Directors can register someone any time until the tournament is over.
+  const staff = useStaffAccess(id);
 
   if (data.error === 'not-configured') return <ConnectNotice />;
   if (data.error) return <Empty>{data.error}</Empty>;
@@ -76,10 +80,13 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   const spotsLeft = new Map(availability.map((a) => [a.event_id, a.spots_left]));
   const closesAt = t.registration_closes_at ? new Date(t.registration_closes_at).getTime() : null;
 
-  if (t.status === 'registration' && closesAt !== null && closesAt < now) {
-    return <Empty>Registration closed on {new Date(closesAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.</Empty>;
-  }
-  if (t.status !== 'registration') {
+  const open = registrationOpen(t, now);
+  const director = !!staff.data && t.status !== 'complete';
+  if (!open && !director) {
+    if (staff.data === undefined) return <Spinner />;
+    if ((t.status === 'registration' || t.status === 'live') && closesAt !== null && closesAt < now) {
+      return <Empty>Registration closed on {new Date(closesAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.</Empty>;
+    }
     return (
       <Empty>
         {t.status === 'live' || t.status === 'complete'
@@ -98,15 +105,21 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   const paidPicks = picks.filter(([eventId]) => !full.has(eventId) && !paidByPartner.has(eventId));
   const payingFor = paidPicks.filter(([, c]) => c.pay_for_partner);
   const count = paidPicks.length;
-  const early = t.early_until && new Date(t.early_until).getTime() > now;
-  const firstPrice = early ? (t.early_entry_fee_cents ?? t.entry_fee_cents) : t.entry_fee_cents;
-  const extraPrice = early ? (t.early_extra_event_fee_cents ?? t.extra_event_fee_cents) : t.extra_event_fee_cents;
-  // Same as start_registration: with an event a partner paid, each of yours is an extra event.
+  const fees = priceAt(t, now);
+  const includable = (eventId: string) => !!events.find((e) => e.id === eventId)?.included_in_registration;
+  // A partner's entry: their registration and, unless it's the included one, the event.
+  const partnerCost = (eventId: string) => entryCost(t, [includable(eventId)], now);
+  const partnersTotal = payingFor.reduce((sum, [eventId]) => sum + partnerCost(eventId), 0);
+  // Same as start_registration: with an event a partner paid, each of yours costs the event fee.
   const price =
-    (coveredPicks.length > 0 ? count * extraPrice : registrationPrice(t, count, now)) + payingFor.length * firstPrice;
+    (coveredPicks.length > 0 ? count * fees.event : entryCost(t, paidPicks.map(([eventId]) => includable(eventId)), now)) +
+    partnersTotal;
   const total = Math.max(0, price - (discount?.cents ?? 0));
   const needsWaiver = !!t.waiver_text?.trim();
-  const problems = Object.fromEntries(events.map((e) => [e.id, entryProblem(e, t.starts_on, facts)]));
+  // A started division has its schedule: players can't join it; a director adds an alternate.
+  const problems = Object.fromEntries(
+    events.map((e) => [e.id, e.started_at && !director ? 'has already started' : entryProblem(e, t.starts_on, facts)]),
+  );
   // Only ask for what some event needs.
   const needsAge = events.some((e) => e.min_age !== null || e.max_age !== null);
   const needsRating = events.some((e) => e.skill_rule !== 'open');
@@ -141,6 +154,7 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
               dupr_id: facts.dupr_id.trim() || null,
               discount_code: discount?.code ?? (code.trim() || null),
               waiver_accepted: needsWaiver ? waiverOk : undefined,
+              terms_accepted: termsOk,
               answers: Object.entries(answers).map(([question_id, answer]) => ({ question_id, answer })),
             },
             entries: picks.map(([event_id, c]) => ({
@@ -171,9 +185,7 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
       <div>
         <h2 className="text-4xl">Register</h2>
         <p className="mt-1 text-muted">
-          {formatMoney(firstPrice)} for your first event, {formatMoney(extraPrice)} for each extra event
-          {early && t.early_until ? ` (early price until ${new Date(t.early_until).toLocaleDateString()})` : ''}. One
-          price, no added fees.
+          {priceSummary(t, now)}. One price, no added fees.
         </p>
         {closesAt && (
           <p className="mt-1 font-semibold">
@@ -181,6 +193,11 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
           </p>
         )}
       </div>
+      {!open && (
+        <p className="rounded-lg bg-info-soft px-3 py-2 text-info">
+          Registration is closed to players. As a director, you can still register someone here.
+        </p>
+      )}
       {t.is_demo && (
         <p className="rounded-lg bg-called-soft px-3 py-2 text-called">
           Practice tournament: anyone trying the demo can see what you enter here. Use made-up names, phone numbers and
@@ -343,6 +360,10 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
                   <span className="block text-sm text-muted">
                     {describeDivision(e)}
                     {e.not_before && t.times_published_at ? ` · starts ${formatTime(e.not_before, t.time_zone)}` : ''}
+                    {e.started_at && director ? ' · already started: joins as an alternate' : ''}
+                    {t.first_event_included && !e.included_in_registration
+                      ? ` · always ${formatMoney(fees.event)}, not covered by registration`
+                      : ''}
                   </span>
                   <span className="mt-1 flex flex-wrap gap-1.5">
                     {paidByPartner.has(e.id) ? (
@@ -393,7 +414,7 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
                         onChange={(ev) => setPartner(e.id, 'pay_for_partner', ev.target.checked)}
                       />
                       <span>
-                        <span className="font-medium">Pay for my partner too (+{formatMoney(firstPrice)})</span>
+                        <span className="font-medium">Pay for my partner too (+{formatMoney(partnerCost(e.id))})</span>
                         <span className="block text-sm text-muted">
                           Their spot is held. They still register to add their own details and agree to the waiver, and
                           this event costs them nothing.
@@ -411,7 +432,7 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
       {(payingFor.length > 0 || coveredPicks.length > 0) && (
         <p className="rounded-lg bg-live-soft px-3 py-2 text-live">
           {payingFor.length > 0 &&
-            `Includes ${payingFor.map(([, c]) => c.partner_name.trim() || c.partner_email.trim()).join(' and ')}’s entry (${formatMoney(firstPrice)} each). `}
+            `Includes ${payingFor.map(([, c]) => c.partner_name.trim() || c.partner_email.trim()).join(' and ')}’s entry (${formatMoney(partnersTotal)}). `}
           {coveredPicks.length > 0 &&
             `Your partner already paid for ${coveredPicks.map(([eventId]) => events.find((e) => e.id === eventId)?.name).join(', ')}.`}
         </p>
@@ -527,13 +548,30 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
         </p>
       )}
 
+      {/* A director registering someone else can't agree for them. */}
+      {!director && (
+        <label className="flex items-start gap-3">
+          <input type="checkbox" required className="mt-0.5 h-6 w-6 accent-[var(--accent)]" checked={termsOk} onChange={(e) => setTermsOk(e.target.checked)} />
+          <span>
+            I agree to the{' '}
+            <Link href="/terms" target="_blank" className="font-medium underline">
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link href="/privacy" target="_blank" className="font-medium underline">
+              Privacy Policy
+            </Link>
+            , including texts about this tournament if I opted in.
+          </span>
+        </label>
+      )}
       <ErrorText>{submit.error}</ErrorText>
       <div className="sticky bottom-0 -mx-4 bg-bg/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0">
         <Button
           variant="primary"
           type="submit"
           className="h-14 w-full text-base"
-          disabled={submit.busy || picks.length === 0 || (needsWaiver && !waiverOk)}
+          disabled={submit.busy || picks.length === 0 || (needsWaiver && !waiverOk) || (!director && !termsOk)}
         >
           {submit.busy
             ? 'Starting checkout…'

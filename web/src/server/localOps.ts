@@ -60,6 +60,8 @@ const EVENT_COLUMNS = [
   'play_up_limit',
   'require_dupr_id',
   'dupr_rated',
+  'included_in_registration',
+  'player_notes',
   'team_rating_max',
   'team_age_min',
   'max_rounds',
@@ -144,7 +146,7 @@ const ops: Record<string, Op> = {
   setCourtCount: async (tx, id: string, count: number) =>
     (await one<{ n: number }>(tx, 'select public.set_court_count($1, $2) as n', [id, count])).n,
   updateTournament: (tx, id: string, changes: Row) =>
-    updateColumns(tx, 'tournaments', id, changes, [
+    updateColumns(tx, 'tournaments', id, 'price_schedule' in changes ? { ...changes, price_schedule: JSON.stringify(changes.price_schedule) } : changes, [
       'name',
       'starts_on',
       'time_zone',
@@ -154,9 +156,10 @@ const ops: Record<string, Op> = {
       'match_slot_minutes',
       'entry_fee_cents',
       'extra_event_fee_cents',
-      'early_entry_fee_cents',
-      'early_extra_event_fee_cents',
-      'early_until',
+      'first_event_included',
+      'price_schedule',
+      'registration_reopened',
+      'contact_email',
       'refund_fee_cents',
       'stream_url',
       'location',

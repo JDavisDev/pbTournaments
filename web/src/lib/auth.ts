@@ -40,7 +40,8 @@ const remoteAuth: Auth = {
     const { data, error } = await supabase().auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin },
+      // When they agreed to the Terms of Service and Privacy Policy (the sign-up checkbox).
+      options: { emailRedirectTo: window.location.origin, data: { terms_accepted_at: new Date().toISOString() } },
     });
     if (error) throw new Error(error.message);
     return data.session ? 'signed-in' : 'confirm-email';

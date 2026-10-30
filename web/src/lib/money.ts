@@ -1,16 +1,14 @@
 // Registrant money on the screens: what a withdrawal credits (the same rule as
 // public.withdraw_registration) and how ledger lines and balances read.
-import { formatMoney } from './format';
+import { formatMoney, priceAt } from './format';
 import type { LedgerEntry, PaymentMethod, Tournament } from './types';
 
-/** The extra-event fee a registration paid: the early price if it registered before early_until. */
+/** The event fee a registration paid: the price schedule's when it registered. */
 export function extraEventFee(
-  t: Pick<Tournament, 'early_until' | 'early_extra_event_fee_cents' | 'extra_event_fee_cents'>,
+  t: Pick<Tournament, 'entry_fee_cents' | 'extra_event_fee_cents' | 'first_event_included' | 'price_schedule' | 'time_zone'>,
   registeredAt: string,
 ) {
-  return t.early_until && t.early_until > registeredAt
-    ? (t.early_extra_event_fee_cents ?? t.extra_event_fee_cents)
-    : t.extra_event_fee_cents;
+  return priceAt(t, registeredAt).event;
 }
 
 /**

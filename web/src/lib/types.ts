@@ -56,11 +56,18 @@ export interface Tournament {
   overdue_after_minutes: number;
   match_slot_minutes: number;
   auto_assign: boolean;
+  /** The registration fee, once per player (the regular price, after any price schedule). */
   entry_fee_cents: number;
+  /** The fee for each event (the regular price). */
   extra_event_fee_cents: number;
-  early_entry_fee_cents: number | null;
-  early_extra_event_fee_cents: number | null;
-  early_until: string | null;
+  /** The registration fee covers one event whose division allows it (events.included_in_registration). */
+  first_event_included: boolean;
+  /** Prices that step up on dates; the regular price applies after the last. */
+  price_schedule: PriceStep[];
+  /** Registration reopened by a director while the tournament is live. */
+  registration_reopened: boolean;
+  /** Where players reach the organizer (Contact on the tournament's pages). */
+  contact_email: string | null;
   refund_fee_cents: number;
   stream_url: string | null;
   location: string | null;
@@ -183,6 +190,8 @@ export interface RegistrationForm {
     dupr_id?: string | null;
     discount_code?: string | null;
     waiver_accepted?: boolean;
+    /** Agreed to the Terms of Service and Privacy Policy (required unless a director registers them). */
+    terms_accepted?: boolean;
     answers?: { question_id: string; answer: string | string[] }[];
   };
   entries: { event_id: string; partner_name?: string; partner_email?: string; pay_for_partner?: boolean }[];
@@ -475,6 +484,13 @@ export interface StartedEvent {
 
 export type MessageScope = 'player' | 'team' | 'event' | 'everyone' | 'not_checked_in';
 
+/** Prices through the end of `through` (YYYY-MM-DD) in the tournament's time zone. */
+export interface PriceStep {
+  through: string;
+  registration_cents: number;
+  event_cents: number;
+}
+
 export interface TournamentEvent {
   id: string;
   tournament_id: string;
@@ -518,6 +534,10 @@ export interface TournamentEvent {
   require_dupr_id: boolean;
   /** Results go to DUPR (Results to DUPR leaves the rest out). */
   dupr_rated: boolean;
+  /** Can be the event the registration fee covers (when the tournament includes one). */
+  included_in_registration: boolean;
+  /** Shown to its players on the division's player guide. */
+  player_notes: string | null;
   team_rating_max: number | null;
   team_age_min: number | null;
   /** Round robin: stop after this many rounds (null = everyone plays everyone). Swiss: the number of rounds. */
@@ -545,6 +565,7 @@ export interface Team {
   withdrawn_at: string | null;
   /** Missed check-in after the division started: its matches are forfeited until it checks in. */
   no_show_at: string | null;
+  created_at: string;
 }
 
 export interface CourtBoardRow {

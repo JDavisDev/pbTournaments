@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
@@ -14,6 +15,8 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // Creating an account means agreeing to the Terms of Service and Privacy Policy.
+  const [agreed, setAgreed] = useState(false);
 
   if (!isBackendConfigured) return <ConnectNotice />;
 
@@ -79,12 +82,21 @@ export default function LoginPage() {
         <Button variant="primary" type="submit" disabled={busy || !email || !password}>
           Sign in
         </Button>
+        <p className="-mt-2 text-center text-sm text-muted">
+          By signing in you agree to the <Terms />.
+        </p>
+        <label className="flex items-start gap-3 border-t border-border pt-4 text-sm">
+          <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--accent)]" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+          <span>
+            New here? To create an account, I agree to the <Terms />.
+          </span>
+        </label>
         <div className={`grid gap-2 ${auth.emailLink ? 'grid-cols-2' : ''}`}>
-          <Button type="button" onClick={signUp} disabled={busy || !email || password.length < 6}>
+          <Button type="button" onClick={signUp} disabled={busy || !agreed || !email || password.length < 6}>
             Create account
           </Button>
           {auth.emailLink && (
-            <Button type="button" onClick={emailLink} disabled={busy || !email}>
+            <Button type="button" onClick={emailLink} disabled={busy || !agreed || !email}>
               Email me a link
             </Button>
           )}
@@ -96,5 +108,19 @@ export default function LoginPage() {
         )}
       </form>
     </Card>
+  );
+}
+
+function Terms() {
+  return (
+    <>
+      <Link href="/terms" target="_blank" className="underline">
+        Terms of Service
+      </Link>{' '}
+      and{' '}
+      <Link href="/privacy" target="_blank" className="underline">
+        Privacy Policy
+      </Link>
+    </>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { use, useState } from 'react';
+import { Fragment, use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { DivisionStatus, divisionState } from '@/components/DivisionStatus';
 import { Icon } from '@/components/Icon';
@@ -13,7 +14,6 @@ import {
   copyEvent,
   deleteEvent,
   deleteTeam,
-  generateMatches,
   getCourtBoard,
   getEvents,
   getMatches,
@@ -38,6 +38,8 @@ import {
   defaultRoundFormats,
   formatSummary,
   fromZonedInput,
+  priceSummary,
+  registrationOpen,
   poolName,
   shortFormat,
   toZonedInput,
@@ -45,7 +47,7 @@ import {
 import { isYoutubeUrl } from '@/lib/youtube';
 import { SaveAllProvider, useSaveAll, useUnsaved, useUnsavedSections } from './SaveAll';
 import { AboutCard, DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SettingsGroup, SharingCard } from './SetupCards';
-import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
+import { useAction, useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import type {
   BracketType,
   CourtBoardRow,
@@ -112,7 +114,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
           />
           <AboutCard key={`about-${data.tournament.id}`} tournament={data.tournament} />
           <PricesCard key={`prices-${data.tournament.id}`} tournament={data.tournament} />
-          <RegistrationCard key={`reg-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
+          <RegistrationCard key={`reg-${data.tournament.id}-${data.tournament.registration_closes_at}`} tournament={data.tournament} onChanged={reload} />
           {/* Optional: folded to a line each. */}
           <div className="mt-2 border-b border-border">
             <QuestionsCard tournament={data.tournament} />
@@ -138,7 +140,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
         </div>
         {adding && (
           <Card className="p-4">
-            <EventForm tournamentId={id} timeZone={data.tournament.time_zone} courts={data.courts} onDone={() => (setAdding(false), reload())} onCancel={() => setAdding(false)} />
+            <EventForm tournamentId={id} timeZone={data.tournament.time_zone} courts={data.courts} firstEventIncluded={data.tournament.first_event_included} onDone={() => (setAdding(false), reload())} onCancel={() => setAdding(false)} />
           </Card>
         )}
         {data.events.length === 0 && !adding && <Empty>Add your first division, e.g. “Men’s Doubles 3.5”.</Empty>}
@@ -147,6 +149,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             key={e.id}
             event={e}
             timeZone={data.tournament.time_zone}
+            firstEventIncluded={data.tournament.first_event_included}
             courts={data.courts}
             teams={data.teams.filter((t) => t.event_id === e.id)}
             matches={data.matches.filter((m) => m.event_id === e.id)}
@@ -307,26 +310,71 @@ function SetupHeader({ tournament, events, onChanged }: { tournament: Tournament
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-border p-5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 flex-col gap-2">
-        {tournament.status !== 'draft' && <h2 className="text-3xl">Settings</h2>}
-        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" aria-label="Tournament status">
-          {stages.map((s, i) => (
-            <li key={s.value} aria-current={i === at ? 'step' : undefined} className="flex items-center gap-2">
-              {i > 0 && <span className={`h-px w-5 ${i <= at ? 'bg-text' : 'bg-border'}`} aria-hidden />}
-              {i < at ? (
-                <Icon name="check" className="h-4 w-4 text-live" />
-              ) : (
-                <span className={`h-2.5 w-2.5 rounded-full ${i === at ? s.dot : 'border-2 border-border'}`} aria-hidden />
-              )}
-              <span className={i === at ? 'font-semibold' : 'text-muted'}>{s.label}</span>
-            </li>
-          ))}
-        </ol>
-        <p className="text-sm text-muted">{note}</p>
-        <ErrorText>{error}</ErrorText>
+    <div className="flex flex-col gap-4 rounded-2xl border border-border p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-col gap-2">
+          {tournament.status !== 'draft' && <h2 className="text-3xl">Settings</h2>}
+          <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" aria-label="Tournament status">
+            {stages.map((s, i) => (
+              <li key={s.value} aria-current={i === at ? 'step' : undefined} className="flex items-center gap-2">
+                {i > 0 && <span className={`h-px w-5 ${i <= at ? 'bg-text' : 'bg-border'}`} aria-hidden />}
+                {i < at ? (
+                  <Icon name="check" className="h-4 w-4 text-live" />
+                ) : (
+                  <span className={`h-2.5 w-2.5 rounded-full ${i === at ? s.dot : 'border-2 border-border'}`} aria-hidden />
+                )}
+                <span className={i === at ? 'font-semibold' : 'text-muted'}>{s.label}</span>
+              </li>
+            ))}
+          </ol>
+          <p className="text-sm text-muted">{note}</p>
+          <ErrorText>{error}</ErrorText>
       </div>
       {action && <div className="shrink-0">{action}</div>}
+      </div>
+      {(tournament.status === 'registration' || tournament.status === 'live') && (
+        <RegistrationSwitch tournament={tournament} onChanged={onChanged} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Registration open or closed to players: close it now, or reopen it (also
+ * once the tournament is live, and clearing a closing date that has passed).
+ * Directors can register someone either way (More → Register a player).
+ */
+function RegistrationSwitch({ tournament: t, onChanged }: { tournament: Tournament; onChanged: () => void }) {
+  const { busy, error, run } = useAction();
+  const now = useNow(60_000);
+  const open = registrationOpen(t, now);
+  const closes = t.registration_closes_at;
+  const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: t.time_zone });
+  const live = t.status === 'live';
+  const changes = open
+    ? live
+      ? { registration_reopened: false }
+      : { registration_closes_at: new Date(now).toISOString() }
+    : {
+        ...(closes && new Date(closes).getTime() < now ? { registration_closes_at: null } : {}),
+        ...(live ? { registration_reopened: true } : {}),
+      };
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+      <p className="text-sm">
+        {open ? (
+          <span className="font-semibold text-live">Registration is open{closes ? ` until ${day(closes)}` : ''}.</span>
+        ) : (
+          <>
+            <span className="font-semibold">Registration is closed to players.</span>{' '}
+            <span className="text-muted">You can still register someone from More → Register a player.</span>
+          </>
+        )}
+      </p>
+      <Button size="sm" disabled={busy} onClick={() => run(() => updateTournament(t.id, changes), onChanged)}>
+        {open ? 'Close registration' : 'Reopen registration'}
+      </Button>
+      <ErrorText>{error}</ErrorText>
     </div>
   );
 }
@@ -354,15 +402,20 @@ function SettingsCard({
     // Blank: teams that miss check-in never forfeit automatically.
     checkin_grace_minutes: tournament.checkin_grace_minutes?.toString() ?? '',
     location: tournament.location ?? '',
+    contact_email: tournament.contact_email ?? '',
     dupr_score_type: tournament.dupr_score_type,
   });
   useUnsaved('details', { form, courts }, async () => {
     if (!form.name.trim()) throw new Error('Give the tournament a name.');
     if (!form.starts_on) throw new Error('Pick the tournament’s date.');
+    if (form.contact_email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contact_email.trim())) {
+      throw new Error('Enter a contact email like you@example.com, or leave it blank.');
+    }
     await updateTournament(tournament.id, {
       ...form,
       name: form.name.trim(),
       location: form.location.trim() || null,
+      contact_email: form.contact_email.trim() || null,
       checkin_grace_minutes: optionalNumber(form.checkin_grace_minutes),
     });
     if (startHere && courts !== courtCount) await setCourtCount(tournament.id, courts);
@@ -399,6 +452,9 @@ function SettingsCard({
         )}
         <Field label="Venue" hint="Sent to DUPR with results">
           <Input placeholder="Club name, street, city" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+        </Field>
+        <Field label="Contact email" hint="Players reach you from the tournament’s pages. Blank: no Contact button.">
+          <Input type="email" placeholder="you@example.com" value={form.contact_email} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} />
         </Field>
         <Field label="Scoring" hint="For DUPR results">
           <Select
@@ -610,67 +666,122 @@ function ChampionshipCard({ tournament, courts }: { tournament: Tournament; cour
 const dollars = (cents: number | null) => (cents === null ? '' : (cents / 100).toFixed(2));
 const cents = (value: string) => (value.trim() === '' ? null : Math.round(Number(value) * 100));
 
+interface StepDraft {
+  through: string;
+  registration: string;
+  event: string;
+}
+
+/**
+ * The registration fee (once per player) and event fee (each event), whether
+ * the registration covers one event, and optional earlier prices that step up
+ * on dates.
+ */
 function PricesCard({ tournament }: { tournament: Tournament }) {
   const [form, setForm] = useState({
-    entry: dollars(tournament.entry_fee_cents),
-    extra: dollars(tournament.extra_event_fee_cents),
-    earlyEntry: dollars(tournament.early_entry_fee_cents),
-    earlyExtra: dollars(tournament.early_extra_event_fee_cents),
-    earlyUntil: tournament.early_until ? toLocalInput(tournament.early_until).slice(0, 10) : '',
+    registration: dollars(tournament.entry_fee_cents),
+    event: dollars(tournament.extra_event_fee_cents),
+    included: tournament.first_event_included,
     refundFee: dollars(tournament.refund_fee_cents),
   });
-  useUnsaved('prices', form, () =>
-    updateTournament(tournament.id, {
-      entry_fee_cents: cents(form.entry) ?? 0,
-      extra_event_fee_cents: cents(form.extra) ?? 0,
-      early_entry_fee_cents: cents(form.earlyEntry),
-      early_extra_event_fee_cents: cents(form.earlyExtra),
-      // Early prices last through the end of the chosen day.
-      early_until: form.earlyUntil ? new Date(`${form.earlyUntil}T23:59:59`).toISOString() : null,
-      refund_fee_cents: cents(form.refundFee) ?? 0,
-    }),
+  const [steps, setSteps] = useState<StepDraft[]>(() =>
+    [...tournament.price_schedule]
+      .sort((a, b) => a.through.localeCompare(b.through))
+      .map((s) => ({ through: s.through, registration: dollars(s.registration_cents), event: dollars(s.event_cents) })),
   );
-  const money = (key: keyof typeof form, placeholder = '0.00') => ({
+  const schedule = [...steps]
+    .sort((a, b) => a.through.localeCompare(b.through))
+    .map((s) => ({ through: s.through, registration_cents: cents(s.registration) ?? 0, event_cents: cents(s.event) ?? 0 }));
+  const changes = {
+    entry_fee_cents: cents(form.registration) ?? 0,
+    extra_event_fee_cents: cents(form.event) ?? 0,
+    first_event_included: form.included,
+    price_schedule: schedule,
+    refund_fee_cents: cents(form.refundFee) ?? 0,
+  };
+  useUnsaved('prices', { form, steps }, async () => {
+    if (steps.some((s) => !s.through)) throw new Error('Pick a date for each price date.');
+    if (new Set(steps.map((s) => s.through)).size !== steps.length) throw new Error('Each price date needs its own day.');
+    await updateTournament(tournament.id, changes);
+  });
+  const money = (value: string, onChange: (value: string) => void, label?: string) => ({
     type: 'number',
     min: 0,
     step: '0.01',
     inputMode: 'decimal' as const,
-    placeholder,
-    value: form[key],
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: e.target.value }),
+    placeholder: '0.00',
+    value,
+    'aria-label': label,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value),
   });
+  const setStep = (i: number, patch: Partial<StepDraft>) => setSteps((all) => all.map((s, j) => (j === i ? { ...s, ...patch } : s)));
 
   return (
-    <SettingsGroup title="Prices" description="All-in prices players see: bake processing and texting costs in. Early prices are optional.">
+    <SettingsGroup title="Prices" description="All-in prices players see: bake processing and texting costs in.">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <Field label="First event ($)">
-          <Input {...money('entry')} />
+        <Field label="Registration fee ($)" hint="Once per player">
+          <Input {...money(form.registration, (registration) => setForm({ ...form, registration }))} />
         </Field>
-        <Field label="Each extra event ($)">
-          <Input {...money('extra')} />
-        </Field>
-        <Field label="Early first event ($)" hint="Optional">
-          <Input {...money('earlyEntry', '')} />
-        </Field>
-        <Field label="Early extra event ($)" hint="Optional">
-          <Input {...money('earlyExtra', '')} />
-        </Field>
-        <Field label="Early prices through">
-          <Input type="date" value={form.earlyUntil} onChange={(e) => setForm({ ...form, earlyUntil: e.target.value })} />
+        <Field label="Event fee ($)" hint="Each event">
+          <Input {...money(form.event, (event) => setForm({ ...form, event }))} />
         </Field>
         <Field label="Kept on refunds ($)">
-          <Input {...money('refundFee')} />
+          <Input {...money(form.refundFee, (refundFee) => setForm({ ...form, refundFee }))} />
         </Field>
       </div>
+      <div>
+        <Check label="First event included in registration" checked={form.included} onChange={(included) => setForm({ ...form, included })} />
+        <p className="text-sm text-muted">
+          {form.included
+            ? 'The registration fee covers one event; each extra event costs the event fee. Each division’s settings say whether it can be the included event.'
+            : 'Players pay the registration fee and the event fee for every event.'}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <span className="font-medium">Price dates</span>
+        <p className="-mt-1 text-sm text-muted">
+          Optional: lower prices that step up on dates, through the end of each day. After the last date, the prices above apply.
+        </p>
+        {steps.length > 0 && (
+          <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
+            <span className="text-sm font-medium">Through</span>
+            <span className="text-sm font-medium">Registration ($)</span>
+            <span className="text-sm font-medium">Event ($)</span>
+            <span />
+            {steps.map((s, i) => (
+              <Fragment key={i}>
+                <Input type="date" aria-label="Through" value={s.through} onChange={(e) => setStep(i, { through: e.target.value })} />
+                <Input {...money(s.registration, (registration) => setStep(i, { registration }), 'Registration fee ($)')} />
+                <Input {...money(s.event, (event) => setStep(i, { event }), 'Event fee ($)')} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Remove the price through ${s.through || 'this date'}`}
+                  onClick={() => setSteps((all) => all.filter((_, j) => j !== i))}
+                >
+                  Remove
+                </Button>
+              </Fragment>
+            ))}
+          </div>
+        )}
+        <Button
+          size="sm"
+          className="self-start"
+          onClick={() => setSteps((all) => [...all, { through: '', registration: form.registration, event: form.event }])}
+        >
+          Add a price date
+        </Button>
+      </div>
+      <p className="rounded-xl bg-surface-2 px-4 py-3 text-sm">
+        <span className="font-semibold">Today: </span>
+        {priceSummary({ ...tournament, ...changes })}
+      </p>
     </SettingsGroup>
   );
 }
 
-const toLocalInput = (iso: string | null) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-};
 
 const LEVELS = ['2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5', '6.0'];
 const optionalNumber = (v: string) => (v === '' ? null : Number(v));
@@ -746,6 +857,7 @@ function EventForm({
   courts,
   event,
   scheduled = false,
+  firstEventIncluded = false,
   onDone,
   onCancel,
 }: {
@@ -754,6 +866,8 @@ function EventForm({
   courts: CourtBoardRow[];
   event?: TournamentEvent;
   scheduled?: boolean;
+  /** The tournament's registration fee covers one event: ask whether this division can be it. */
+  firstEventIncluded?: boolean;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -784,6 +898,8 @@ function EventForm({
     rating_tolerance: event && Number(event.rating_tolerance) > 0 ? String(Number(event.rating_tolerance)) : '',
     play_up_limit: event?.play_up_limit != null ? String(Number(event.play_up_limit)) : '',
     dupr_rated: event?.dupr_rated ?? true,
+    included_in_registration: event?.included_in_registration ?? true,
+    player_notes: event?.player_notes ?? '',
     team_rating_max: event?.team_rating_max != null ? String(Number(event.team_rating_max)) : '',
     team_age_min: event?.team_age_min?.toString() ?? '',
     max_rounds: event?.max_rounds?.toString() ?? '',
@@ -839,6 +955,8 @@ function EventForm({
               ...division,
               partner_required: form.partner_required,
               dupr_rated: form.dupr_rated,
+              included_in_registration: form.included_in_registration,
+              player_notes: form.player_notes.trim() || null,
               ...(scheduled
                 ? {}
                 : {
@@ -1011,6 +1129,13 @@ function EventForm({
           checked={form.dupr_rated}
           onChange={(v) => set('dupr_rated', v)}
         />
+        {firstEventIncluded && (
+          <Check
+            label="Can be the event included in registration"
+            checked={form.included_in_registration}
+            onChange={(v) => set('included_in_registration', v)}
+          />
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Min age">
             <Input type="number" min={0} placeholder="Any" value={form.min_age} onChange={(e) => set('min_age', e.target.value)} />
@@ -1123,6 +1248,23 @@ function EventForm({
         <Field label="Start time" hint="Optional. Matches won’t be sent out before this.">
           <Input type="datetime-local" value={form.not_before} onChange={(e) => set('not_before', e.target.value)} />
         </Field>
+      </Section>
+
+      <Section title="Player guide">
+        <div className="sm:col-span-2">
+          <Field
+            label="Notes for this division’s players"
+            hint="Optional. On the division’s player guide, after its format and schedule: warm-ups, balls, courts, anything you’d otherwise announce."
+          >
+            <Textarea
+              rows={4}
+              maxLength={5000}
+              value={form.player_notes}
+              onChange={(e) => set('player_notes', e.target.value)}
+              placeholder={'5-minute warm-up on your court.\nFranklin X-40 balls, provided.\nCourts 1–4 all morning.'}
+            />
+          </Field>
+        </div>
       </Section>
 
       <Section title="Courts">
@@ -1339,6 +1481,7 @@ function RoundFormatsEditor({
 function EventCard({
   event,
   timeZone,
+  firstEventIncluded,
   courts,
   teams,
   matches,
@@ -1347,6 +1490,7 @@ function EventCard({
 }: {
   event: TournamentEvent;
   timeZone: string;
+  firstEventIncluded: boolean;
   courts: CourtBoardRow[];
   teams: Team[];
   matches: MatchDetails[];
@@ -1369,6 +1513,7 @@ function EventCard({
           tournamentId={event.tournament_id}
           timeZone={timeZone}
           courts={courts}
+          firstEventIncluded={firstEventIncluded}
           event={event}
           scheduled={scheduled}
           onDone={() => (setEditing(false), onChanged())}
@@ -1392,14 +1537,14 @@ function EventCard({
           {section.length > 0 && <p className="text-sm font-medium">Plays on {courtsLabel(section)}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          {scheduled ? (
-            <>
-              <DivisionStatus state={divisionState(event, matches)} startedAt={event.started_at} timeZone={timeZone} />
-              <Badge>{matches.length} matches</Badge>
-            </>
-          ) : (
-            <Badge>Not scheduled</Badge>
-          )}
+          <DivisionStatus state={divisionState(event, matches)} startedAt={event.started_at} timeZone={timeZone} />
+          {scheduled && <Badge>{matches.length} matches</Badge>}
+          <Link
+            href={`/t/${event.tournament_id}/events/${event.id}/guide`}
+            className="inline-flex h-10 items-center rounded-full px-4 text-sm font-medium hover:bg-surface"
+          >
+            Player guide
+          </Link>
           <Button size="sm" onClick={() => setEditing(true)}>
             Edit
           </Button>
@@ -1467,9 +1612,12 @@ function EventCard({
       <ErrorText>{error}</ErrorText>
       <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
         {!scheduled ? (
-          <Button variant="primary" disabled={busy || teams.length < 2} onClick={() => run(() => generateMatches(event.id), onChanged)}>
-            Build schedule
-          </Button>
+          <p className="text-sm text-muted">
+            The schedule is built when the division starts, from the teams entered then.{' '}
+            <Link href={`/t/${event.tournament_id}/events/${event.id}`} className="font-medium text-text underline">
+              Preview it
+            </Link>
+          </p>
         ) : (
           <Button
             disabled={busy || started}

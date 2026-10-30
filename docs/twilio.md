@@ -50,7 +50,7 @@ The log below it can be filtered to **Problems** (failed or not sent) and search
 A quick end-to-end check before an event:
 
 1. Register yourself in a test division with your own phone and texts on.
-2. Build the schedule, go live, check yourself in.
+2. Check yourself in and start the division (that builds its schedule).
 3. When the match is called you should get the text; the log shows **Sent**, then **Delivered** a few seconds later.
 4. Open the link in the text and report a score.
 

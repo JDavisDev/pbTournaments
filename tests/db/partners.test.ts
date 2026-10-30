@@ -34,6 +34,7 @@ async function register(tournamentId: string, email: string, entries: Entry[], e
   await actAs(db, null);
   const player = {
     first_name: email.split('@')[0],
+    terms_accepted: true,
     last_name: 'Player',
     email,
     gender: 'male',

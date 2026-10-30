@@ -1,4 +1,4 @@
-import type { BracketType, ChampionshipMode, EventFormat, MatchDetails, PoolPlay, RoundFormat, RoundKey } from './types';
+import type { BracketType, ChampionshipMode, EventFormat, MatchDetails, PoolPlay, RoundFormat, RoundKey, Tournament } from './types';
 
 export function formatTime(iso: string | null | undefined, timeZone?: string) {
   if (!iso) return '';
@@ -171,24 +171,66 @@ export const poolName = (pool: number | null) => (pool ? `Pool ${String.fromChar
 export const formatMoney = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: cents % 100 ? 2 : 0 });
 
-/** Same rule as public.registration_price: first event, then each extra; early prices until the cutoff. */
-export function registrationPrice(
-  t: {
-    entry_fee_cents: number;
-    extra_event_fee_cents: number;
-    early_entry_fee_cents: number | null;
-    early_extra_event_fee_cents: number | null;
-    early_until: string | null;
-  },
-  eventCount: number,
-  now = Date.now(),
-) {
-  if (eventCount < 1) return 0;
-  const early = t.early_until !== null && new Date(t.early_until).getTime() > now;
-  const first = early ? (t.early_entry_fee_cents ?? t.entry_fee_cents) : t.entry_fee_cents;
-  const extra = early ? (t.early_extra_event_fee_cents ?? t.extra_event_fee_cents) : t.extra_event_fee_cents;
-  return first + (eventCount - 1) * extra;
+type Priced = Pick<Tournament, 'entry_fee_cents' | 'extra_event_fee_cents' | 'first_event_included' | 'price_schedule' | 'time_zone'>;
+
+/**
+ * Same rule as private.price_at: the registration and event fees at a
+ * moment. `through`: the last day of the schedule step in effect (null for
+ * the regular price).
+ */
+export function priceAt(t: Priced, at: number | string = Date.now()) {
+  const day = toZonedInput(new Date(at).toISOString(), t.time_zone).slice(0, 10);
+  const step = [...t.price_schedule].sort((a, b) => a.through.localeCompare(b.through)).find((s) => day <= s.through);
+  return {
+    registration: step?.registration_cents ?? t.entry_fee_cents,
+    event: step?.event_cents ?? t.extra_event_fee_cents,
+    through: step?.through ?? null,
+  };
 }
+
+/**
+ * Same rule as private.entry_cost: a player's own events, given whether each
+ * division may be the included one. The registration fee, and the event fee
+ * for each event it doesn't cover.
+ */
+export function entryCost(t: Priced, includable: boolean[], now: number = Date.now()) {
+  if (includable.length === 0) return 0;
+  const p = priceAt(t, now);
+  const covered = t.first_event_included && includable.some(Boolean) ? 1 : 0;
+  return p.registration + p.event * (includable.length - covered);
+}
+
+/** Same rule as public.registration_price: this many events, all in divisions that may be the included one. */
+export function registrationPrice(t: Priced, eventCount: number, now: number = Date.now()) {
+  return entryCost(t, Array(Math.max(0, eventCount)).fill(true), now);
+}
+
+/** "$42.50 registration, first event included · $15.50 each extra event", for players. */
+export function priceSummary(t: Priced, now: number = Date.now()) {
+  const p = priceAt(t, now);
+  const until = p.through ? ` · until ${formatDay(p.through)}` : '';
+  return t.first_event_included
+    ? `${formatMoney(p.registration)} registration, first event included · ${formatMoney(p.event)} each extra event${until}`
+    : `${formatMoney(p.registration)} registration + ${formatMoney(p.event)} per event${until}`;
+}
+
+/**
+ * Same rule as private.registration_open: whether players can register now.
+ * In registration, or live once a director reopens it, until any closing date.
+ */
+export function registrationOpen(
+  t: Pick<Tournament, 'status' | 'registration_reopened' | 'registration_closes_at'>,
+  now: number = Date.now(),
+) {
+  return (
+    (t.status === 'registration' || (t.status === 'live' && t.registration_reopened)) &&
+    (!t.registration_closes_at || new Date(t.registration_closes_at).getTime() >= now)
+  );
+}
+
+/** "Nov 3" from "2026-11-03". */
+export const formatDay = (day: string) =>
+  new Date(`${day}T12:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
 export function ordinal(n: number) {
   const s = ['th', 'st', 'nd', 'rd'];

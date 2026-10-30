@@ -48,11 +48,12 @@ interface Who {
 async function register(
   tournamentId: string,
   who: Who,
-  entries: { event_id: string; partner_name?: string; partner_email?: string }[],
+  entries: { event_id: string; partner_name?: string; partner_email?: string; pay_for_partner?: boolean }[],
 ) {
   await actAs(db, null);
   const player = {
     first_name: who.first,
+    terms_accepted: true,
     last_name: who.last,
     email: who.email,
     phone: '+15550001111',
@@ -87,22 +88,108 @@ describe('registration', () => {
     expect(reg).toMatchObject({ amount_cents: 4250 + 1550, status: 'pending' });
   });
 
-  it('uses early prices until the cutoff', async () => {
+  it('follows the price schedule, through each step’s last day in the tournament’s time zone', async () => {
     const { tournamentId, mens } = await openTournament();
-    await db.query(
-      `update public.tournaments set early_entry_fee_cents = 3250, early_until = $2 where id = $1`,
-      [tournamentId, addMinutes(START, 60).toISOString()],
-    );
+    await db.query(`update public.tournaments set price_schedule = $2::jsonb where id = $1`, [
+      tournamentId,
+      JSON.stringify([
+        // Out of order on purpose: the earliest step that hasn't passed applies.
+        { through: '2026-11-09', registration_cents: 3500, event_cents: 1200 },
+        { through: '2026-11-07', registration_cents: 3000, event_cents: 1000 },
+      ]),
+    ]);
+    const price = async (at: string, events = 1) => {
+      await setClock(db, new Date(at));
+      return (await one<{ p: number }>(db, 'select public.registration_price($1, $2) as p', [tournamentId, events])).p;
+    };
+    // New York: Nov 7, 8:00 and 23:30 (Nov 8 in UTC) are still the first step.
+    expect(await price('2026-11-07T13:00:00Z')).toBe(3000);
+    expect(await price('2026-11-08T04:30:00Z', 2)).toBe(3000 + 1000);
+    // Nov 8, 00:30 New York: the second step.
+    expect(await price('2026-11-08T05:30:00Z', 2)).toBe(3500 + 1200);
+    // After the last step: the regular price.
+    expect(await price('2026-11-10T06:00:00Z', 2)).toBe(4250 + 1550);
+
+    // What a registration is charged follows the same schedule.
     await setClock(db, START);
     const early = await register(tournamentId, { first: 'A', last: 'B', email: 'a@x.test' }, [
       { event_id: mens, partner_name: 'C D', partner_email: 'c@x.test' },
     ]);
-    expect(early.amount_cents).toBe(3250);
-    await setClock(db, addMinutes(START, 61));
-    const late = await register(tournamentId, { first: 'E', last: 'F', email: 'e@x.test' }, [
-      { event_id: mens, partner_name: 'G H', partner_email: 'g@x.test' },
+    expect(early.amount_cents).toBe(3000);
+
+    await expect(
+      db.query(`update public.tournaments set price_schedule = $2::jsonb where id = $1`, [
+        tournamentId,
+        JSON.stringify([{ through: 'soon', registration_cents: -5, event_cents: 1 }]),
+      ]),
+    ).rejects.toThrow();
+  });
+
+  it('charges the registration fee and every event when the first event isn’t included', async () => {
+    const { tournamentId, mens, mixed } = await openTournament({ entry: 2000, extra: 1500 });
+    await db.query('update public.tournaments set first_event_included = false where id = $1', [tournamentId]);
+    const one_ = await register(tournamentId, { first: 'A', last: 'B', email: 'a@x.test' }, [
+      { event_id: mens, partner_name: 'C D', partner_email: 'c@x.test' },
     ]);
-    expect(late.amount_cents).toBe(4250);
+    expect(one_.amount_cents).toBe(2000 + 1500);
+    const two = await register(tournamentId, { first: 'E', last: 'F', email: 'e@x.test' }, [
+      { event_id: mens, partner_name: 'G H', partner_email: 'g@x.test' },
+      { event_id: mixed, partner_name: 'I J', partner_email: 'i@x.test' },
+    ]);
+    expect(two.amount_cents).toBe(2000 + 2 * 1500);
+  });
+
+  it('includes only an event whose division allows it', async () => {
+    const { tournamentId, mens, mixed } = await openTournament({ entry: 4000, extra: 1500 });
+    await db.query('update public.events set included_in_registration = false where id = $1', [mixed]);
+    // Only the excluded division: registration plus its event fee.
+    const excluded = await register(tournamentId, { first: 'A', last: 'B', email: 'a@x.test' }, [
+      { event_id: mixed, partner_name: 'C D', partner_email: 'c@x.test' },
+    ]);
+    expect(excluded.amount_cents).toBe(4000 + 1500);
+    // With an allowed one too: that one is included, the excluded one is extra.
+    const both = await register(tournamentId, { first: 'E', last: 'F', email: 'e@x.test' }, [
+      { event_id: mens, partner_name: 'G H', partner_email: 'g@x.test' },
+      { event_id: mixed, partner_name: 'I J', partner_email: 'i@x.test' },
+    ]);
+    expect(both.amount_cents).toBe(4000 + 1500);
+    // Paying a partner's way in the excluded division: their registration and the event.
+    const generous = await register(tournamentId, { first: 'K', last: 'L', email: 'k@x.test' }, [
+      { event_id: mixed, partner_name: 'M N', partner_email: 'm@x.test', pay_for_partner: true },
+    ]);
+    expect(generous.amount_cents).toBe(2 * (4000 + 1500));
+  });
+
+  it('lets a director register players when registration is closed, and reopen it once live', async () => {
+    const { tournamentId, director, mens, mixed } = await openTournament();
+    const asDirector = async (email: string, eventId: string) => {
+      await actAs(db, director);
+      return asRole(db, 'authenticated', async () =>
+        (
+          await one(db, 'select public.start_registration($1, $2::jsonb, $3::jsonb) as r', [
+            tournamentId,
+            JSON.stringify({ first_name: 'Late', last_name: 'Entry', email, dupr_doubles: 3.5, dupr_id: 'LATE01' }),
+            JSON.stringify([{ event_id: eventId, partner_name: 'P Q', partner_email: `p-${email}` }]),
+          ])
+        ).r,
+      );
+    };
+    const player = (email: string, eventId: string) =>
+      register(tournamentId, { first: 'A', last: 'B', email }, [{ event_id: eventId, partner_name: 'C D', partner_email: `c-${email}` }]);
+
+    // Closing date passed: players can't, the director can.
+    await db.query('update public.tournaments set registration_closes_at = $2 where id = $1', [tournamentId, addMinutes(START, -60)]);
+    await expect(player('a@x.test', mens)).rejects.toThrow(/closed on/);
+    expect((await asDirector('late@x.test', mens)).status).toBe('pending');
+
+    // Live: closed to players until a director reopens it, and never for a started division.
+    await db.query(`update public.tournaments set status = 'live', registration_closes_at = null where id = $1`, [tournamentId]);
+    await db.query('update public.events set started_at = $2 where id = $1', [mens, START]);
+    await expect(player('b@x.test', mixed)).rejects.toThrow(/not open/);
+    await db.query('update public.tournaments set registration_reopened = true where id = $1', [tournamentId]);
+    expect((await player('c@x.test', mixed)).status).toBe('pending');
+    await expect(player('d@x.test', mens)).rejects.toThrow(/already started/);
+    expect((await asDirector('late2@x.test', mens)).status).toBe('pending');
   });
 
   it('forms a team when both partners have paid and named each other', async () => {

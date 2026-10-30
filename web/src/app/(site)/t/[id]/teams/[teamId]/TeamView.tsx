@@ -65,6 +65,7 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
   if (!team) return <Empty>Team not found.</Empty>;
   const event = data.events.find((e) => e.id === team.event_id)!;
   const tz = data.tournament.time_zone;
+  const guide = `/t/${id}/events/${event.id}/guide?team=${team.id}`;
 
   const queueById = new Map(data.queue.map((q) => [q.match_id, q]));
   // Live first, then upcoming in queue order, then results (latest first).
@@ -109,8 +110,27 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
           {team.pool ? ` · ${poolName(team.pool)}` : ''}
           {team.seed ? ` · Seed ${team.seed}` : ''} · {wins}–{losses}
           {myStanding ? ` · ${ordinal(myStanding.pool_rank)} in pool` : ''}
+          {event.started_at && (
+            <>
+              {' · '}
+              <Link href={guide} className="underline hover:text-text">
+                How it runs
+              </Link>
+            </>
+          )}
         </p>
       </div>
+
+      {/* Before play: what to expect, so the morning announcements can be short. */}
+      {!event.started_at && (
+        <Link href={guide} className="flex items-center justify-between gap-4 rounded-2xl bg-surface-2 p-5 transition hover:bg-border/60">
+          <span>
+            <span className="block font-display text-2xl leading-tight font-bold uppercase">How {event.name} runs</span>
+            <span className="block text-muted">Format, scoring, your pool and what to expect on match day.</span>
+          </span>
+          <Icon name="arrow" className="h-7 w-7 shrink-0" />
+        </Link>
+      )}
 
       <MatchDayPanel
         tournamentId={id}

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { getEvents, getTournament } from '@/lib/api';
-import { formatDate } from '@/lib/format';
+import { formatDate, registrationOpen } from '@/lib/format';
 import { auth } from '@/lib/auth';
 import { useAction, useLiveTournament, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { isBackendConfigured, isDemoMode } from '@/lib/config';
@@ -45,7 +45,7 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   // The court desk is for play: it shows once a director starts a division.
   const playing = events.some((e) => e.started_at) && t.status !== 'complete';
   const desk = playing ? [{ href: `${base}/desk`, label: 'Court desk' }] : [];
-  const register = t.status === 'registration' ? [{ href: `${base}/register`, label: 'Register' }] : [];
+  const register = registrationOpen(t, now) ? [{ href: `${base}/register`, label: 'Register' }] : [];
   const tv: MoreItem = { href: `/tv/${id}`, label: 'TV board', icon: 'tv', hint: 'Courts and results for a big screen', newTab: true };
   let tabs: Tab[];
   let more: MoreItem[] = [];
@@ -61,7 +61,8 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
       { href: `${base}/planner`, label: 'Planner', icon: 'calendar', hint: 'Plan the day’s divisions and courts' },
       { href: `${base}/messages`, label: 'Messages', icon: 'message', hint: 'Text and email players' },
       ...(draft ? [] : [{ href: `${base}/dupr`, label: 'DUPR', icon: 'upload', hint: 'Send final results to DUPR' } as MoreItem]),
-      ...(t.status === 'registration'
+      // Directors can register someone even when registration is closed to players.
+      ...(t.status === 'registration' || t.status === 'live'
         ? [{ href: `${base}/register`, label: 'Register a player', icon: 'pen', hint: 'The registration form' } as MoreItem]
         : []),
       tv,
@@ -148,6 +149,14 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
         <h1 className="text-5xl sm:text-6xl">{t.name}</h1>
         <div className="flex gap-2">
           {staff.data && !t.announcement && <AnnounceButton tournament={t} onChanged={tournament.reload} />}
+          {!staff.data && t.contact_email && !t.is_demo && (
+            <a
+              href={`mailto:${t.contact_email}?subject=${encodeURIComponent(`Question about ${t.name}`)}`}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-border px-4 text-sm font-medium transition hover:border-text"
+            >
+              <Icon name="message" /> Contact
+            </a>
+          )}
           <Button size="sm" onClick={() => setSharing(true)}>
             <Icon name="share" /> Share
           </Button>

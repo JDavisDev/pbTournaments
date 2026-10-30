@@ -94,7 +94,7 @@ export function suggestMinutes(gamesTo: number, bestOf: number) {
   return bestOf === 1 ? one : Math.round(one * (bestOf === 3 ? 2.3 : 3.6));
 }
 
-const seedOrder = (size: number) => {
+export const seedOrder = (size: number) => {
   let order = [1];
   while (order.length < size) order = order.flatMap((s) => [s, order.length * 2 + 1 - s]);
   return order;

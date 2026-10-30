@@ -14,7 +14,7 @@ import { Button, Empty, Input, LinkButton, Select, Spinner } from '@/components/
 import { getCourtBoard, getEvents, getMatches, getTeams, getTournament } from '@/lib/api';
 import { describeDivision } from '@/lib/eligibility';
 import { StreamEmbed, WatchChip } from '@/components/StreamEmbed';
-import { formatMoney, formatTime, isPlayable, registrationPrice } from '@/lib/format';
+import { formatTime, isPlayable, priceSummary, registrationOpen } from '@/lib/format';
 import { useLiveTournament, useNow } from '@/lib/hooks';
 
 async function load(id: string) {
@@ -62,14 +62,13 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
           <img src={tournament.image_data} alt="" className="max-h-72 w-full rounded-2xl object-cover" />
         )}
         {tournament.stream_url && <StreamEmbed url={tournament.stream_url} title={`${tournament.name} live`} />}
-        {tournament.status === 'registration' && (
+        {registrationOpen(tournament) && (
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-surface-2 p-5">
             <div>
               <h2 className="text-2xl">Registration is open</h2>
               <p className="text-muted">
-                {formatMoney(registrationPrice(tournament, 1))} first event ·{' '}
-                {formatMoney(registrationPrice(tournament, 2) - registrationPrice(tournament, 1))} each extra
-                {closes && <span className="font-semibold text-text"> · closes {closes}</span>}
+                {priceSummary(tournament)}
+                {closes && <span className="font-semibold text-text"> · registration closes {closes}</span>}
               </p>
             </div>
             <LinkButton variant="primary" href={`/t/${tournament.id}/register`}>
@@ -196,7 +195,7 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
                           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
                             <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
                           </div>
-                          <p className="text-sm text-muted">{ms.length ? `${done} of ${ms.length} matches played` : 'Schedule not built yet'}</p>
+                          <p className="text-sm text-muted">{ms.length ? `${done} of ${ms.length} matches played` : 'Schedule builds when it starts'}</p>
                         </Link>
                       );
                     })}

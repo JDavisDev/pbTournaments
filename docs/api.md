@@ -125,12 +125,12 @@ Any finished score is accepted (11–10, 15–14 and 14–11 all count, because 
 
 ## Registration and payment
 
-Prices live on the tournament: `entry_fee_cents` (first event), `extra_event_fee_cents` (each extra), optional `early_entry_fee_cents`/`early_extra_event_fee_cents` until `early_until`, and `refund_fee_cents`.
+Prices live on the tournament: `entry_fee_cents` (the registration fee, once per player), `extra_event_fee_cents` (the event fee, each event), `first_event_included` (the registration fee covers one event whose division has `events.included_in_registration`), `price_schedule` (optional earlier prices, `[{through, registration_cents, event_cents}]`: each applies through the end of its `through` date in the tournament's time zone, the earliest one not yet passed; after the last, the regular fees), and `refund_fee_cents`.
 
 | Function | Who | What it does |
 |---|---|---|
-| `registration_price(p_tournament, p_event_count)` → int | Anyone | Price in cents |
-| `start_registration(p_tournament, p_player, p_entries)` → jsonb | Anyone, while status is `registration` | `p_player`: `{first_name, last_name, email, phone, sms_opt_in, gender, birth_date, dupr_id, dupr_doubles, dupr_singles, self_rating, discount_code, waiver_accepted, answers}`; `answers`: `[{question_id, answer}]`, a string or (for `choices`) an array. `p_entries`: `[{event_id, partner_name, partner_email, pay_for_partner}]`. Creates a pending registration and returns `{registration_id, amount_cents, status, waitlisted}` (free ones are paid immediately) |
+| `registration_price(p_tournament, p_event_count)` → int | Anyone | Price in cents now for this many events, in divisions that may be the included one |
+| `start_registration(p_tournament, p_player, p_entries)` → jsonb | Anyone, while status is `registration` | `p_player`: `{first_name, last_name, email, phone, sms_opt_in, gender, birth_date, dupr_id, dupr_doubles, dupr_singles, self_rating, discount_code, waiver_accepted, terms_accepted, answers}` (`terms_accepted` must be true unless tournament staff register the player); players can register while registration is open (status `registration`, or `live` with `registration_reopened`, until `registration_closes_at`), staff any time until the tournament is complete; `answers`: `[{question_id, answer}]`, a string or (for `choices`) an array. `p_entries`: `[{event_id, partner_name, partner_email, pay_for_partner}]`. Creates a pending registration and returns `{registration_id, amount_cents, status, waitlisted}` (free ones are paid immediately) |
 | `partner_paid_events(p_tournament, p_email)` → `[{event_id}]` | Anyone | Events whose entry a partner already paid for this email (the sign-up form shows them as paid) |
 | `get_registration(p_registration)` → jsonb | Anyone with the id | Status, amount, and each event's team or who they're waiting for |
 | `pair_registrations(p_event, p_registration_a, p_registration_b)` → team | Staff | Make a team from two paid players whose partner details didn't match |

@@ -42,7 +42,7 @@ describe('registration rules', () => {
       return asRole(db, 'anon', () =>
         one(db, 'select public.start_registration($1, $2::jsonb, $3::jsonb) as r', [
           tournamentId,
-          JSON.stringify({ first_name: 'Pat', last_name: 'Ray', email: `${Math.random()}@x.test`, dupr_id: Math.random().toString(36).slice(2, 8).toUpperCase(), ...player }),
+          JSON.stringify({ terms_accepted: true, first_name: 'Pat', last_name: 'Ray', email: `${Math.random()}@x.test`, dupr_id: Math.random().toString(36).slice(2, 8).toUpperCase(), ...player }),
           JSON.stringify([{ event_id: eventId, partner_name: 'Sam', partner_email: 'sam@x.test' }]),
         ]),
       );

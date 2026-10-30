@@ -38,7 +38,7 @@ async function openTournament() {
 /** Registers as an anonymous visitor (the public form) and pays at checkout. */
 async function registerAndPay(tournamentId: string, email: string, entries: { event_id: string; partner_email?: string }[], code?: string) {
   await actAs(db, null);
-  const player = { first_name: email.split('@')[0], last_name: 'Player', email, phone: null, sms_opt_in: false, dupr_doubles: 3.5, dupr_id: Math.random().toString(36).slice(2, 8).toUpperCase(), discount_code: code };
+  const player = { first_name: email.split('@')[0], last_name: 'Player', email, phone: null, sms_opt_in: false, dupr_doubles: 3.5, dupr_id: Math.random().toString(36).slice(2, 8).toUpperCase(), discount_code: code, terms_accepted: true };
   const reg = await asRole(db, 'anon', async () =>
     (
       await one(db, 'select public.start_registration($1, $2::jsonb, $3::jsonb) as r', [

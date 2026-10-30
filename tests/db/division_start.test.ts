@@ -65,16 +65,25 @@ describe('starting a division', () => {
     expect(await liveMatches(db, tournamentId)).toHaveLength(2);
   });
 
-  it('needs a schedule, and opens the tournament if it isn’t live yet', async () => {
+  it('builds the schedule when it starts, and opens the tournament if it isn’t live yet', async () => {
     const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START });
     await db.query(`update public.tournaments set status = 'registration', setup_paid_at = now() where id = $1`, [tournamentId]);
     const eventId = await addEvent(db, tournamentId, 'Open');
-    await expect(start(eventId)).rejects.toThrow(/Build this division/);
+    await expect(start(eventId)).rejects.toThrow(/at least 2 teams/);
     for (let i = 1; i <= 2; i++) await checkIn(db, await addPair(db, eventId, [`T${i}a`, `T${i}b`], i));
-    await buildSchedule(db, eventId);
     await start(eventId);
     expect((await one(db, 'select status from public.tournaments where id = $1', [tournamentId])).status).toBe('live');
     expect(await liveMatches(db, tournamentId)).toHaveLength(1);
+  });
+
+  it('starts a schedule built ahead of time as it is', async () => {
+    const { tournamentId } = await createLiveTournament(db, { courts: 4, start: START });
+    const eventId = await addEvent(db, tournamentId, 'Open');
+    for (let i = 1; i <= 2; i++) await checkIn(db, await addPair(db, eventId, [`T${i}a`, `T${i}b`], i));
+    await buildSchedule(db, eventId);
+    const built = await rows(db, 'select id from public.matches where event_id = $1 order by id', [eventId]);
+    await start(eventId);
+    expect(await rows(db, 'select id from public.matches where event_id = $1 order by id', [eventId])).toEqual(built);
   });
 
   it('gives a team that hasn’t checked in the round-1 sit-out, and texts its players', async () => {
