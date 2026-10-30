@@ -43,8 +43,8 @@ import {
   toZonedInput,
 } from '@/lib/format';
 import { isYoutubeUrl } from '@/lib/youtube';
-import { SaveAllProvider, useSaveAll, useUnsaved } from './SaveAll';
-import { AboutCard, DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SaveState, SharingCard } from './SetupCards';
+import { SaveAllProvider, useSaveAll, useUnsaved, useUnsavedSections } from './SaveAll';
+import { AboutCard, DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SettingsGroup, SharingCard } from './SetupCards';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import type {
   BracketType,
@@ -98,31 +98,32 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-      {!draft && <h2 className="text-4xl">Settings</h2>}
-      <StatusTrack tournament={data.tournament} events={data.events} onChanged={reload} />
-      {draft && <OpenRegistration tournament={data.tournament} divisions={data.events.length} />}
+      <SetupHeader tournament={data.tournament} events={data.events} onChanged={reload} />
       <Steps step={step} divisions={data.events.length} onStep={go} />
 
       {/* Both steps stay mounted, so switching keeps what's typed. */}
       <SaveAllProvider>
-        <section className={`flex flex-col gap-4 ${step === 'settings' ? '' : 'hidden'}`}>
+        <section className={step === 'settings' ? 'flex flex-col' : 'hidden'}>
           <SettingsCard
             key={`details-${data.tournament.id}`}
             tournament={data.tournament}
             courtCount={data.courts.length}
             startHere={draft}
-            onChanged={reload}
           />
-          <AboutCard key={`about-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
-          <PricesCard key={`prices-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
+          <AboutCard key={`about-${data.tournament.id}`} tournament={data.tournament} />
+          <PricesCard key={`prices-${data.tournament.id}`} tournament={data.tournament} />
           <RegistrationCard key={`reg-${data.tournament.id}`} tournament={data.tournament} onChanged={reload} />
-          <QuestionsCard tournament={data.tournament} />
-          <DiscountCodesCard tournament={data.tournament} />
-          <FeesCard tournament={data.tournament} onChanged={reload} />
-          <SharingCard tournament={data.tournament} />
-          <StreamsCard tournament={data.tournament} courts={data.courts} onChanged={reload} />
-          <ChampionshipCard key={`champ-${data.tournament.id}`} tournament={data.tournament} courts={data.courts} onChanged={reload} />
+          {/* Optional: folded to a line each. */}
+          <div className="mt-2 border-b border-border">
+            <QuestionsCard tournament={data.tournament} />
+            <DiscountCodesCard tournament={data.tournament} />
+            <FeesCard tournament={data.tournament} onChanged={reload} />
+            <SharingCard tournament={data.tournament} />
+            <StreamsCard tournament={data.tournament} courts={data.courts} />
+            <ChampionshipCard key={`champ-${data.tournament.id}`} tournament={data.tournament} courts={data.courts} />
+          </div>
           <ContinueToDivisions onDone={() => (reload(), go('divisions'))} />
+          <SaveBar onSaved={reload} />
         </section>
       </SaveAllProvider>
 
@@ -164,144 +165,169 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
 /** Setup's two steps: the tournament's settings, then its divisions. */
 function Steps({ step, divisions, onStep }: { step: Step; divisions: number; onStep: (step: Step) => void }) {
   const steps: [Step, string][] = [
-    ['settings', 'Tournament settings'],
-    ['divisions', divisions ? `Divisions (${divisions})` : 'Divisions'],
+    ['settings', 'Tournament'],
+    ['divisions', divisions ? `Divisions · ${divisions}` : 'Divisions'],
   ];
   return (
-    <nav className="grid grid-cols-2 gap-2" aria-label="Setup steps">
-      {steps.map(([key, label], i) => (
+    <nav className="flex gap-1 self-start rounded-full bg-surface-2 p-1" aria-label="Setup steps">
+      {steps.map(([key, label]) => (
         <button
           key={key}
           onClick={() => onStep(key)}
           aria-current={step === key ? 'step' : undefined}
-          className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left ${
-            step === key ? 'bg-accent text-accent-text' : 'bg-surface-2 text-muted hover:text-text'
+          className={`h-11 rounded-full px-5 font-semibold whitespace-nowrap ${
+            step === key ? 'bg-accent text-accent-text' : 'text-muted hover:text-text'
           }`}
         >
-          <span
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full font-display text-lg font-bold ${
-              step === key ? 'bg-accent-text/20' : 'bg-surface'
-            }`}
-            aria-hidden
-          >
-            {i + 1}
-          </span>
-          <span className="font-semibold leading-tight">{label}</span>
+          {label}
         </button>
       ))}
     </nav>
   );
 }
 
-/** The end of the settings step: save every card with changes, then on to the divisions. */
+/** The end of the settings step: save anything unsaved, then on to the divisions. */
 function ContinueToDivisions({ onDone }: { onDone: () => void }) {
   const saveAll = useSaveAll();
   const { busy, error, run } = useAction();
   return (
-    <div className="flex flex-col gap-2 pt-2">
-      <Button variant="primary" className="h-14 w-full px-8 text-lg sm:w-auto sm:self-end" disabled={busy} onClick={() => run(saveAll, onDone)}>
-        {busy ? 'Saving…' : 'Save and continue to divisions'} <Icon name="arrow" />
+    <div className="flex flex-col items-end gap-2 pt-8">
+      <Button variant="primary" className="w-full sm:w-auto" disabled={busy} onClick={() => run(saveAll, onDone)}>
+        {busy ? 'Saving…' : 'Continue to divisions'} <Icon name="arrow" />
       </Button>
       <ErrorText>{error}</ErrorText>
     </div>
   );
 }
 
-/** The end of a draft: open registration, and the day's tabs take over from Setup. */
-function OpenRegistration({ tournament, divisions }: { tournament: Tournament; divisions: number }) {
-  const router = useRouter();
+const sectionNames: Record<string, string> = {
+  details: 'Basics',
+  about: 'About',
+  prices: 'Prices',
+  registration: 'Registration',
+  streams: 'Live streams',
+  championship: 'Championship courts',
+};
+
+/** One Save for every section: shows while any of them has unsaved changes, and briefly after saving. */
+function SaveBar({ onSaved }: { onSaved: () => void }) {
+  const unsaved = useUnsavedSections();
+  const saveAll = useSaveAll();
   const { busy, error, run } = useAction();
-  const ready = divisions > 0 && !!tournament.name.trim();
+  const [justSaved, setJustSaved] = useState(false);
+  const names = [...unsaved].map((n) => sectionNames[n] ?? n);
+  if (names.length === 0 && !justSaved) return null;
   return (
-    <Card className="flex flex-col gap-3 border-2 border-accent p-5">
-      <div>
-        <h2 className="text-2xl">Done setting up?</h2>
-        <p className="text-muted">
-          Set up the tournament and its divisions below, then open registration to make it public. Check-in, Players and the
-          rest show up then, and these settings move to <b>More → Settings</b>, where you can still change them.
+    <div className="sticky bottom-0 z-20 -mx-4 mt-6 border-t border-border bg-surface/95 px-4 py-3 backdrop-blur" role="status">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className={`min-w-0 ${names.length ? '' : 'text-live'}`}>
+          {names.length ? (
+            <>
+              <span className="font-semibold">Unsaved changes</span>
+              <span className="text-muted"> · {names.join(', ')}</span>
+            </>
+          ) : (
+            'Saved.'
+          )}
         </p>
+        {names.length > 0 && (
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() =>
+              run(saveAll, () => {
+                setJustSaved(true);
+                setTimeout(() => setJustSaved(false), 2500);
+                onSaved();
+              })
+            }
+          >
+            {busy ? 'Saving…' : 'Save changes'}
+          </Button>
+        )}
       </div>
-      {!ready && <p className="text-sm text-called">Add at least one division first.</p>}
-      <Button
-        variant="primary"
-        className="self-start"
-        disabled={busy || !ready}
-        onClick={() => run(() => setTournamentStatus(tournament.id, 'registration'), () => router.push(`/t/${tournament.id}`))}
-      >
-        Save and open registration
-      </Button>
       <ErrorText>{error}</ErrorText>
-    </Card>
+    </div>
   );
 }
 
-const stages: { value: TournamentStatus; label: string; hint: string; current: string; dot: string }[] = [
-  { value: 'draft', label: 'Draft', hint: 'Only directors see it', current: 'bg-surface-2 ring-2 ring-text', dot: 'bg-text' },
-  { value: 'registration', label: 'Registration', hint: 'Public; players sign up', current: 'bg-called-soft text-called ring-2 ring-called', dot: 'bg-called' },
-  { value: 'live', label: 'Live', hint: 'Divisions playing', current: 'bg-live-soft text-live ring-2 ring-live', dot: 'bg-live' },
-  { value: 'complete', label: 'Complete', hint: 'Results stay public', current: 'bg-info-soft text-info ring-2 ring-info', dot: 'bg-info' },
+const stages: { value: TournamentStatus; label: string; hint: string; dot: string }[] = [
+  { value: 'draft', label: 'Draft', hint: 'Only directors can see it.', dot: 'bg-text' },
+  { value: 'registration', label: 'Registration', hint: 'Public: players can sign up. It goes live when you start the first division at Check-in.', dot: 'bg-called' },
+  { value: 'live', label: 'Live', hint: 'Divisions are playing.', dot: 'bg-live' },
+  { value: 'complete', label: 'Complete', hint: 'Results stay public.', dot: 'bg-info' },
 ];
 
 /**
- * Where the tournament is. It moves along on its own: opening registration
- * (above, in a draft), starting the first division, and here, marking it
- * complete once every division is final.
+ * Where the tournament is, and its next step. It moves along on its own:
+ * opening registration (here, in a draft), starting the first division, and
+ * here again, marking it complete once every division is final.
  */
-function StatusTrack({ tournament, events, onChanged }: { tournament: Tournament; events: TournamentEvent[]; onChanged: () => void }) {
+function SetupHeader({ tournament, events, onChanged }: { tournament: Tournament; events: TournamentEvent[]; onChanged: () => void }) {
+  const router = useRouter();
   const { busy, error, run } = useAction();
   const at = stages.findIndex((s) => s.value === tournament.status);
   const allFinal = events.length > 0 && events.every((e) => e.finalized_at);
-  return (
-    <Card className="flex flex-col gap-3 p-4">
-      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Tournament status">
-        {stages.map((s, i) => (
-          <li
-            key={s.value}
-            aria-current={i === at ? 'step' : undefined}
-            className={`flex items-start gap-2 rounded-xl px-3 py-2 ${i === at ? s.current : i < at ? 'text-text' : 'text-muted'}`}
-          >
-            {i < at ? (
-              <Icon name="check" className="mt-0.5 h-5 w-5 text-live" />
-            ) : (
-              <span className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${i === at ? s.dot : 'border-2 border-border'}`} aria-hidden />
-            )}
-            <span>
-              <span className="block font-semibold">{s.label}</span>
-              <span className={`block text-xs ${i === at ? '' : 'text-muted'}`}>{s.hint}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-      {tournament.status === 'registration' && (
-        <p className="text-sm text-muted">It goes live when you start the first division at Check-in.</p>
-      )}
-      {tournament.status === 'live' &&
-        (allFinal ? (
-          <Button
-            className="self-start"
-            disabled={busy}
-            onClick={() =>
-              confirm('Mark the tournament complete? Results stay public.') && run(() => setTournamentStatus(tournament.id, 'complete'), onChanged)
-            }
-          >
-            Mark tournament complete
-          </Button>
-        ) : (
-          <p className="text-sm text-muted">Mark it complete once every division’s results are final.</p>
-        ))}
-      {tournament.status === 'complete' && (
+  const ready = events.length > 0 && !!tournament.name.trim();
+
+  let action: React.ReactNode = null;
+  let note = stages[at].hint;
+  if (tournament.status === 'draft') {
+    note = ready
+      ? 'Only directors can see it. Open registration when you’re ready; Check-in and Players show up then, and this page moves to More → Settings.'
+      : 'Only directors can see it. Set up the tournament and add a division, then open registration.';
+    action = (
+      <Button
+        variant="primary"
+        disabled={busy || !ready}
+        onClick={() => run(() => setTournamentStatus(tournament.id, 'registration'), () => router.push(`/t/${tournament.id}`))}
+      >
+        Open registration
+      </Button>
+    );
+  } else if (tournament.status === 'live') {
+    if (allFinal) {
+      action = (
         <Button
-          variant="ghost"
-          size="sm"
-          className="self-start"
           disabled={busy}
-          onClick={() => run(() => setTournamentStatus(tournament.id, 'live'), onChanged)}
+          onClick={() =>
+            confirm('Mark the tournament complete? Results stay public.') && run(() => setTournamentStatus(tournament.id, 'complete'), onChanged)
+          }
         >
-          Reopen the tournament
+          Mark complete
         </Button>
-      )}
-      <ErrorText>{error}</ErrorText>
-    </Card>
+      );
+    } else note = 'Divisions are playing. Mark it complete once every division’s results are final.';
+  } else if (tournament.status === 'complete') {
+    action = (
+      <Button variant="ghost" disabled={busy} onClick={() => run(() => setTournamentStatus(tournament.id, 'live'), onChanged)}>
+        Reopen
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 rounded-2xl border border-border p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-col gap-2">
+        {tournament.status !== 'draft' && <h2 className="text-3xl">Settings</h2>}
+        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" aria-label="Tournament status">
+          {stages.map((s, i) => (
+            <li key={s.value} aria-current={i === at ? 'step' : undefined} className="flex items-center gap-2">
+              {i > 0 && <span className={`h-px w-5 ${i <= at ? 'bg-text' : 'bg-border'}`} aria-hidden />}
+              {i < at ? (
+                <Icon name="check" className="h-4 w-4 text-live" />
+              ) : (
+                <span className={`h-2.5 w-2.5 rounded-full ${i === at ? s.dot : 'border-2 border-border'}`} aria-hidden />
+              )}
+              <span className={i === at ? 'font-semibold' : 'text-muted'}>{s.label}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="text-sm text-muted">{note}</p>
+        <ErrorText>{error}</ErrorText>
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
   );
 }
 
@@ -310,12 +336,10 @@ function SettingsCard({
   tournament,
   courtCount,
   startHere = false,
-  onChanged,
 }: {
   tournament: Tournament;
   courtCount?: number;
   startHere?: boolean;
-  onChanged: () => void;
 }) {
   // new_tournament's placeholder name: ask for the real one.
   const unnamed = tournament.name === 'New tournament';
@@ -332,9 +356,9 @@ function SettingsCard({
     location: tournament.location ?? '',
     dupr_score_type: tournament.dupr_score_type,
   });
-  const { busy, error, run } = useAction();
-  const [saved, setSaved] = useState(false);
-  const { dirty, commit } = useUnsaved('details', { form, courts }, async () => {
+  useUnsaved('details', { form, courts }, async () => {
+    if (!form.name.trim()) throw new Error('Give the tournament a name.');
+    if (!form.starts_on) throw new Error('Pick the tournament’s date.');
     await updateTournament(tournament.id, {
       ...form,
       name: form.name.trim(),
@@ -351,27 +375,17 @@ function SettingsCard({
   });
 
   return (
-    <Card className={startHere ? 'border-2 border-text p-5' : 'p-4'}>
-      {startHere ? (
-        <div className="mb-4">
-          <h2 className="text-3xl">Start here</h2>
-          <p className="text-muted">
-            {tournament.is_demo
-              ? 'A practice tournament dated today, so you can run it right away. Rename it if you like, then fill the division with mock players and build its schedule.'
-              : 'Name your tournament and set its date and venue. Everything else is filled in; change it in the cards below.'}
-          </p>
-        </div>
-      ) : (
-        <h2 className="mb-3 text-xl">Tournament details</h2>
-      )}
-      <form
-        className="grid gap-3 sm:grid-cols-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSaved(false);
-          run(commit, () => (setSaved(true), onChanged()));
-        }}
-      >
+    <SettingsGroup
+      title={startHere ? 'Start here' : 'Basics'}
+      description={
+        startHere
+          ? tournament.is_demo
+            ? 'A practice tournament dated today, so you can run it right away. Rename it if you like, then fill the division with mock players and build its schedule.'
+            : 'Name your tournament and set its date and venue. Everything else is filled in; change it below.'
+          : 'Name, date, venue and how the day runs.'
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name">
           <Input required value={form.name} placeholder="Fall Classic" onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
@@ -404,7 +418,7 @@ function SettingsCard({
             )}
           </Select>
         </Field>
-        <div className="grid grid-cols-2 gap-3 sm:col-span-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:col-span-2 sm:grid-cols-4">
           <Field label="No-show (min)" hint="Flag a court after">
             <Input {...num('no_show_minutes')} />
           </Field>
@@ -425,27 +439,20 @@ function SettingsCard({
             />
           </Field>
         </div>
-        <div className="flex flex-col gap-2 sm:col-span-2">
-          <ErrorText>{error}</ErrorText>
-          <SaveState saved={saved} dirty={dirty} />
-          <Button type="submit" variant={startHere ? 'primary' : 'secondary'} disabled={busy}>
-            Save tournament details
-          </Button>
-        </div>
-      </form>
-    </Card>
+      </div>
+    </SettingsGroup>
   );
 }
 
 /** YouTube links: one for the whole event, and one per streamed court. */
-function StreamsCard({ tournament, courts, onChanged }: { tournament: Tournament; courts: CourtBoardRow[]; onChanged: () => void }) {
+function StreamsCard({ tournament, courts }: { tournament: Tournament; courts: CourtBoardRow[] }) {
   const [main, setMain] = useState(tournament.stream_url ?? '');
   const [perCourt, setPerCourt] = useState<Record<string, { name: string; url: string }>>(() =>
     Object.fromEntries(courts.map((c) => [c.court_id, { name: c.court_name, url: c.stream_url ?? '' }])),
   );
-  const { busy, error, run } = useAction();
-  const [saved, setSaved] = useState(false);
-  const { dirty, commit } = useUnsaved('streams', { main, perCourt }, async () => {
+  const bad = [main, ...Object.values(perCourt).map((c) => c.url)].find((u) => u.trim() && !isYoutubeUrl(u.trim()));
+  useUnsaved('streams', { main, perCourt }, async () => {
+    if (bad) throw new Error(`“${bad}” isn’t a YouTube link.`);
     await updateTournament(tournament.id, { stream_url: main.trim() || null });
     for (const c of courts) {
       const next = perCourt[c.court_id];
@@ -454,48 +461,35 @@ function StreamsCard({ tournament, courts, onChanged }: { tournament: Tournament
       if (next.name.trim() && next.name.trim() !== c.court_name) await renameCourt(c.court_id, next.name.trim());
     }
   });
-  const bad = [main, ...Object.values(perCourt).map((c) => c.url)].find((u) => u.trim() && !isYoutubeUrl(u.trim()));
+  const streamed = (main.trim() ? 1 : 0) + Object.values(perCourt).filter((c) => c.url.trim()).length;
 
   return (
-    <Card className="p-4">
-      <h2 className="text-xl">Live streams</h2>
-      <p className="mb-3 text-xs text-muted">
-        Paste YouTube links. Players see “Watch live” on the tournament page, and their court’s stream when their match is on it.
-      </p>
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSaved(false);
-          run(commit, () => (setSaved(true), onChanged()));
-        }}
-      >
-        <Field label="Main stream">
-          <Input placeholder="https://youtube.com/live/…" value={main} onChange={(e) => setMain(e.target.value)} />
-        </Field>
-        {courts.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium">Courts</span>
-            {courts.map((c) => {
-              const v = perCourt[c.court_id] ?? { name: c.court_name, url: '' };
-              const update = (patch: Partial<typeof v>) => setPerCourt((p) => ({ ...p, [c.court_id]: { ...v, ...patch } }));
-              return (
-                <div key={c.court_id} className="grid grid-cols-[6.5rem_1fr] gap-2">
-                  <Input aria-label="Court name" value={v.name} onChange={(e) => update({ name: e.target.value })} />
-                  <Input aria-label={`${c.court_name} stream`} placeholder="No stream" value={v.url} onChange={(e) => update({ url: e.target.value })} />
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {bad && <p className="text-xs text-late">“{bad}” isn’t a YouTube link.</p>}
-        <ErrorText>{error}</ErrorText>
-        <SaveState saved={saved} dirty={dirty} />
-        <Button type="submit" disabled={busy || !!bad}>
-          Save streams
-        </Button>
-      </form>
-    </Card>
+    <SettingsGroup
+      title="Live streams"
+      foldable
+      summary={streamed ? `${streamed} stream${streamed === 1 ? '' : 's'}` : 'None'}
+      description="Paste YouTube links. Players see “Watch live” on the tournament page, and their court’s stream when their match is on it. Court names are set here too."
+    >
+      <Field label="Main stream">
+        <Input placeholder="https://youtube.com/live/…" value={main} onChange={(e) => setMain(e.target.value)} />
+      </Field>
+      {courts.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Courts</span>
+          {courts.map((c) => {
+            const v = perCourt[c.court_id] ?? { name: c.court_name, url: '' };
+            const update = (patch: Partial<typeof v>) => setPerCourt((p) => ({ ...p, [c.court_id]: { ...v, ...patch } }));
+            return (
+              <div key={c.court_id} className="grid grid-cols-[6.5rem_1fr] gap-2">
+                <Input aria-label="Court name" value={v.name} onChange={(e) => update({ name: e.target.value })} />
+                <Input aria-label={`${c.court_name} stream`} placeholder="No stream" value={v.url} onChange={(e) => update({ url: e.target.value })} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {bad && <p className="text-sm text-late">“{bad}” isn’t a YouTube link.</p>}
+    </SettingsGroup>
   );
 }
 
@@ -508,7 +502,7 @@ const championshipRoundChoices: { label: string; keys: RoundKey[] }[] = [
 ];
 
 /** Featured courts (commentary, a stream) that get the big bracket rounds first. */
-function ChampionshipCard({ tournament, courts, onChanged }: { tournament: Tournament; courts: CourtBoardRow[]; onChanged: () => void }) {
+function ChampionshipCard({ tournament, courts }: { tournament: Tournament; courts: CourtBoardRow[] }) {
   const [ranks, setRanks] = useState<Record<string, number | null>>(() =>
     Object.fromEntries(courts.map((c) => [c.court_id, c.championship_rank])),
   );
@@ -518,10 +512,8 @@ function ChampionshipCard({ tournament, courts, onChanged }: { tournament: Tourn
     wait: tournament.championship_wait_minutes?.toString() ?? '',
     finalWait: tournament.final_wait_minutes?.toString() ?? '',
   });
-  const { busy, error, run } = useAction();
-  const [saved, setSaved] = useState(false);
   const minutes = (value: string) => (value.trim() === '' ? null : Math.max(1, Math.round(Number(value))));
-  const { dirty, commit } = useUnsaved('championship', { ranks, form }, async () => {
+  useUnsaved('championship', { ranks, form }, async () => {
     await updateTournament(tournament.id, {
       championship_mode: form.mode,
       championship_rounds: form.rounds,
@@ -536,102 +528,89 @@ function ChampionshipCard({ tournament, courts, onChanged }: { tournament: Tourn
   const hasRound = (keys: RoundKey[]) => keys.every((k) => form.rounds.includes(k));
   const toggleRound = (keys: RoundKey[], on: boolean) =>
     setForm((f) => ({ ...f, rounds: on ? [...new Set([...f.rounds, ...keys])] : f.rounds.filter((r) => !keys.includes(r)) }));
+  const featured = Object.values(ranks).filter((r) => r !== null).length;
 
   return (
-    <Card className="p-4">
-      <h2 className="text-xl">Championship courts</h2>
-      <p className="mb-3 text-xs text-muted">
-        Your featured courts, e.g. the one with commentary. They play pool matches until the big rounds, then get those first.
-      </p>
-      <form
-        className="flex flex-col gap-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSaved(false);
-          run(commit, () => (setSaved(true), onChanged()));
-        }}
-      >
-        {courts.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium">Courts</span>
-            {courts.map((c) => (
-              <div key={c.court_id} className="grid grid-cols-[6.5rem_1fr] items-center gap-2">
-                <span className="text-sm">{c.court_name}</span>
-                <Select
-                  aria-label={`${c.court_name} championship rank`}
-                  value={ranks[c.court_id] ?? ''}
-                  onChange={(e) => setRanks((r) => ({ ...r, [c.court_id]: e.target.value ? Number(e.target.value) : null }))}
-                >
-                  <option value="">Not championship</option>
-                  {courts.map((_, i) => (
-                    <option key={i} value={i + 1}>
-                      {championshipRankLabel(i + 1)}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2 text-sm font-medium">When the championship courts are busy</legend>
-          {championshipModes.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              aria-pressed={form.mode === m.value}
-              onClick={() => setForm((f) => ({ ...f, mode: m.value }))}
-              className={`rounded-lg border px-3 py-2 text-left ${
-                form.mode === m.value ? 'border-accent bg-accent-soft' : 'border-border hover:bg-surface-2'
-              }`}
-            >
-              <div className="text-sm font-medium">{m.label}</div>
-              <div className="text-xs text-muted">{m.hint}</div>
-            </button>
+    <SettingsGroup
+      title="Championship courts"
+      foldable
+      summary={featured ? `${featured} court${featured === 1 ? '' : 's'}` : 'None'}
+      description="Your featured courts, e.g. the one with commentary. They play pool matches until the big rounds, then get those first."
+    >
+      {courts.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Courts</span>
+          {courts.map((c) => (
+            <div key={c.court_id} className="grid grid-cols-[6.5rem_1fr] items-center gap-2">
+              <span className="text-sm">{c.court_name}</span>
+              <Select
+                aria-label={`${c.court_name} championship rank`}
+                value={ranks[c.court_id] ?? ''}
+                onChange={(e) => setRanks((r) => ({ ...r, [c.court_id]: e.target.value ? Number(e.target.value) : null }))}
+              >
+                <option value="">Not championship</option>
+                {courts.map((_, i) => (
+                  <option key={i} value={i + 1}>
+                    {championshipRankLabel(i + 1)}
+                  </option>
+                ))}
+              </Select>
+            </div>
           ))}
-        </fieldset>
-
-        {form.mode === 'wait' && (
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Wait at most (min)" hint="Blank = no limit">
-              <Input type="number" min={1} inputMode="numeric" value={form.wait} onChange={(e) => setForm((f) => ({ ...f, wait: e.target.value }))} />
-            </Field>
-            <Field label="Finals wait (min)" hint="For the Main court">
-              <Input
-                type="number"
-                min={1}
-                inputMode="numeric"
-                value={form.finalWait}
-                onChange={(e) => setForm((f) => ({ ...f, finalWait: e.target.value }))}
-              />
-            </Field>
-          </div>
-        )}
-
-        <div className="flex flex-col">
-          <span className="text-sm font-medium">Rounds that go there</span>
-          <div className="grid grid-cols-2">
-            {championshipRoundChoices.map((r) => (
-              <Check key={r.label} label={r.label} checked={hasRound(r.keys)} onChange={(on) => toggleRound(r.keys, on)} />
-            ))}
-          </div>
         </div>
+      )}
 
-        <ErrorText>{error}</ErrorText>
-        <SaveState saved={saved} dirty={dirty} />
-        <Button type="submit" disabled={busy}>
-          Save championship courts
-        </Button>
-      </form>
-    </Card>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-sm font-medium">When the championship courts are busy</legend>
+        {championshipModes.map((m) => (
+          <button
+            key={m.value}
+            type="button"
+            aria-pressed={form.mode === m.value}
+            onClick={() => setForm((f) => ({ ...f, mode: m.value }))}
+            className={`rounded-lg border px-3 py-2 text-left ${
+              form.mode === m.value ? 'border-accent bg-accent-soft' : 'border-border hover:bg-surface-2'
+            }`}
+          >
+            <div className="text-sm font-medium">{m.label}</div>
+            <div className="text-xs text-muted">{m.hint}</div>
+          </button>
+        ))}
+      </fieldset>
+
+      {form.mode === 'wait' && (
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Wait at most (min)" hint="Blank = no limit">
+            <Input type="number" min={1} inputMode="numeric" value={form.wait} onChange={(e) => setForm((f) => ({ ...f, wait: e.target.value }))} />
+          </Field>
+          <Field label="Finals wait (min)" hint="For the Main court">
+            <Input
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={form.finalWait}
+              onChange={(e) => setForm((f) => ({ ...f, finalWait: e.target.value }))}
+            />
+          </Field>
+        </div>
+      )}
+
+      <div className="flex flex-col">
+        <span className="text-sm font-medium">Rounds that go there</span>
+        <div className="grid grid-cols-2">
+          {championshipRoundChoices.map((r) => (
+            <Check key={r.label} label={r.label} checked={hasRound(r.keys)} onChange={(on) => toggleRound(r.keys, on)} />
+          ))}
+        </div>
+      </div>
+    </SettingsGroup>
   );
 }
 
 const dollars = (cents: number | null) => (cents === null ? '' : (cents / 100).toFixed(2));
 const cents = (value: string) => (value.trim() === '' ? null : Math.round(Number(value) * 100));
 
-function PricesCard({ tournament, onChanged }: { tournament: Tournament; onChanged: () => void }) {
+function PricesCard({ tournament }: { tournament: Tournament }) {
   const [form, setForm] = useState({
     entry: dollars(tournament.entry_fee_cents),
     extra: dollars(tournament.extra_event_fee_cents),
@@ -640,9 +619,7 @@ function PricesCard({ tournament, onChanged }: { tournament: Tournament; onChang
     earlyUntil: tournament.early_until ? toLocalInput(tournament.early_until).slice(0, 10) : '',
     refundFee: dollars(tournament.refund_fee_cents),
   });
-  const { busy, error, run } = useAction();
-  const [saved, setSaved] = useState(false);
-  const { dirty, commit } = useUnsaved('prices', form, () =>
+  useUnsaved('prices', form, () =>
     updateTournament(tournament.id, {
       entry_fee_cents: cents(form.entry) ?? 0,
       extra_event_fee_cents: cents(form.extra) ?? 0,
@@ -664,44 +641,28 @@ function PricesCard({ tournament, onChanged }: { tournament: Tournament; onChang
   });
 
   return (
-    <Card className="p-4">
-      <h2 className="text-xl">Prices</h2>
-      <p className="mb-3 text-xs text-muted">All-in prices players see: bake processing and texting costs in.</p>
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSaved(false);
-          run(commit, () => (setSaved(true), onChanged()));
-        }}
-      >
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Field label="First event ($)">
-            <Input {...money('entry')} />
-          </Field>
-          <Field label="Each extra event ($)">
-            <Input {...money('extra')} />
-          </Field>
-          <Field label="Early first event ($)" hint="Optional">
-            <Input {...money('earlyEntry', '')} />
-          </Field>
-          <Field label="Early extra event ($)" hint="Optional">
-            <Input {...money('earlyExtra', '')} />
-          </Field>
-          <Field label="Early prices through">
-            <Input type="date" value={form.earlyUntil} onChange={(e) => setForm({ ...form, earlyUntil: e.target.value })} />
-          </Field>
-          <Field label="Kept on refunds ($)">
-            <Input {...money('refundFee')} />
-          </Field>
-        </div>
-        <ErrorText>{error}</ErrorText>
-        <SaveState saved={saved} dirty={dirty} />
-        <Button type="submit" disabled={busy}>
-          Save prices
-        </Button>
-      </form>
-    </Card>
+    <SettingsGroup title="Prices" description="All-in prices players see: bake processing and texting costs in. Early prices are optional.">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Field label="First event ($)">
+          <Input {...money('entry')} />
+        </Field>
+        <Field label="Each extra event ($)">
+          <Input {...money('extra')} />
+        </Field>
+        <Field label="Early first event ($)" hint="Optional">
+          <Input {...money('earlyEntry', '')} />
+        </Field>
+        <Field label="Early extra event ($)" hint="Optional">
+          <Input {...money('earlyExtra', '')} />
+        </Field>
+        <Field label="Early prices through">
+          <Input type="date" value={form.earlyUntil} onChange={(e) => setForm({ ...form, earlyUntil: e.target.value })} />
+        </Field>
+        <Field label="Kept on refunds ($)">
+          <Input {...money('refundFee')} />
+        </Field>
+      </div>
+    </SettingsGroup>
   );
 }
 

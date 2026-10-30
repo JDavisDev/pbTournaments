@@ -23,6 +23,7 @@ export default function Home() {
   const router = useRouter();
 
   if (!isBackendConfigured) return <ConnectNotice />;
+  const liveNow = (live.data ?? []).filter((t) => t.status === 'live');
 
   return (
     <>
@@ -69,7 +70,28 @@ export default function Home() {
         </p>
         <ErrorText>{create.error}</ErrorText>
       </section>
-      <ListingsNearYou />
+      {liveNow.length > 0 && (
+        <section id="live" className="mb-12">
+          <h2 className="mb-3 text-3xl">Live</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {liveNow.map((t) => (
+              <Link
+                key={t.id}
+                href={`/t/${t.id}`}
+                className="flex items-start justify-between gap-2 rounded-2xl border border-border p-4 transition hover:border-text"
+              >
+                <span>
+                  <span className="block font-semibold">{t.name}</span>
+                  <span className="block text-sm text-muted">{formatDate(t.starts_on)}</span>
+                </span>
+                <Badge tone="live">Live</Badge>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+      {/* Tournaments run here with registration open are upcoming too. */}
+      <ListingsNearYou hosted={live.data} />
       {isDemoMode && session !== undefined && (
         <div id="practice" className="scroll-mt-6">
           <DemoCard signedIn={!!session} />
@@ -101,31 +123,6 @@ export default function Home() {
           )}
         </section>
       )}
-
-      <section id="live">
-        <h2 className="mb-3 text-3xl">Happening now</h2>
-        {live.error ? (
-          <Empty>{live.error}</Empty>
-        ) : live.data === undefined ? (
-          <Spinner />
-        ) : live.data.length === 0 ? (
-          <Empty>No tournaments are open or live right now.</Empty>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {live.data.map((t) => (
-              <Link key={t.id} href={`/t/${t.id}`}>
-                <Card className="p-4 transition hover:border-accent">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-semibold">{t.name}</div>
-                    <Badge tone={t.status === 'live' ? 'live' : 'info'}>{t.status === 'live' ? 'Live' : 'Registration'}</Badge>
-                  </div>
-                  <div className="mt-1 text-sm text-muted">{formatDate(t.starts_on)}</div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
     </>
   );
 }

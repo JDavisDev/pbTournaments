@@ -109,7 +109,6 @@ export const {
   getPlatformPricing,
   getTournamentFees,
   getListings,
-  getRecentListings,
   getListing,
   saveListing,
   deleteListing,

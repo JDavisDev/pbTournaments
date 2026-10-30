@@ -333,12 +333,6 @@ const ops: Record<string, Op> = {
        order by starts_on, name limit $3`,
       [state, today, limit],
     ),
-  getRecentListings: (tx, today: string, limit: number) =>
-    all(
-      tx,
-      'select * from public.tournament_listings where last_day >= $1 order by created_at desc limit $2',
-      [today, limit],
-    ),
   getListing: (tx, id: string) => one(tx, 'select * from public.tournament_listings where id = $1', [id]),
   saveListing: async (tx, id: string | null, fields: Row) => {
     if (id) return updateColumns(tx, 'tournament_listings', id, fields, LISTING_COLUMNS);

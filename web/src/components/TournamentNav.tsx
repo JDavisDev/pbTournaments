@@ -9,7 +9,7 @@ import { auth } from '@/lib/auth';
 import { useAction, useLiveTournament, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { isBackendConfigured, isDemoMode } from '@/lib/config';
 import { setViewMode, type ViewMode } from '@/lib/viewMode';
-import { Announcement } from './Announcement';
+import { AnnounceButton, Announcement } from './Announcement';
 import { DemoClock } from './DemoTools';
 import { useMyTeam } from './MatchDay';
 import { ShareDialog } from './ShareDialog';
@@ -93,14 +93,14 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className="mb-8">
       {showDemoBar && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-called/60 px-4 py-3">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-called-soft px-4 py-2.5">
           <p className="text-sm">
             <span className="font-semibold">Demo: </span>
             {view === 'player'
               ? 'you’re seeing what a player sees: their own matches, the schedule and results. No director tools.'
               : 'you’re seeing the director’s tools. Switch to see what a player sees.'}
           </p>
-          <div className="flex gap-1 rounded-full bg-surface-2 p-1" role="radiogroup" aria-label="View as">
+          <div className="flex gap-1 rounded-full bg-surface p-1" role="radiogroup" aria-label="View as">
             {(
               [
                 ['admin', 'View as director'],
@@ -129,23 +129,29 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
           )}
         </div>
       )}
-      {/* On every page of the tournament; directors post one from the Overview. */}
-      {(t.announcement || (staff.data && pathname === base)) && (
-        <div className="mb-5 flex flex-col">
+      {/* On every page of the tournament; directors post one with Announce. */}
+      {t.announcement && (
+        <div className="mb-6">
           <Announcement tournament={t} editable={!!staff.data} onChanged={tournament.reload} />
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Badge tone={statusTone[t.status]}>{statusText[t.status]}</Badge>
         {t.status === 'live' && !t.auto_assign && <Badge tone="called">Paused</Badge>}
-        <span className="text-sm text-muted">{formatDate(t.starts_on)}</span>
+        <span className="text-muted">
+          {formatDate(t.starts_on)}
+          {t.location && ` · ${t.location}`}
+        </span>
         {t.stream_url && <WatchChip url={t.stream_url} label="Watch live" />}
       </div>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-5xl sm:text-7xl">{t.name}</h1>
-        <Button size="sm" onClick={() => setSharing(true)}>
-          <Icon name="share" /> Share
-        </Button>
+        <h1 className="text-5xl sm:text-6xl">{t.name}</h1>
+        <div className="flex gap-2">
+          {staff.data && !t.announcement && <AnnounceButton tournament={t} onChanged={tournament.reload} />}
+          <Button size="sm" onClick={() => setSharing(true)}>
+            <Icon name="share" /> Share
+          </Button>
+        </div>
       </div>
       <ShareDialog open={sharing} onClose={() => setSharing(false)} tournament={t} events={events} />
       <nav className="mt-6 flex gap-6 overflow-x-auto overflow-y-hidden border-b border-border [scrollbar-width:none]">

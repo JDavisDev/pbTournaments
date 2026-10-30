@@ -1,10 +1,11 @@
 'use client';
 
-// Setup sidebar cards: who runs the tournament, registration limits and
+// Settings sections: who runs the tournament, registration limits and
 // extras (waiver, image, close date, refund policy), your own registration
 // questions, and discount codes.
-import { useState } from 'react';
-import { Badge, Button, Card, ErrorText, Field, Input, Select, Textarea } from '@/components/ui';
+import { useState, type ReactNode } from 'react';
+import { Icon } from '@/components/Icon';
+import { Badge, Button, ErrorText, Field, Input, Select, Textarea } from '@/components/ui';
 import {
   addDiscountCode,
   addTournamentStaff,
@@ -27,6 +28,57 @@ import type { RegistrationQuestion, StaffRole, Tournament } from '@/lib/types';
 
 const roleText: Record<StaffRole, string> = { admin: 'Admin', monitor: 'Court monitor' };
 
+const columns = 'md:grid md:grid-cols-[13rem_1fr] md:gap-10';
+
+/**
+ * One group of settings: its title and what it's for on the left (above, on
+ * phones), its fields on the right. `foldable` groups (the optional ones)
+ * close to a line with their summary; their fields stay mounted, so nothing
+ * typed is lost and Save still sees it.
+ */
+export function SettingsGroup({
+  title,
+  description,
+  summary,
+  foldable = false,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  /** A folded group's one line: "2 codes", "Texting on". */
+  summary?: ReactNode;
+  foldable?: boolean;
+  children: ReactNode;
+}) {
+  const body = <div className="flex min-w-0 flex-col gap-4">{children}</div>;
+  if (!foldable) {
+    return (
+      <section className={`flex flex-col gap-4 border-t border-border py-8 first:border-t-0 first:pt-2 ${columns}`}>
+        <div>
+          <h2 className="text-2xl">{title}</h2>
+          {description && <p className="mt-1 text-sm text-muted">{description}</p>}
+        </div>
+        {body}
+      </section>
+    );
+  }
+  return (
+    <details className="group border-t border-border">
+      <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 py-4 [&::-webkit-details-marker]:hidden">
+        <span className={`min-w-0 flex-1 md:items-baseline ${columns}`}>
+          <span className="block font-display text-2xl leading-tight font-bold uppercase">{title}</span>
+          {summary && <span className="block text-muted">{summary}</span>}
+        </span>
+        <Icon name="chevron" className="h-6 w-6 shrink-0 text-muted transition-transform group-open:rotate-180" />
+      </summary>
+      <div className={`flex flex-col gap-4 pb-8 ${columns}`}>
+        <div className="text-sm text-muted">{description}</div>
+        {body}
+      </div>
+    </details>
+  );
+}
+
 /** Share the tournament with other admins and court monitors, by email. */
 export function SharingCard({ tournament }: { tournament: Tournament }) {
   const team = useLoad(() => getTournamentTeam(tournament.id), [tournament.id]);
@@ -34,128 +86,109 @@ export function SharingCard({ tournament }: { tournament: Tournament }) {
   const [role, setRole] = useState<StaffRole>('monitor');
   const [note, setNote] = useState<string | null>(null);
   const { busy, error, run } = useAction();
+  const people = team.data?.length ?? 0;
 
   return (
-    <Card className="flex flex-col gap-3 p-4">
-      <div>
-        <h2 className="text-xl">Sharing</h2>
-        <p className="text-xs text-muted">
-          <b>Admins</b> can change everything. <b>Court monitors</b> see the courts and queue, enter scores, check players in
-          and send a no-show back to the queue.
-        </p>
-      </div>
-      <ul className="flex flex-col divide-y divide-border text-sm">
-        {(team.data ?? []).map((m) => (
-          <li key={`${m.source}-${m.email ?? 'guest'}`} className="flex items-center justify-between gap-2 py-2">
-            <span className="min-w-0">
-              <span className="block truncate font-medium">
-                {m.email ?? 'Guest'}
-                {m.is_me ? ' (you)' : ''}
-              </span>
-              <span className="text-xs text-muted">
-                {roleText[m.role]}
-                {m.source === 'organization' ? ' · whole organization' : m.source === 'invite' ? ' · invited, not signed up yet' : ''}
-              </span>
-            </span>
-            {m.source !== 'organization' && !m.is_me && m.email && (
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                onClick={() => run(() => removeTournamentStaff(tournament.id, m.email!), team.reload)}
-              >
-                Remove
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
-      <form
-        className="flex flex-col gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setNote(null);
-          run(async () => {
-            const result = await addTournamentStaff(tournament.id, email, role);
-            setNote(
-              result === 'invited'
-                ? `${email} doesn’t have an account yet. They’ll get access when they sign up with that email.`
-                : `${email} added as ${roleText[role].toLowerCase()}.`,
-            );
-            setEmail('');
-          }, team.reload);
-        }}
-      >
-        <Input type="email" required placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <div className="flex gap-2">
-          <Select className="flex-1" value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>
-            <option value="monitor">Court monitor</option>
-            <option value="admin">Admin</option>
-          </Select>
-          <Button type="submit" disabled={busy || !email}>
-            Add
+    <SettingsGroup
+      title="Sharing"
+      foldable
+      summary={team.data ? (people === 1 ? 'Just you' : `${people} people`) : null}
+      description={
+        <>
+      <b>Admins</b> can change everything. <b>Court monitors</b> see the courts and queue, enter scores, check players in
+      and send a no-show back to the queue.
+    </>
+  }
+>
+  <ul className="flex flex-col divide-y divide-border text-sm">
+    {(team.data ?? []).map((m) => (
+      <li key={`${m.source}-${m.email ?? 'guest'}`} className="flex items-center justify-between gap-2 py-2">
+        <span className="min-w-0">
+          <span className="block truncate font-medium">
+            {m.email ?? 'Guest'}
+            {m.is_me ? ' (you)' : ''}
+          </span>
+          <span className="text-xs text-muted">
+            {roleText[m.role]}
+            {m.source === 'organization' ? ' · whole organization' : m.source === 'invite' ? ' · invited, not signed up yet' : ''}
+          </span>
+        </span>
+        {m.source !== 'organization' && !m.is_me && m.email && (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => run(() => removeTournamentStaff(tournament.id, m.email!), team.reload)}
+          >
+            Remove
           </Button>
-        </div>
-      </form>
-      {note && <p className="text-sm text-live">{note}</p>}
-      <ErrorText>{error}</ErrorText>
-    </Card>
+        )}
+      </li>
+    ))}
+  </ul>
+  <form
+    className="flex flex-col gap-2"
+    onSubmit={(e) => {
+      e.preventDefault();
+      setNote(null);
+      run(async () => {
+        const result = await addTournamentStaff(tournament.id, email, role);
+        setNote(
+          result === 'invited'
+            ? `${email} doesn’t have an account yet. They’ll get access when they sign up with that email.`
+            : `${email} added as ${roleText[role].toLowerCase()}.`,
+        );
+        setEmail('');
+      }, team.reload);
+    }}
+  >
+    <Input type="email" required placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+    <div className="flex gap-2">
+      <Select className="flex-1" value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>
+        <option value="monitor">Court monitor</option>
+        <option value="admin">Admin</option>
+      </Select>
+      <Button type="submit" disabled={busy || !email}>
+        Add
+      </Button>
+    </div>
+  </form>
+  {note && <p className="text-sm text-live">{note}</p>}
+  <ErrorText>{error}</ErrorText>
+    </SettingsGroup>
   );
-}
-
-/** Under a card's Save button: saved, or changes waiting to be saved. */
-export function SaveState({ saved, dirty }: { saved: boolean; dirty: boolean }) {
-  if (dirty) return <p className="text-sm text-called">Not saved yet</p>;
-  return saved ? <p className="text-sm text-live">Saved.</p> : null;
 }
 
 /** What players read about the event, and the announcement for last-minute changes. */
-export function AboutCard({ tournament, onChanged }: { tournament: Tournament; onChanged: () => void }) {
+export function AboutCard({ tournament }: { tournament: Tournament }) {
   const [form, setForm] = useState({ details: tournament.details ?? '', announcement: tournament.announcement ?? '' });
-  const { busy, error, run } = useAction();
-  const [saved, setSaved] = useState(false);
-  const { dirty, commit } = useUnsaved('about', form, () =>
+  useUnsaved('about', form, () =>
     updateTournament(tournament.id, { details: form.details.trim() || null, announcement: form.announcement.trim() || null }),
   );
   return (
-    <Card className="p-4">
-      <h2 className="text-xl">Details and announcement</h2>
-      <form
-        className="mt-3 flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSaved(false);
-          run(commit, () => (setSaved(true), onChanged()));
-        }}
+    <SettingsGroup title="About" description="What players read on the tournament page, and a notice for last-minute changes.">
+      <Field label="Details" hint="Schedule notes, parking, food, what to bring, prizes. Web links work.">
+        <Textarea
+          rows={8}
+          maxLength={10000}
+          value={form.details}
+          onChange={(e) => setForm({ ...form, details: e.target.value })}
+          placeholder={'Check-in opens at 7:30 in the main lobby.\nFree parking in the north lot.\nFood trucks from 11.'}
+        />
+      </Field>
+      <Field
+        label="Announcement"
+        hint={`For last-minute changes: a yellow notice at the top of the tournament’s pages. Leave blank for none. ${form.announcement.length}/${ANNOUNCEMENT_MAX}`}
       >
-        <Field label="Details" hint="On the tournament page: schedule notes, parking, food, what to bring, prizes. Web links work.">
-          <Textarea
-            rows={8}
-            maxLength={10000}
-            value={form.details}
-            onChange={(e) => setForm({ ...form, details: e.target.value })}
-            placeholder={'Check-in opens at 7:30 in the main lobby.\nFree parking in the north lot.\nFood trucks from 11.'}
-          />
-        </Field>
-        <Field
-          label="Announcement"
-          hint={`For last-minute changes: a yellow notice at the top of the tournament’s pages. Leave blank for none. ${form.announcement.length}/${ANNOUNCEMENT_MAX}`}
-        >
-          <Textarea
-            rows={2}
-            maxLength={ANNOUNCEMENT_MAX}
-            value={form.announcement}
-            onChange={(e) => setForm({ ...form, announcement: e.target.value })}
-            placeholder="Courts 5–8 are moving to the north gym at noon."
-          />
-        </Field>
-        <ErrorText>{error}</ErrorText>
-        <SaveState saved={saved} dirty={dirty} />
-        <Button type="submit" disabled={busy}>
-          Save details and announcement
-        </Button>
-      </form>
-    </Card>
+        <Textarea
+          rows={2}
+          maxLength={ANNOUNCEMENT_MAX}
+          value={form.announcement}
+          onChange={(e) => setForm({ ...form, announcement: e.target.value })}
+          placeholder="Courts 5–8 are moving to the north gym at noon."
+        />
+      </Field>
+    </SettingsGroup>
   );
 }
 
@@ -169,8 +202,7 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
     refundPolicy: tournament.refund_policy ?? '',
   });
   const { busy, error, run } = useAction();
-  const [saved, setSaved] = useState(false);
-  const { dirty, commit } = useUnsaved('registration', form, () =>
+  useUnsaved('registration', form, () =>
     updateTournament(tournament.id, {
       max_players: form.max_players ? Number(form.max_players) : null,
       registration_closes_at: form.closes ? new Date(fromZonedInput(form.closes, tz)).toISOString() : null,
@@ -180,15 +212,14 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
   );
 
   return (
-    <Card className="flex flex-col gap-3 p-4">
-      <h2 className="text-xl">Registration</h2>
+    <SettingsGroup title="Registration" description="Limits, the closing date, and what players agree to when they sign up.">
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium">Tournament image</span>
         {tournament.image_data ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={tournament.image_data} alt="" className="max-h-40 w-full rounded-xl object-cover" />
         ) : (
-          <p className="text-xs text-muted">A logo or banner, shown on the tournament page and sign-up form.</p>
+          <p className="text-sm text-muted">A logo or banner, shown on the tournament page and sign-up form.</p>
         )}
         <div className="flex gap-2">
           <label className="inline-flex h-10 cursor-pointer items-center rounded-full border border-border px-4 text-sm font-medium hover:border-text">
@@ -210,45 +241,28 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
           )}
         </div>
       </div>
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSaved(false);
-          run(commit, () => (setSaved(true), onChanged()));
-        }}
-      >
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Max players" hint="Whole tournament. Then the waitlist.">
-            <Input type="number" min={1} placeholder="No limit" value={form.max_players} onChange={(e) => setForm({ ...form, max_players: e.target.value })} />
-          </Field>
-          <Field label="Registration closes">
-            <Input type="datetime-local" value={form.closes} onChange={(e) => setForm({ ...form, closes: e.target.value })} />
-          </Field>
-        </div>
-        <p className="-mt-1 text-xs text-muted">Each division’s own limit is “Max teams” in its settings. Full divisions take a waitlist too.</p>
-        <Field label="Waiver" hint="Optional. Players must agree to it to register.">
-          <Textarea rows={5} value={form.waiver} onChange={(e) => setForm({ ...form, waiver: e.target.value })} placeholder="I understand pickleball involves risk of injury…" />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Max players" hint="Whole tournament, then the waitlist. Divisions have their own “Max teams”.">
+          <Input type="number" min={1} placeholder="No limit" value={form.max_players} onChange={(e) => setForm({ ...form, max_players: e.target.value })} />
         </Field>
-        <Field
-          label="Refund policy"
-          hint="Shown on the tournament page, at registration and when a player withdraws. Withdrawals credit what the entry cost; you decide the refund."
-        >
-          <Textarea
-            rows={4}
-            maxLength={5000}
-            value={form.refundPolicy}
-            onChange={(e) => setForm({ ...form, refundPolicy: e.target.value })}
-            placeholder="Full refund less a $5 processing fee until 7 days before the tournament. No refunds after that."
-          />
+        <Field label="Registration closes">
+          <Input type="datetime-local" value={form.closes} onChange={(e) => setForm({ ...form, closes: e.target.value })} />
         </Field>
-        <ErrorText>{error}</ErrorText>
-        <SaveState saved={saved} dirty={dirty} />
-        <Button type="submit" disabled={busy}>
-          Save registration settings
-        </Button>
-      </form>
-    </Card>
+      </div>
+      <Field label="Waiver" hint="Optional. Players must agree to it to register.">
+        <Textarea rows={4} value={form.waiver} onChange={(e) => setForm({ ...form, waiver: e.target.value })} placeholder="I understand pickleball involves risk of injury…" />
+      </Field>
+      <Field label="Refund policy" hint="Shown on the tournament page, at registration and when a player withdraws. You decide each refund.">
+        <Textarea
+          rows={3}
+          maxLength={5000}
+          value={form.refundPolicy}
+          onChange={(e) => setForm({ ...form, refundPolicy: e.target.value })}
+          placeholder="Full refund less a $5 processing fee until 7 days before the tournament. No refunds after that."
+        />
+      </Field>
+      <ErrorText>{error}</ErrorText>
+    </SettingsGroup>
   );
 }
 
@@ -257,13 +271,16 @@ export function DiscountCodesCard({ tournament }: { tournament: Tournament }) {
   const codes = useLoad(() => getDiscountCodes(tournament.id), [tournament.id]);
   const [form, setForm] = useState({ code: '', kind: 'percent', value: '', maxUses: '', expires: '' });
   const { busy, error, run } = useAction();
+  const count = codes.data?.length ?? 0;
 
   return (
-    <Card className="flex flex-col gap-3 p-4">
-      <h2 className="text-xl">Discount codes</h2>
-      {(codes.data ?? []).length === 0 ? (
-        <p className="text-xs text-muted">None yet. Players enter a code when they register.</p>
-      ) : (
+    <SettingsGroup
+      title="Discount codes"
+      foldable
+      summary={codes.data ? (count ? `${count} code${count === 1 ? '' : 's'}` : 'None') : null}
+      description="Players enter a code when they register."
+    >
+      {count > 0 && (
         <ul className="flex flex-col divide-y divide-border text-sm">
           {codes.data!.map((c) => (
             <li key={c.id} className="flex items-center justify-between gap-2 py-2">
@@ -314,7 +331,7 @@ export function DiscountCodesCard({ tournament }: { tournament: Tournament }) {
         </Button>
       </form>
       <ErrorText>{error}</ErrorText>
-    </Card>
+    </SettingsGroup>
   );
 }
 
@@ -338,13 +355,16 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
     });
 
   return (
-    <Card className="flex flex-col gap-3 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xl">Fees</h2>
-        {f.is_demo && <Badge tone="called">Practice: free</Badge>}
-      </div>
-
-      <div className="flex items-center justify-between gap-3 rounded-xl bg-surface p-3">
+    <SettingsGroup
+      title="Fees"
+      foldable
+      summary={[
+        f.is_demo ? 'Practice: free' : f.setup_due_cents ? `Setup fee ${formatMoney(f.setup_due_cents)} due` : 'Setup fee paid',
+        f.texts_enabled ? 'texting on' : 'texting off',
+      ].join(' · ')}
+      description="What this tournament costs on Courtside. Tip: build these into your entry price so players see one all-in price."
+    >
+      <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 p-3">
         <span>
           <span className="block font-semibold">Setup fee</span>
           <span className="text-sm text-muted">One time. Needed before registration opens or play starts.</span>
@@ -375,7 +395,7 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
         </dd>
       </dl>
 
-      <label className="flex items-start gap-3 rounded-xl bg-surface p-3">
+      <label className="flex items-start gap-3 rounded-xl bg-surface-2 p-3">
         <input
           type="checkbox"
           className="mt-0.5 h-6 w-6 shrink-0 accent-[var(--accent)]"
@@ -391,9 +411,8 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
           </span>
         </span>
       </label>
-      <p className="text-xs text-muted">Tip: build these into your entry price so players see one all-in price.</p>
       <ErrorText>{error}</ErrorText>
-    </Card>
+    </SettingsGroup>
   );
 }
 
@@ -432,11 +451,12 @@ export function QuestionsCard({ tournament }: { tournament: Tournament }) {
     }, questions.reload);
 
   return (
-    <Card className="flex flex-col gap-3 p-4">
-      <div>
-        <h2 className="text-xl">Registration questions</h2>
-        <p className="text-sm text-muted">Anything you need from players: T-shirt size, home club, lunch. Answers show on the Players page.</p>
-      </div>
+    <SettingsGroup
+      title="Questions"
+      foldable
+      summary={questions.data ? (list.length ? list.map((q) => q.label).join(', ') : 'None') : null}
+      description="Anything you need from players at registration: T-shirt size, home club, lunch. Answers show on the Players page."
+    >
       {list.length > 0 && (
         <ol className="flex flex-col divide-y divide-border text-sm">
           {list.map((q, i) => (
@@ -475,7 +495,7 @@ export function QuestionsCard({ tournament }: { tournament: Tournament }) {
         </ol>
       )}
       <form
-        className="flex flex-col gap-3 rounded-xl bg-surface p-3"
+        className="flex flex-col gap-3 rounded-xl bg-surface-2 p-4"
         onSubmit={(e) => {
           e.preventDefault();
           run(
@@ -536,6 +556,6 @@ export function QuestionsCard({ tournament }: { tournament: Tournament }) {
           )}
         </div>
       </form>
-    </Card>
+    </SettingsGroup>
   );
 }

@@ -424,12 +424,6 @@ export function getListings(state: string | null, today: string, limit = 200) {
   return select<TournamentListing[]>(query.order('starts_on').order('name').limit(limit));
 }
 
-/** The newest listings that haven't ended by `today`. */
-export const getRecentListings = (today: string, limit: number) =>
-  select<TournamentListing[]>(
-    supabase().from('tournament_listings').select('*').gte('last_day', today).order('created_at', { ascending: false }).limit(limit),
-  );
-
 export const getListing = (id: string) =>
   select<TournamentListing>(supabase().from('tournament_listings').select('*').eq('id', id).single());
 
