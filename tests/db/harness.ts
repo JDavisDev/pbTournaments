@@ -195,6 +195,12 @@ export async function buildSchedule(db: Db, eventId: string): Promise<number> {
   return (await one(db, 'select public.generate_matches($1) as n', [eventId])).n;
 }
 
+/** The director at the end of pool play: finalize it (seeds the bracket, held), then start the bracket. */
+export async function finishPoolPlay(db: Db, eventId: string) {
+  await db.query('select public.finalize_pool_play($1)', [eventId]);
+  await db.query('select public.start_bracket($1)', [eventId]);
+}
+
 export async function upNext(db: Db, tournamentId: string) {
   return rows(db, 'select * from public.up_next($1)', [tournamentId]);
 }

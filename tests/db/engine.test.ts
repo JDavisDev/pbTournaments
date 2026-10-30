@@ -14,6 +14,7 @@ import {
   createLiveTournament,
   createOrganization,
   createUser,
+  finishPoolPlay,
   generate,
   liveMatches,
   one,
@@ -407,6 +408,7 @@ describe('formats', () => {
     expect(standings.filter((s) => s.pool === 2).map((s) => seedOf(s.team_id))).toEqual([2, 3, 6, 7]);
     expect(standings[0]).toMatchObject({ played: 3, wins: 3, losses: 0, pool_rank: 1 });
 
+    await finishPoolPlay(db, eventId);
     const bracket = await rows(db, `select * from public.match_details where event_id = $1 and stage = 'bracket' order by round, position`, [eventId]);
     const poolOfTeam = new Map(standings.map((s) => [s.team_id, s.pool]));
     for (const semi of bracket.slice(0, 2)) {

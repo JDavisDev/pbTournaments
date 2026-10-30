@@ -202,6 +202,7 @@ const ops: Record<string, Op> = {
   finalizeEvent: (tx, id: string) => one(tx, 'select * from public.finalize_event($1)', [id]),
   reopenEvent: (tx, id: string) => one(tx, 'select * from public.reopen_event($1)', [id]),
   startBracket: (tx, id: string) => tx.query('select public.start_bracket($1)', [id]).then(() => null),
+  finalizePoolPlay: (tx, id: string) => tx.query('select public.finalize_pool_play($1)', [id]).then(() => null),
   swapBracketTeams: (tx, eventId: string, a: string, b: string) =>
     tx.query('select public.swap_bracket_teams($1, $2, $3)', [eventId, a, b]).then(() => null),
   checkInTeam: (tx, id: string, checkedIn = true) => one(tx, 'select * from public.check_in_team($1, $2)', [id, checkedIn]),

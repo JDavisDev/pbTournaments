@@ -7,6 +7,7 @@ import {
   checkIn,
   createDb,
   createLiveTournament,
+  finishPoolPlay,
   generate,
   liveMatches,
   one,
@@ -123,13 +124,53 @@ describe('round robin options', () => {
     const live = left.find((r) => r.status === 'assigned' || r.status === 'in_progress');
     expect(cancelled + (live?.n ?? 0) + 2).toBe(6);
 
-    // Matches already on court finish normally; then the bracket fills.
+    // Matches already on court finish normally; then the director finalizes pool play and the bracket fills.
     for (const m of await liveMatches(db, tournamentId)) {
       await reportScore(db, m.id, [seedOf(m.team1_id) < seedOf(m.team2_id) ? [11, 3] : [3, 11]]);
     }
+    await finishPoolPlay(db, eventId);
     const [final] = await bracketRows(eventId);
     expect(final.status).not.toBe('waiting');
     expect([seedOf(final.team1_id), seedOf(final.team2_id)].sort()).toEqual([1, 2]);
+  });
+});
+
+describe('reviewing pool play', () => {
+  it('waits for the director, and re-seeds from corrected scores until the bracket starts', async () => {
+    const { tournamentId, eventId, teams, seedOf } = await bracketEvent(4, { format: 'pools_to_bracket', pools: 1, advancePerPool: 2 });
+    await generate(db, eventId);
+    // The better seed wins every pool match: 1 and 2 reach the final.
+    for (let guard = 0; guard < 10; guard++) {
+      const live = (await liveMatches(db, tournamentId)).filter((m) => m.stage === 'pool');
+      if (live.length === 0) break;
+      for (const m of live) await reportScore(db, m.id, [seedOf(m.team1_id) < seedOf(m.team2_id) ? [11, 3] : [3, 11]]);
+    }
+    const finalSeeds = async () => {
+      const [final] = await bracketRows(eventId);
+      return [seedOf(final.team1_id), seedOf(final.team2_id)].sort();
+    };
+
+    // Pool play is over, but nothing moves on until the director finalizes it.
+    expect((await bracketRows(eventId))[0].team1_id).toBeNull();
+    await db.query('select public.finalize_pool_play($1)', [eventId]);
+    expect(await finalSeeds()).toEqual([1, 2]);
+    expect((await bracketRows(eventId))[0].on_hold).toBe(true);
+
+    // Seed 3 actually beat seed 2. Fixed before the bracket starts, it re-seeds.
+    const twoVsThree = await one(
+      db,
+      `select * from public.matches where event_id = $1 and stage = 'pool' and $2 in (team1_id, team2_id) and $3 in (team1_id, team2_id)`,
+      [eventId, teams[1], teams[2]],
+    );
+    const flipped = (winner: number) => [[seedOf(twoVsThree.team1_id) === winner ? 11 : 6, seedOf(twoVsThree.team1_id) === winner ? 6 : 11]];
+    await db.query('select public.correct_score($1, $2::jsonb)', [twoVsThree.id, JSON.stringify(flipped(3))]);
+    expect(await finalSeeds()).toEqual([1, 3]);
+
+    // Once the bracket starts it stands: a fix is saved for the record only.
+    await db.query('select public.start_bracket($1)', [eventId]);
+    await db.query('select public.correct_score($1, $2::jsonb)', [twoVsThree.id, JSON.stringify(flipped(2))]);
+    expect(await finalSeeds()).toEqual([1, 3]);
+    expect((await one(db, 'select winner_team_id from public.matches where id = $1', [twoVsThree.id])).winner_team_id).toBe(teams[1]);
   });
 });
 

@@ -8,6 +8,7 @@ import { DivisionStatus, divisionState } from '@/components/DivisionStatus';
 import { FinalizeDivision } from '@/components/FinalizeDivision';
 import { Icon } from '@/components/Icon';
 import { QueuePanel } from '@/components/desk/QueuePanel';
+import { ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
 import { MatchRow } from '@/components/MatchRow';
 import { Podium } from '@/components/Podium';
 import { StandingsTable } from '@/components/StandingsTable';
@@ -26,11 +27,13 @@ import {
   getTeams,
   getTournament,
   startBracket,
+  finalizePoolPlay,
   swapBracketTeams,
 } from '@/lib/api';
 import { describeDivision } from '@/lib/eligibility';
 import { advanceRule, bracketSeeds, formatSummary, formatTime, isPlayable, podium, poolName, shortFormat } from '@/lib/format';
 import { useAction, useLiveTournament, useLoad, useNow, useStaffAccess } from '@/lib/hooks';
+import { rulesOf } from '@/lib/scoring';
 import type { MatchDetails, QueueRow, Team } from '@/lib/types';
 
 async function load(id: string) {
@@ -58,6 +61,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
   const [arranging, setArranging] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const control = useAction();
+  const [score, setScore] = useState<ScoreTarget | null>(null);
 
   if (error === 'not-configured') return <ConnectNotice />;
   if (error) return <Empty>{error}</Empty>;
@@ -105,6 +109,8 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
     !bracket.some((m) => isPlayable(m) && (m.status === 'assigned' || m.status === 'in_progress' || m.status === 'completed'));
   const held = bracket.some((m) => m.on_hold && (m.status === 'waiting' || m.status === 'queued'));
   const seeded = event.format !== 'pools_to_bracket' || !!event.playoffs_seeded_at;
+  // Pool play is over and waits for the director to review and finalize it.
+  const reviewing = event.format === 'pools_to_bracket' && poolMatches.length > 0 && poolLeft.length === 0 && !event.pools_finalized_at;
   const stage =
     all.length === 0
       ? 'Not scheduled'
@@ -112,11 +118,31 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         ? 'Complete'
         : poolLeft.length > 0
           ? 'Pool play'
-          : held
+          : reviewing
+            ? 'Reviewing pool play'
+            : held
             ? 'Seeds under review'
             : 'Bracket';
 
   const state = divisionState(event, all);
+  // Directors fix a finished match's score from the Matches tab.
+  const correct = isDirector
+    ? (m: MatchDetails) =>
+        setScore({
+          matchId: m.id,
+          team1: m.team1_name,
+          team2: m.team2_name,
+          rules: rulesOf(m),
+          games: m.games,
+          mode: 'correct',
+          note:
+            m.stage === 'pool' && event.playoffs_seeded_at
+              ? bracketNotStarted
+                ? 'Saving seeds the bracket again from the new standings. Seeds you arranged by hand are reset.'
+                : 'The bracket has started, so it stays as it is: this fixes the score for the results and DUPR.'
+              : undefined,
+        })
+    : undefined;
   const grace = data.tournament.checkin_grace_minutes;
   const forfeitAt = event.started_at && grace !== null ? new Date(event.started_at).getTime() + grace * 60_000 : null;
   const absent = teams.filter((t) => !t.checked_in_at && !t.no_show_at);
@@ -244,6 +270,29 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         </Card>
       )}
 
+      {isDirector && state === 'live' && reviewing && (
+        <Card className="flex flex-col gap-3 border-2 border-called p-4">
+          <div>
+            <p className="font-semibold">Pool play is done</p>
+            <p className="text-muted">
+              Check the scores and standings; to fix a score, click the match under Matches. Then finalize pool play to seed the
+              bracket. You can still arrange the seeds before you start it.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            className="self-start"
+            disabled={control.busy}
+            onClick={() =>
+              confirm('Finalize pool play? The bracket is seeded from these standings.') && control.run(() => finalizePoolPlay(eventId), reload)
+            }
+          >
+            Finalize pool play
+          </Button>
+          <ErrorText>{control.error}</ErrorText>
+        </Card>
+      )}
+
       {isDirector && !medals && state === 'live' && (poolUnstarted.length > 0 || (bracketNotStarted && seeded) || held) && (
         <Card className="flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -258,7 +307,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
                     `Standings use win percentage over the matches played.` +
                     (poolLeft.length > poolUnstarted.length ? ' Matches on court now finish first.' : '') +
                     (swiss ? ' No more Swiss rounds are drawn.' : '') +
-                    (event.format === 'pools_to_bracket' ? ' The bracket is seeded once they do.' : '');
+                    (event.format === 'pools_to_bracket' ? ' Then you review the results and finalize pool play to seed the bracket.' : '');
                   if (confirm(msg)) control.run(() => endPoolPlay(eventId), reload);
                 }}
               >
@@ -380,6 +429,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
                 matches={poolMatches.filter((m) => m.pool === pool && isPlayable(m))}
                 queueById={queueById}
                 timeZone={data.tournament.time_zone}
+                onCorrect={correct}
               />
             ))}
             {bracket.some(isPlayable) && (
@@ -388,6 +438,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
                 matches={bracket.filter(isPlayable).sort((a, b) => Number(a.queue_seq) - Number(b.queue_seq))}
                 queueById={queueById}
                 timeZone={data.tournament.time_zone}
+                onCorrect={correct}
               />
             )}
           </section>
@@ -399,6 +450,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
 
         {active === 'queue' && isDirector && <QueuePanel queue={queue} staff now={now} onChanged={reload} />}
       </>
+      <ScoreDialog target={score} onClose={() => setScore(null)} onDone={reload} />
     </div>
   );
 }
@@ -483,18 +535,27 @@ function MatchList({
   matches,
   queueById,
   timeZone,
+  onCorrect,
 }: {
   title: string;
   matches: MatchDetails[];
   queueById: Map<string, QueueRow>;
   timeZone: string;
+  /** Directors: a finished match opens its score to fix. */
+  onCorrect?: (m: MatchDetails) => void;
 }) {
   return (
     <div className="divide-y divide-border rounded-xl border border-border bg-surface">
       <h4 className="px-3 py-2 font-display text-lg font-bold uppercase">{title}</h4>
-      {matches.map((m) => (
-        <MatchRow key={m.id} match={m} queueRow={queueById.get(m.id)} timeZone={timeZone} />
-      ))}
+      {matches.map((m) =>
+        onCorrect && m.status === 'completed' ? (
+          <button key={m.id} type="button" title="Fix this score" className="block w-full text-left hover:bg-surface-2" onClick={() => onCorrect(m)}>
+            <MatchRow match={m} queueRow={queueById.get(m.id)} timeZone={timeZone} />
+          </button>
+        ) : (
+          <MatchRow key={m.id} match={m} queueRow={queueById.get(m.id)} timeZone={timeZone} />
+        ),
+      )}
     </div>
   );
 }

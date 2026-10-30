@@ -43,6 +43,7 @@ export const {
   finalizeEvent,
   reopenEvent,
   startBracket,
+  finalizePoolPlay,
   swapBracketTeams,
   checkInTeam,
   confirmOnCourt,

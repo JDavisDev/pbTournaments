@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { type Db, addEvent, addPair, checkIn, createDb, createLiveTournament, generate, liveMatches, one, reportScore, rows } from './harness';
+import { type Db, addEvent, addPair, checkIn, createDb, createLiveTournament, finishPoolPlay, generate, liveMatches, one, reportScore, rows } from './harness';
 
 const START = new Date('2026-11-07T13:00:00Z');
 
@@ -101,6 +101,7 @@ describe('teams in the bracket', () => {
     const { tournamentId, eventId, seedOf } = await division(15, { pools: 3, bracketSize: 8 });
     expect(await generate(db, eventId)).toBe(3 * 10 + 7);
     await play(tournamentId, seedOf, 'pool');
+    await finishPoolPlay(db, eventId);
 
     const standings = await rows(db, 'select team_id, pool_rank from public.standings where event_id = $1', [eventId]);
     const rank = new Map(standings.map((s) => [s.team_id, s.pool_rank]));
@@ -132,6 +133,7 @@ describe('straight to the medal matches', () => {
     const { tournamentId, eventId, seedOf } = await division(8, { pools: 2, advancePerPool: 2, bracketType: 'medal' });
     expect(await generate(db, eventId)).toBe(2 * 6 + 2);
     await play(tournamentId, seedOf, 'pool');
+    await finishPoolPlay(db, eventId);
 
     const standings = await rows(db, 'select team_id, pool, pool_rank from public.standings where event_id = $1', [eventId]);
     const of = new Map(standings.map((s) => [s.team_id, s]));
@@ -186,7 +188,8 @@ describe('Swiss rounds', () => {
     const pairs = all.map((m) => [m.team1_id, m.team2_id].sort().join());
     expect(new Set(pairs).size).toBe(pairs.length);
 
-    // The bracket takes the top 4 of the final standings.
+    // The bracket takes the top 4 of the final standings, once the director finalizes them.
+    await finishPoolPlay(db, eventId);
     const top4 = (await rows(db, 'select team_id from public.standings where event_id = $1 and pool_rank <= 4', [eventId])).map((r) => r.team_id);
     expect((await bracketTeams(eventId)).sort()).toEqual(top4.sort());
   });
@@ -224,6 +227,7 @@ describe('Swiss rounds', () => {
     expect((await one(db, 'select public.end_pool_play($1) as n', [eventId])).n).toBe(0);
     await report();
     expect(Math.max(...(await poolMatches(eventId)).map((m) => m.round))).toBe(2);
+    await finishPoolPlay(db, eventId);
     expect(await bracketTeams(eventId)).toHaveLength(4);
     expect((await liveMatches(db, tournamentId)).every((m) => m.stage === 'bracket')).toBe(true);
   });

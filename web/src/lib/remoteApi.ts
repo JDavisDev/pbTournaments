@@ -251,6 +251,8 @@ export const finalizeEvent = (eventId: string) => rpc<TournamentEvent>('finalize
 /** Unlocks a final division so a result can be fixed. */
 export const reopenEvent = (eventId: string) => rpc<TournamentEvent>('reopen_event', { p_event: eventId });
 export const startBracket = (eventId: string) => rpc<void>('start_bracket', { p_event: eventId });
+/** Pool play reviewed and final: seeds the bracket, held until startBracket. */
+export const finalizePoolPlay = (eventId: string) => rpc<void>('finalize_pool_play', { p_event: eventId });
 export const swapBracketTeams = (eventId: string, teamA: string, teamB: string) =>
   rpc<void>('swap_bracket_teams', { p_event: eventId, p_team_a: teamA, p_team_b: teamB });
 export const checkInTeam = (teamId: string, checkedIn = true) =>

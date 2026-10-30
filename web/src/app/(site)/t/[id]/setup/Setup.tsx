@@ -1314,11 +1314,15 @@ function EventForm({
               onChange={(v) => set('grand_final_reset', v)}
             />
           )}
-          <Check
-            label="Hold the bracket so I can review and swap seeds before it starts"
-            checked={form.confirm_seeds}
-            onChange={(v) => set('confirm_seeds', v)}
-          />
+          {form.format === 'single_elim' ? (
+            <Check
+              label="Hold the bracket so I can review and swap seeds before it starts"
+              checked={form.confirm_seeds}
+              onChange={(v) => set('confirm_seeds', v)}
+            />
+          ) : (
+            <p className="self-end pb-2 text-sm text-muted">When pool play ends, you review the results and finalize them, then start the bracket.</p>
+          )}
         </Section>
       )}
 

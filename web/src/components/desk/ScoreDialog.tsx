@@ -12,6 +12,8 @@ export interface ScoreTarget {
   rules: ScoringRules;
   games?: [number, number][] | null;
   mode: 'report' | 'correct';
+  /** What saving does beyond the score, e.g. re-seeding the bracket. */
+  note?: string;
 }
 
 export function ScoreDialog({
@@ -25,6 +27,7 @@ export function ScoreDialog({
 }) {
   return (
     <Modal open={!!target} onClose={onClose} title={target?.mode === 'correct' ? 'Correct score' : 'Enter score'}>
+      {target?.note && <p className="mb-4 rounded-lg bg-info-soft px-3 py-2 text-sm text-info">{target.note}</p>}
       {target && (
         <ScoreEntry
           key={target.matchId}

@@ -202,7 +202,8 @@ function formatItems(e: TournamentEvent, teamCount: number): string[] {
   } else {
     lines.push(`Gold: ${roundRules(e, 'final')}. Bronze: ${roundRules(e, 'bronze')}.`);
   }
-  if (e.confirm_seeds) lines.push('The director reviews the bracket seeds before it starts.');
+  if (e.format === 'pools_to_bracket') lines.push('When pool play ends, the director checks the results before the bracket starts.');
+  else if (e.confirm_seeds) lines.push('The director reviews the bracket seeds before it starts.');
   return lines;
 }
 

@@ -112,6 +112,7 @@ describe('advancing from pools', () => {
       if (live.length === 0) break;
       for (const m of live) await reportScore(db, m.id, [[11, 5]]);
     }
+    await db.query('select public.finalize_pool_play($1)', [eventId]);
     await expect(db.query('select public.set_advance_per_pool($1, 1)', [eventId])).rejects.toThrow(/already seeded/);
   });
 

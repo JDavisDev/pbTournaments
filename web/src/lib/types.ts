@@ -508,6 +508,8 @@ export interface TournamentEvent {
   not_before: string | null;
   sort_order: number;
   playoffs_seeded_at: string | null;
+  /** A director reviewed pool play and finalized it, seeding the bracket (finalize_pool_play). */
+  pools_finalized_at: string | null;
   /** When a director started the division (start_event); its matches go on court only after. */
   started_at: string | null;
   /** When a director marked the results final (finalize_event): scores are locked and it can go to DUPR. */
