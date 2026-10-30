@@ -62,6 +62,8 @@ const EVENT_COLUMNS = [
   'dupr_rated',
   'included_in_registration',
   'player_notes',
+  'timeouts_per_game',
+  'timeout_minutes',
   'team_rating_max',
   'team_age_min',
   'max_rounds',

@@ -900,6 +900,8 @@ function EventForm({
     dupr_rated: event?.dupr_rated ?? true,
     included_in_registration: event?.included_in_registration ?? true,
     player_notes: event?.player_notes ?? '',
+    timeouts_per_game: event?.timeouts_per_game ?? 2,
+    timeout_minutes: event?.timeout_minutes ?? 1,
     team_rating_max: event?.team_rating_max != null ? String(Number(event.team_rating_max)) : '',
     team_age_min: event?.team_age_min?.toString() ?? '',
     max_rounds: event?.max_rounds?.toString() ?? '',
@@ -957,6 +959,8 @@ function EventForm({
               dupr_rated: form.dupr_rated,
               included_in_registration: form.included_in_registration,
               player_notes: form.player_notes.trim() || null,
+              timeouts_per_game: form.timeouts_per_game,
+              timeout_minutes: form.timeout_minutes,
               ...(scheduled
                 ? {}
                 : {
@@ -1339,6 +1343,24 @@ function EventForm({
             placeholder="None (win by 2)"
             value={form.point_cap ?? ''}
             onChange={(e) => set('point_cap', optionalNumber(e.target.value))}
+          />
+        </Field>
+        <Field label="Timeouts per team, per game" hint="Usually 2 in games to 11, 3 in games to 15 or 21.">
+          <Input
+            type="number"
+            min={0}
+            max={9}
+            value={form.timeouts_per_game}
+            onChange={(e) => set('timeouts_per_game', Math.max(0, Math.min(9, Number(e.target.value) || 0)))}
+          />
+        </Field>
+        <Field label="Timeout length (min)">
+          <Input
+            type="number"
+            min={1}
+            max={10}
+            value={form.timeout_minutes}
+            onChange={(e) => set('timeout_minutes', Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
           />
         </Field>
         {hasBracket && (

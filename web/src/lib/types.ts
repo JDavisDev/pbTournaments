@@ -538,6 +538,9 @@ export interface TournamentEvent {
   included_in_registration: boolean;
   /** Shown to its players on the division's player guide. */
   player_notes: string | null;
+  /** Timeouts each team gets per game, and how long each lasts. */
+  timeouts_per_game: number;
+  timeout_minutes: number;
   team_rating_max: number | null;
   team_age_min: number | null;
   /** Round robin: stop after this many rounds (null = everyone plays everyone). Swiss: the number of rounds. */

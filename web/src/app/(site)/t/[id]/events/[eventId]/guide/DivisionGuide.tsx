@@ -131,6 +131,12 @@ function startLine(e: TournamentEvent, t: Tournament) {
   return 'The start time will be posted here and on the tournament page.';
 }
 
+/** "Timeouts: 2 per team per game, 1 minute each." */
+function timeouts(e: TournamentEvent) {
+  if (e.timeouts_per_game === 0) return 'No timeouts.';
+  return `Timeouts: ${e.timeouts_per_game} per team per game, ${e.timeout_minutes} minute${e.timeout_minutes === 1 ? '' : 's'} each.`;
+}
+
 /** A bracket round's format: its own, else the bracket's, else pool play's. */
 function roundRules(e: TournamentEvent, key: RoundKey) {
   const f = e.round_formats.find((r) => r.key === key);
@@ -166,6 +172,7 @@ function formatItems(e: TournamentEvent, teamCount: number): string[] {
       );
     }
     lines.push(`Pool matches: ${poolRules.toLowerCase()}.`);
+    lines.push(timeouts(e));
     lines.push('Standings: win percentage, then head-to-head among tied teams, then point differential.');
   }
 
@@ -174,7 +181,7 @@ function formatItems(e: TournamentEvent, teamCount: number): string[] {
     return lines;
   }
 
-  if (e.format === 'single_elim') lines.push('A bracket by seed from the start.');
+  if (e.format === 'single_elim') lines.push('A bracket by seed from the start.', timeouts(e));
   else if (e.bracket_type === 'medal') {
     lines.push(
       pools === 2
