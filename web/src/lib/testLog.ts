@@ -44,9 +44,11 @@ export const clearTestLog = () => write([]);
 
 /** Logs every call that changes something. Reads are too frequent to be useful here. */
 export function logged<T extends object>(api: T): T {
-  return new Proxy(api, {
-    get(target, name) {
-      const fn = (target as Record<string | symbol, unknown>)[name];
+  // An empty target: bundled module exports are read-only, and a proxy must
+  // return a read-only property of its target unchanged.
+  return new Proxy({} as T, {
+    get(_, name) {
+      const fn = (api as Record<string | symbol, unknown>)[name];
       if (typeof fn !== 'function' || typeof name !== 'string' || /^(get|is|check|claim)/.test(name)) return fn;
       return async (...args: unknown[]) => {
         const started = Date.now();
