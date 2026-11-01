@@ -1,6 +1,6 @@
 # DUPR
 
-Players give their **DUPR ID** when they sign up; it is required in every division. Players a director adds by hand are flagged on the Players page until they have one. Directors can add or fix IDs and ratings on the **Players** page.
+Players' **DUPR ID** is optional for now: registration only asks for it in a division with `require_dupr_id` on, and none has it by default. Directors can add or fix IDs and ratings on the **Players** page.
 
 ## Ratings and division rules
 

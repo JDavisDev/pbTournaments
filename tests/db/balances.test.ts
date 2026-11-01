@@ -187,7 +187,7 @@ describe('balances', () => {
     await db.query(`update public.tournaments set status = 'live' where id = $1`, [tournamentId]);
     await setClock(db, START);
 
-    await withdrawAsPlayer(a.id);
+    await db.query('select public.withdraw_registration($1)', [a.id]);
     const team = await one(db, `select * from public.teams where name like '%' and withdrawn_at is not null`);
     const left = await rows(db, `select * from public.matches where $1 in (team1_id, team2_id) and status <> 'completed'`, [team.id]);
     expect(left).toEqual([]);

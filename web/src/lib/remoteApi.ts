@@ -253,6 +253,13 @@ export const reopenEvent = (eventId: string) => rpc<TournamentEvent>('reopen_eve
 export const startBracket = (eventId: string) => rpc<void>('start_bracket', { p_event: eventId });
 /** Pool play reviewed and final: seeds the bracket, held until startBracket. */
 export const finalizePoolPlay = (eventId: string) => rpc<void>('finalize_pool_play', { p_event: eventId });
+export const resetBracket = (eventId: string) => rpc<number>('reset_bracket', { p_event: eventId });
+export const resumePoolPlay = (eventId: string) => rpc<number>('resume_pool_play', { p_event: eventId });
+export const placeTeamInPool = (teamId: string, pool: number) =>
+  rpc<number>('place_team_in_pool', { p_team: teamId, p_pool: pool });
+export const swapPoolTeams = (eventId: string, teamA: string, teamB: string) =>
+  rpc<void>('swap_pool_teams', { p_event: eventId, p_team_a: teamA, p_team_b: teamB });
+export const setTeamSeed = (teamId: string, seed: number) => rpc<void>('set_team_seed', { p_team: teamId, p_seed: seed });
 export const swapBracketTeams = (eventId: string, teamA: string, teamB: string) =>
   rpc<void>('swap_bracket_teams', { p_event: eventId, p_team_a: teamA, p_team_b: teamB });
 export const checkInTeam = (teamId: string, checkedIn = true) =>
@@ -267,8 +274,10 @@ export const correctScore = (matchId: string, games: [number, number][]) =>
   rpc('correct_score', { p_match: matchId, p_games: games });
 export const forfeitMatch = (matchId: string, winnerTeamId: string) =>
   rpc('forfeit_match', { p_match: matchId, p_winner_team: winnerTeamId });
-export const requeueMatch = (matchId: string, absentTeamId: string | null) =>
-  rpc('requeue_match', { p_match: matchId, p_absent_team: absentTeamId });
+export const requeueMatch = (matchId: string, absentTeamId: string | null, hold = false) =>
+  rpc('requeue_match', { p_match: matchId, p_absent_team: absentTeamId, p_hold: hold });
+export const reopenMatch = (matchId: string) => rpc('reopen_match', { p_match: matchId });
+export const cancelMatch = (matchId: string) => rpc('cancel_match', { p_match: matchId });
 export const setCourtPaused = (courtId: string, paused: boolean) =>
   rpc('set_court_out_of_service', { p_court: courtId, p_out_of_service: paused });
 export const assignMatchToCourt = (matchId: string, courtId: string) =>
@@ -510,6 +519,7 @@ export const checkInPlayer = (tournamentId: string, playerId: string, checkedIn 
   rpc('check_in_player', { p_tournament: tournamentId, p_player: playerId, p_checked_in: checkedIn });
 
 export const withdrawTeam = (teamId: string) => rpc<number>('withdraw_team', { p_team: teamId });
+export const reinstateTeam = (teamId: string) => rpc<number>('reinstate_team', { p_team: teamId });
 
 export const substitutePlayer = (teamId: string, oldPlayerId: string, p: { first_name: string; last_name: string; phone?: string; email?: string }) =>
   rpc('substitute_player', {

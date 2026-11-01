@@ -19,6 +19,7 @@ import {
   getRegistrations,
   getTeamRoster,
   getTournament,
+  reinstateTeam,
   renameTeam,
   replaceTeam,
   substitutePlayer,
@@ -286,7 +287,7 @@ function PersonRow({
             p.phone,
             p.email,
             rating != null ? `DUPR ${Number(rating).toFixed(2)}` : '',
-            p.profile ? (p.profile.dupr_id ?? 'no DUPR ID') : '',
+            p.profile?.dupr_id ?? '',
           ]
             .filter(Boolean)
             .join(' · ')}
@@ -379,6 +380,7 @@ function PersonSheet({
             </Select>
           )}
           <TeamSummary team={team} eligibility={eligibility.get(team.team_id)} />
+          {(team.withdrawn_at || team.no_show_at) && <BringBack team={team} onDone={onDone} />}
           {!team.withdrawn_at && (
             <>
               <TeamActions
@@ -469,6 +471,27 @@ function TeamSummary({ team, eligibility }: { team: TeamRosterRow; eligibility?:
   );
 }
 
+/** Undoes a drop, a replacement or a missed check-in. */
+function BringBack({ team, onDone }: { team: TeamRosterRow; onDone: () => void }) {
+  const { busy, error, run } = useAction();
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-lg">Put this team back</h3>
+      <p className="text-sm text-muted">
+        {team.replaced_by_team_id
+          ? 'They take back their matches from the alternate, as long as the alternate hasn’t started.'
+          : team.withdrawn_at
+            ? 'Forfeited matches go back in the queue. Any their opponent has already played on from stay forfeited.'
+            : 'They get more time: forfeited matches go back in the queue until they check in, and the deadline no longer applies. Any their opponent has already played on from stay forfeited.'}
+      </p>
+      <Button disabled={busy} onClick={() => run(() => reinstateTeam(team.team_id), onDone)}>
+        Put {team.name} back
+      </Button>
+      <ErrorText>{error}</ErrorText>
+    </section>
+  );
+}
+
 function TeamActions({
   tournamentId,
   team,
@@ -544,7 +567,7 @@ function TeamActions({
 
       <section className="flex flex-col gap-2">
         <h3 className="text-lg">Drop this team</h3>
-        <p className="text-sm text-muted">Their remaining matches are forfeited and opponents move on. This can’t be undone.</p>
+        <p className="text-sm text-muted">Their remaining matches are forfeited and opponents move on. You can put them back afterward.</p>
         <Button
           variant="danger"
           disabled={busy}

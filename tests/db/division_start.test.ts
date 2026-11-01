@@ -129,9 +129,11 @@ describe('starting a division', () => {
     // The other teams keep playing.
     expect((await liveMatches(db, tournamentId)).length).toBeGreaterThan(0);
 
-    // Checking in late clears it (forfeits already made stand).
+    // Checking in late clears it and brings back the forfeits nothing was played on top of.
     await checkIn(db, teams[3]);
     expect((await one(db, 'select no_show_at from public.teams where id = $1', [teams[3]])).no_show_at).toBeNull();
+    const back = await rows(db, `select status from public.matches where event_id = $1 and $2 in (team1_id, team2_id)`, [eventId, teams[3]]);
+    expect(back.some((m) => m.status === 'completed')).toBe(false);
   });
 
   it('never forfeits anyone when the tournament turns the grace period off', async () => {

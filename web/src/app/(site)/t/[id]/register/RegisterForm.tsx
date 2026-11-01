@@ -17,6 +17,7 @@ import {
 import { describeDivision, entryProblem, type PlayerFacts } from '@/lib/eligibility';
 import { entryCost, formatMoney, formatTime, priceAt, priceSummary, registrationOpen } from '@/lib/format';
 import { useAction, useLoad, useNow, useStaffAccess } from '@/lib/hooks';
+import { saveProfile, useProfile, type PlayerProfile } from '@/lib/profile';
 
 interface Choice {
   partner_name: string;
@@ -31,6 +32,16 @@ const optionalNumber = (v: string) => (v.trim() === '' ? null : Number(v));
 
 export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const profile = useProfile();
+  const staff = useStaffAccess(id);
+  if (staff.data === undefined) return <Spinner />;
+  // A director registers someone else, so their own profile doesn't fill it in.
+  // Keyed so choosing another test player starts the form over.
+  const saved = staff.data ? null : profile;
+  return <Form key={saved?.email ?? 'new'} id={id} saved={saved} />;
+}
+
+function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const cancelled = searchParams.get('cancelled');
@@ -45,15 +56,22 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
     ]);
     return { tournament, events, availability, questions };
   }, [id]);
-  const [me, setMe] = useState({ first_name: '', last_name: '', email: '', phone: '', sms_opt_in: true });
-  const [facts, setFacts] = useState<PlayerFacts>({
-    gender: '',
-    birth_date: '',
-    dupr_doubles: '',
-    dupr_singles: '',
-    self_rating: '',
-    dupr_id: '',
+  const [me, setMe] = useState({
+    first_name: saved?.first_name ?? '',
+    last_name: saved?.last_name ?? '',
+    email: saved?.email ?? '',
+    phone: saved?.phone ?? '',
+    sms_opt_in: saved?.sms_opt_in ?? true,
   });
+  const [facts, setFacts] = useState<PlayerFacts>({
+    gender: saved?.gender ?? '',
+    birth_date: saved?.birth_date ?? '',
+    dupr_doubles: saved?.dupr_doubles ?? '',
+    dupr_singles: saved?.dupr_singles ?? '',
+    self_rating: saved?.self_rating ?? '',
+    dupr_id: saved?.dupr_id ?? '',
+  });
+  const [editing, setEditing] = useState(false);
   const [chosen, setChosen] = useState<Record<string, Choice>>(() =>
     linkedEvent ? { [linkedEvent]: { partner_name: '', partner_email: '', pay_for_partner: false } } : {},
   );
@@ -124,6 +142,19 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   const needsAge = events.some((e) => e.min_age !== null || e.max_age !== null);
   const needsRating = events.some((e) => e.skill_rule !== 'open');
   const hasSingles = events.some((e) => e.kind === 'singles' && e.skill_rule !== 'open');
+  const needsGender = events.some((e) => e.gender !== 'open');
+  const needsDuprId = events.some((e) => e.require_dupr_id);
+  // With everything on file, the details fold away to a line. They open again
+  // if a chosen event needs something more, like a rating.
+  const onFile =
+    !!me.first_name.trim() &&
+    !!me.last_name.trim() &&
+    emailPattern.test(me.email.trim()) &&
+    (!needsDuprId || !!facts.dupr_id.trim()) &&
+    (!needsGender || !!facts.gender) &&
+    (!needsAge || !!facts.birth_date);
+  const needsMore = picks.some(([eventId]) => problems[eventId]?.startsWith('needs'));
+  const folded = !!saved && onFile && !editing && !needsMore;
 
   const toggle = (eventId: string) =>
     setChosen((c) => {
@@ -163,6 +194,8 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
               pay_for_partner: c.pay_for_partner && !full.has(event_id) && !paidByPartner.has(event_id),
             })),
           });
+          // Next time they only choose events.
+          if (!director) saveProfile({ ...me, ...facts });
           if (reg.status === 'paid' || reg.status === 'waitlisted') {
             router.push(`/t/${id}/register/done?r=${reg.registration_id}`);
             return;
@@ -210,6 +243,20 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
         </p>
       )}
 
+      {folded ? (
+        <Card className="flex items-start justify-between gap-3 p-5">
+          <div className="min-w-0">
+            <p className="text-sm text-muted">Playing as</p>
+            <p className="text-xl font-semibold">
+              {me.first_name} {me.last_name}
+            </p>
+            <p className="truncate text-sm text-muted">{[me.email, me.phone, needsDuprId && facts.dupr_id && `DUPR ${facts.dupr_id}`].filter(Boolean).join(' · ')}</p>
+          </div>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(true)}>
+            Change
+          </Button>
+        </Card>
+      ) : (
       <Card className="flex flex-col gap-3 p-5">
         <h3 className="text-xl">Your details</h3>
         <div className="grid grid-cols-2 gap-3">
@@ -233,13 +280,15 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Gender" hint="For men’s, women’s and mixed events">
-            <Select value={facts.gender} onChange={(e) => setFacts({ ...facts, gender: e.target.value as PlayerFacts['gender'] })}>
-              <option value="">Choose…</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </Select>
-          </Field>
+          {needsGender && (
+            <Field label="Gender" hint="For men’s, women’s and mixed events">
+              <Select value={facts.gender} onChange={(e) => setFacts({ ...facts, gender: e.target.value as PlayerFacts['gender'] })}>
+                <option value="">Choose…</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </Select>
+            </Field>
+          )}
           {needsAge && (
             <Field label="Date of birth" hint="For age divisions">
               <Input
@@ -251,20 +300,22 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
             </Field>
           )}
         </div>
-        <Field
-          label="DUPR ID"
-          hint="On your DUPR profile, under your name. We use it to check ratings and send your results to DUPR. No account yet? It’s free at dupr.com."
-        >
-          <Input
-            required
-            autoCapitalize="characters"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="e.g. 7K2QXW"
-            value={facts.dupr_id}
-            onChange={(e) => setFacts({ ...facts, dupr_id: e.target.value.toUpperCase() })}
-          />
-        </Field>
+        {needsDuprId && (
+          <Field
+            label="DUPR ID"
+            hint="On your DUPR profile, under your name. We use it to check ratings and send your results to DUPR. No account yet? It’s free at dupr.com."
+          >
+            <Input
+              required
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="e.g. 7K2QXW"
+              value={facts.dupr_id}
+              onChange={(e) => setFacts({ ...facts, dupr_id: e.target.value.toUpperCase() })}
+            />
+          </Field>
+        )}
         {needsRating && (
           <div className="grid grid-cols-2 gap-3">
             <Field label="DUPR doubles">
@@ -333,6 +384,7 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
           </span>
         </label>
       </Card>
+      )}
 
       <Card className="flex flex-col gap-3 p-5">
         <h3 className="text-xl">Events</h3>

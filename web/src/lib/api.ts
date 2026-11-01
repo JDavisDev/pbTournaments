@@ -1,10 +1,13 @@
 // The app's data functions. Supabase in production; the local dev database
 // when NEXT_PUBLIC_DATA_MODE=local. Same names, arguments and results.
-import { isLocalMode } from './config';
+import { isDemoMode, isLocalMode } from './config';
 import { localApi } from './localClient';
 import * as remote from './remoteApi';
+import { logged } from './testLog';
 
-const api = (isLocalMode ? localApi : remote) as typeof remote;
+const backend = (isLocalMode ? localApi : remote) as typeof remote;
+// Demo and local sites log every change for the Test menu.
+const api = isDemoMode ? logged(backend) : backend;
 
 export const {
   getTournament,
@@ -44,6 +47,11 @@ export const {
   reopenEvent,
   startBracket,
   finalizePoolPlay,
+  resetBracket,
+  resumePoolPlay,
+  placeTeamInPool,
+  swapPoolTeams,
+  setTeamSeed,
   swapBracketTeams,
   checkInTeam,
   confirmOnCourt,
@@ -51,6 +59,8 @@ export const {
   correctScore,
   forfeitMatch,
   requeueMatch,
+  reopenMatch,
+  cancelMatch,
   setCourtPaused,
   assignMatchToCourt,
   moveMatchToCourt,
@@ -74,6 +84,7 @@ export const {
   getTeamRoster,
   checkInPlayer,
   withdrawTeam,
+  reinstateTeam,
   substitutePlayer,
   replaceTeam,
   renameTeam,

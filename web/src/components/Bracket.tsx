@@ -50,7 +50,17 @@ function Slot({
   );
 }
 
-function MatchBox({ m, highlightTeamId, picking }: { m: MatchDetails; highlightTeamId?: string; picking?: Picking }) {
+function MatchBox({
+  m,
+  highlightTeamId,
+  picking,
+  onOpen,
+}: {
+  m: MatchDetails;
+  highlightTeamId?: string;
+  picking?: Picking;
+  onOpen?: (m: MatchDetails) => void;
+}) {
   const scores = m.games ? [m.games.map((g) => g[0]).join(' '), m.games.map((g) => g[1]).join(' ')] : ['', ''];
   const live = m.status === 'assigned' || m.status === 'in_progress';
   const mine = highlightTeamId && (m.team1_id === highlightTeamId || m.team2_id === highlightTeamId);
@@ -62,7 +72,7 @@ function MatchBox({ m, highlightTeamId, picking }: { m: MatchDetails; highlightT
     if (m.forfeit) return m.winner_team_id === teamId ? 'W' : 'FF';
     return scores[slot - 1];
   };
-  return (
+  const box = (
     <div
       className={`overflow-hidden rounded-lg border bg-surface text-sm ${notPlayed ? 'opacity-50' : ''} ${
         live ? 'border-live ring-1 ring-live' : mine ? 'border-accent' : 'border-border'
@@ -98,12 +108,28 @@ function MatchBox({ m, highlightTeamId, picking }: { m: MatchDetails; highlightT
       {m.on_hold && canPick && <div className="bg-called-soft px-2.5 py-1 text-xs font-medium text-called">Held for seeding</div>}
     </div>
   );
+  if (!onOpen || picking || m.is_bye || m.status === 'waiting' || m.status === 'cancelled') return box;
+  return (
+    <button type="button" title="Score or change this match" className="block w-full rounded-lg text-left transition hover:brightness-95" onClick={() => onOpen(m)}>
+      {box}
+    </button>
+  );
 }
 
 const roundTitle = (label: string) => label.replace(/ #\d+$/, '').replace(/ \d+$/, '');
 
 /** One column per round. */
-function Rounds({ matches, highlightTeamId, picking }: { matches: MatchDetails[]; highlightTeamId?: string; picking?: Picking }) {
+function Rounds({
+  matches,
+  highlightTeamId,
+  picking,
+  onOpen,
+}: {
+  matches: MatchDetails[];
+  highlightTeamId?: string;
+  picking?: Picking;
+  onOpen?: (m: MatchDetails) => void;
+}) {
   const rounds = [...new Set(matches.map((m) => m.round))].sort((a, b) => a - b);
   return (
     <div className="flex gap-5 overflow-x-auto pb-2">
@@ -118,7 +144,7 @@ function Rounds({ matches, highlightTeamId, picking }: { matches: MatchDetails[]
             </div>
             <div className="flex flex-1 flex-col justify-around gap-4">
               {inRound.map((m) => (
-                <MatchBox key={m.id} m={m} highlightTeamId={highlightTeamId} picking={picking} />
+                <MatchBox key={m.id} m={m} highlightTeamId={highlightTeamId} picking={picking} onOpen={onOpen} />
               ))}
             </div>
           </div>
@@ -131,16 +157,19 @@ function Rounds({ matches, highlightTeamId, picking }: { matches: MatchDetails[]
 /**
  * Single or double elimination. Double elimination shows the winners and
  * losers brackets, then the grand final; a bronze match sits under the
- * single-elimination final. Pass `picking` to let the director swap teams.
+ * single-elimination final. Pass `picking` to let the director swap teams, or
+ * `onOpen` to let them open a match to score or change it.
  */
 export function Bracket({
   matches,
   highlightTeamId,
   picking,
+  onOpen,
 }: {
   matches: MatchDetails[];
   highlightTeamId?: string;
   picking?: Picking;
+  onOpen?: (m: MatchDetails) => void;
 }) {
   const main = matches.filter((m) => m.side === 'main');
   const losers = matches.filter((m) => m.side === 'losers');
@@ -151,12 +180,12 @@ export function Bracket({
     const bronze = finals.find((m) => m.round_key === 'bronze');
     return (
       <div className="flex flex-col gap-4">
-        <Rounds matches={main} highlightTeamId={highlightTeamId} picking={picking} />
+        <Rounds matches={main} highlightTeamId={highlightTeamId} picking={picking} onOpen={onOpen} />
         {bronze && (
           <div className="max-w-64">
             <h4 className="font-display text-lg leading-tight font-bold uppercase">Bronze</h4>
             <p className="mb-2 text-xs text-muted">{shortFormat(bronze)}</p>
-            <MatchBox m={bronze} highlightTeamId={highlightTeamId} picking={picking} />
+            <MatchBox m={bronze} highlightTeamId={highlightTeamId} picking={picking} onOpen={onOpen} />
           </div>
         )}
       </div>
@@ -167,12 +196,12 @@ export function Bracket({
     <div className="flex flex-col gap-6">
       <div>
         <p className="mb-2 text-xs font-semibold tracking-widest text-muted uppercase">Winners bracket</p>
-        <Rounds matches={main} highlightTeamId={highlightTeamId} picking={picking} />
+        <Rounds matches={main} highlightTeamId={highlightTeamId} picking={picking} onOpen={onOpen} />
       </div>
       {losers.length > 0 && (
         <div>
           <p className="mb-2 text-xs font-semibold tracking-widest text-muted uppercase">Losers bracket</p>
-          <Rounds matches={losers} highlightTeamId={highlightTeamId} picking={picking} />
+          <Rounds matches={losers} highlightTeamId={highlightTeamId} picking={picking} onOpen={onOpen} />
         </div>
       )}
       <div>
@@ -182,7 +211,7 @@ export function Bracket({
             <div key={m.id} className="w-64">
               <h4 className="font-display text-lg leading-tight font-bold uppercase">{m.label}</h4>
               <p className="mb-2 text-xs text-muted">{shortFormat(m)}</p>
-              <MatchBox m={m} highlightTeamId={highlightTeamId} picking={picking} />
+              <MatchBox m={m} highlightTeamId={highlightTeamId} picking={picking} onOpen={onOpen} />
             </div>
           ))}
         </div>

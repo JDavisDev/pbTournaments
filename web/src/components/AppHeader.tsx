@@ -6,11 +6,14 @@ import { BRAND } from '@/lib/brand';
 import { isDemoMode, isLocalMode } from '@/lib/config';
 import { useAction, useSession } from '@/lib/hooks';
 import { LogoHorizontal } from './Logo';
+import { useProfile } from '@/lib/profile';
+import { TestMenu } from './TestMenu';
 import { TextSizeButton } from './TextSizeButton';
 
 export function AppHeader() {
   const user = useSession();
   const guest = useAction();
+  const profile = useProfile();
   return (
     <header className="border-t-4 border-brand bg-surface">
       {isDemoMode && (
@@ -36,6 +39,14 @@ export function AppHeader() {
             Pricing
           </Link>
           <TextSizeButton />
+          {isDemoMode && (
+            <>
+              <Link href="/profile" className="hidden h-11 items-center rounded-full px-3 font-medium text-muted hover:text-text sm:inline-flex">
+                {profile ? profile.first_name : 'Sign up'}
+              </Link>
+              <TestMenu />
+            </>
+          )}
           {user === undefined ? null : user ? (
             <>
               <span className="hidden text-muted lg:inline">{isGuest(user) ? 'Guest' : user.email}</span>

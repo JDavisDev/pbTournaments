@@ -203,6 +203,13 @@ const ops: Record<string, Op> = {
   reopenEvent: (tx, id: string) => one(tx, 'select * from public.reopen_event($1)', [id]),
   startBracket: (tx, id: string) => tx.query('select public.start_bracket($1)', [id]).then(() => null),
   finalizePoolPlay: (tx, id: string) => tx.query('select public.finalize_pool_play($1)', [id]).then(() => null),
+  resetBracket: async (tx, id: string) => (await one<{ n: number }>(tx, 'select public.reset_bracket($1) as n', [id])).n,
+  resumePoolPlay: async (tx, id: string) => (await one<{ n: number }>(tx, 'select public.resume_pool_play($1) as n', [id])).n,
+  placeTeamInPool: async (tx, id: string, pool: number) =>
+    (await one<{ n: number }>(tx, 'select public.place_team_in_pool($1, $2) as n', [id, pool])).n,
+  swapPoolTeams: (tx, eventId: string, a: string, b: string) =>
+    tx.query('select public.swap_pool_teams($1, $2, $3)', [eventId, a, b]).then(() => null),
+  setTeamSeed: (tx, id: string, seed: number) => tx.query('select public.set_team_seed($1, $2)', [id, seed]).then(() => null),
   swapBracketTeams: (tx, eventId: string, a: string, b: string) =>
     tx.query('select public.swap_bracket_teams($1, $2, $3)', [eventId, a, b]).then(() => null),
   checkInTeam: (tx, id: string, checkedIn = true) => one(tx, 'select * from public.check_in_team($1, $2)', [id, checkedIn]),
@@ -211,8 +218,10 @@ const ops: Record<string, Op> = {
   reportScore: (tx, id: string, g: unknown) => one(tx, 'select * from public.report_score($1, $2::jsonb)', [id, games(g)]),
   correctScore: (tx, id: string, g: unknown) => one(tx, 'select * from public.correct_score($1, $2::jsonb)', [id, games(g)]),
   forfeitMatch: (tx, id: string, winner: string) => one(tx, 'select * from public.forfeit_match($1, $2)', [id, winner]),
-  requeueMatch: (tx, id: string, absent: string | null) =>
-    one(tx, 'select * from public.requeue_match($1, $2)', [id, absent]),
+  requeueMatch: (tx, id: string, absent: string | null, hold = false) =>
+    one(tx, 'select * from public.requeue_match($1, $2, $3)', [id, absent, hold]),
+  reopenMatch: (tx, id: string) => one(tx, 'select * from public.reopen_match($1)', [id]),
+  cancelMatch: (tx, id: string) => one(tx, 'select * from public.cancel_match($1)', [id]),
   setCourtPaused: (tx, id: string, paused: boolean) =>
     one(tx, 'select * from public.set_court_out_of_service($1, $2)', [id, paused]),
   assignMatchToCourt: (tx, id: string, court: string) =>
@@ -258,6 +267,7 @@ const ops: Record<string, Op> = {
   checkInPlayer: (tx, tournamentId: string, playerId: string, checkedIn = true) =>
     tx.query('select public.check_in_player($1, $2, $3)', [tournamentId, playerId, checkedIn]).then(() => null),
   withdrawTeam: async (tx, id: string) => (await one<{ n: number }>(tx, 'select public.withdraw_team($1) as n', [id])).n,
+  reinstateTeam: async (tx, id: string) => (await one<{ n: number }>(tx, 'select public.reinstate_team($1) as n', [id])).n,
   substitutePlayer: (tx, teamId: string, oldPlayer: string, p: { first_name: string; last_name: string; phone?: string; email?: string }) =>
     one(tx, 'select * from public.substitute_player($1, $2, $3, $4, $5, $6)', [
       teamId,

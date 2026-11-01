@@ -46,6 +46,8 @@ export function MatchRow({
           <Badge tone="live">Playing · {m.court_name}</Badge>
         ) : m.status === 'assigned' ? (
           <Badge tone="called">Go to {m.court_name}</Badge>
+        ) : m.status === 'cancelled' ? (
+          <Badge>Cancelled</Badge>
         ) : queueRow ? (
           <>
             <span className="text-xs text-muted">#{queueRow.queue_rank} in line</span>

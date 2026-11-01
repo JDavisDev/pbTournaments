@@ -304,7 +304,7 @@ function MatchDayPanel({
       {team.no_show_at && (
         <Card className="border-2 border-late p-4">
           <p className="font-semibold text-late">You missed check-in</p>
-          <p>Your team’s matches were forfeited. If you’re here now, check in at the front desk: any match still to come can be played.</p>
+          <p>Your team’s matches were forfeited. If you’re here now, check in at the front desk: matches no one has played on from come back.</p>
         </Card>
       )}
 

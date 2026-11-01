@@ -7,16 +7,19 @@ import { ConnectNotice } from '@/components/ConnectNotice';
 import { DivisionStatus, divisionState } from '@/components/DivisionStatus';
 import { FinalizeDivision } from '@/components/FinalizeDivision';
 import { Icon } from '@/components/Icon';
+import { MatchActionsDialog, QueuedMatchDialog } from '@/components/desk/MatchActionsDialog';
 import { QueuePanel } from '@/components/desk/QueuePanel';
-import { ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
+import { correctionTarget, ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
 import { MatchRow } from '@/components/MatchRow';
 import { Podium } from '@/components/Podium';
 import { StandingsTable } from '@/components/StandingsTable';
 import { SchedulePreview } from '@/components/SchedulePreview';
 import { StartDivision } from '@/components/StartDivision';
 import { WatchChip } from '@/components/StreamEmbed';
-import { Badge, Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
+import { Badge, Button, Card, Empty, ErrorText, Select, Spinner } from '@/components/ui';
 import {
+  cancelMatch,
+  clearMatches,
   endPoolPlay,
   getCourtBoard,
   getEvents,
@@ -26,15 +29,21 @@ import {
   getTeamRoster,
   getTeams,
   getTournament,
+  placeTeamInPool,
+  reinstateTeam,
+  reopenMatch,
+  resetBracket,
+  resumePoolPlay,
   startBracket,
   finalizePoolPlay,
   swapBracketTeams,
+  swapPoolTeams,
 } from '@/lib/api';
 import { describeDivision } from '@/lib/eligibility';
-import { advanceRule, bracketSeeds, formatSummary, formatTime, isPlayable, podium, poolName, shortFormat } from '@/lib/format';
+import { advanceRule, bracketSeeds, formatSummary, formatTime, isPlayable, podium, poolName, shortFormat, wasPlayed } from '@/lib/format';
 import { useAction, useLiveTournament, useLoad, useNow, useStaffAccess } from '@/lib/hooks';
 import { rulesOf } from '@/lib/scoring';
-import type { MatchDetails, QueueRow, Team } from '@/lib/types';
+import type { CourtBoardRow, MatchDetails, QueueRow, Team } from '@/lib/types';
 
 async function load(id: string) {
   const [tournament, events, teams, matches, standings, queue, courts] = await Promise.all([
@@ -61,7 +70,10 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
   const [arranging, setArranging] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const control = useAction();
+  const undo = useAction();
   const [score, setScore] = useState<ScoreTarget | null>(null);
+  const [courtActions, setCourtActions] = useState<CourtBoardRow | null>(null);
+  const [queuedMatch, setQueuedMatch] = useState<MatchDetails | null>(null);
 
   if (error === 'not-configured') return <ConnectNotice />;
   if (error) return <Empty>{error}</Empty>;
@@ -125,24 +137,32 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
             : 'Bracket';
 
   const state = divisionState(event, all);
-  // Directors fix a finished match's score from the Matches tab.
-  const correct = isDirector
-    ? (m: MatchDetails) =>
-        setScore({
-          matchId: m.id,
-          team1: m.team1_name,
-          team2: m.team2_name,
-          rules: rulesOf(m),
-          games: m.games,
-          mode: 'correct',
-          note:
-            m.stage === 'pool' && event.playoffs_seeded_at
-              ? bracketNotStarted
-                ? 'Saving seeds the bracket again from the new standings. Seeds you arranged by hand are reset.'
-                : 'The bracket has started, so it stays as it is: this fixes the score for the results and DUPR.'
-              : undefined,
-        })
-    : undefined;
+  // Directors open a match from the bracket or the Matches tab: fix it if it's
+  // finished, score it if it's on a court, send it out or hold it if it's queued.
+  const openMatch = (m: MatchDetails) => {
+    if (m.status === 'completed') return setScore(correctionTarget(m, data.matches));
+    if (m.status === 'queued') return setQueuedMatch(m);
+    const court = data.courts.find((c) => c.match_id === m.id);
+    if (!court) return;
+    setScore({
+      matchId: m.id,
+      team1: m.team1_name,
+      team2: m.team2_name,
+      rules: rulesOf(m),
+      mode: 'report',
+      onMore: () => (setScore(null), setCourtActions(court)),
+    });
+  };
+  const onOpen = isDirector ? openMatch : undefined;
+  // What can still be backed out of. A bracket can be reset until its second round starts.
+  const open = !!event.started_at && !event.finalized_at;
+  const canUnstart = open && !all.some((m) => m.status === 'completed' && wasPlayed(m));
+  const canResume = open && !event.pools_finalized_at && (poolMatches.some((m) => m.status === 'cancelled') || event.rounds_before_end !== null);
+  const bracketPlayed = bracket.filter(wasPlayed);
+  const firstWave = Math.min(...bracket.filter((m) => !m.is_bye && !m.team1_bye && !m.team2_bye).map((m) => m.wave));
+  const pastFirstRound = bracketPlayed.some((m) => m.wave > firstWave);
+  const canReset = open && bracket.length > 0 && !pastFirstRound && (event.format === 'single_elim' || !!event.pools_finalized_at);
+  const canChangePools = open && event.format !== 'single_elim' && poolMatches.length > 0 && !event.pools_finalized_at;
   const grace = data.tournament.checkin_grace_minutes;
   const forfeitAt = event.started_at && grace !== null ? new Date(event.started_at).getTime() + grace * 60_000 : null;
   const absent = teams.filter((t) => !t.checked_in_at && !t.no_show_at);
@@ -355,6 +375,53 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         </Card>
       )}
 
+      {isDirector && (canUnstart || canResume || canReset || (open && pastFirstRound)) && (
+        <Card className="flex flex-col gap-3 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-auto text-sm font-semibold tracking-widest text-muted uppercase">Undo</span>
+            {canUnstart && (
+              <Button
+                size="sm"
+                disabled={undo.busy}
+                onClick={() =>
+                  confirm(
+                    `Undo starting ${event.name}? Its schedule is cleared${onCourt.length ? ` and ${onCourt.length} match${onCourt.length === 1 ? '' : 'es'} on court ${onCourt.length === 1 ? 'is' : 'are'} called off` : ''}. You can change teams and format, and start it again.`,
+                  ) && undo.run(() => clearMatches(eventId), reload)
+                }
+              >
+                Undo start
+              </Button>
+            )}
+            {canResume && (
+              <Button size="sm" disabled={undo.busy} onClick={() => undo.run(() => resumePoolPlay(eventId), reload)}>
+                Resume pool play
+              </Button>
+            )}
+            {canReset && (
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={undo.busy}
+                onClick={() =>
+                  confirm(
+                    `Reset the bracket?${bracketPlayed.length ? ` ${bracketPlayed.length} match${bracketPlayed.length === 1 ? '' : 'es'} played or on court ${bracketPlayed.length === 1 ? 'is' : 'are'} discarded, and players on court get a text.` : ''} ` +
+                      (event.format === 'single_elim'
+                        ? 'It’s built again from the current seeds, and held until you start it.'
+                        : 'You go back to reviewing pool play, and seed it again when you finalize.'),
+                  ) && undo.run(() => resetBracket(eventId), () => (setArranging(false), reload()))
+                }
+              >
+                Reset bracket
+              </Button>
+            )}
+          </div>
+          {pastFirstRound && (
+            <p className="text-sm text-muted">The second round has started, so the bracket stands. Scores can still be fixed from Matches.</p>
+          )}
+          <ErrorText>{undo.error}</ErrorText>
+        </Card>
+      )}
+
       {onCourt.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {onCourt.map((c) => (
@@ -416,20 +483,24 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
             {event.format === 'pools_to_bracket' && !event.playoffs_seeded_at && (
               <p className="mb-3 text-sm text-muted">Seeds are filled in when pool play finishes.</p>
             )}
-            <Bracket matches={bracket} picking={arranging ? { pickedTeamId: picked, onPick: pick } : undefined} />
+            {isDirector && !arranging && <p className="mb-3 text-sm text-muted">Click a match to score or change it.</p>}
+            <Bracket matches={bracket} picking={arranging ? { pickedTeamId: picked, onPick: pick } : undefined} onOpen={onOpen} />
           </section>
         )}
 
+        {active === 'matches' && <ErrorText>{undo.error}</ErrorText>}
         {active === 'matches' && (
           <section className="grid gap-4 lg:grid-cols-2">
             {pools.map((pool) => (
               <MatchList
                 key={pool}
                 title={pools.length > 1 ? poolName(pool) : swiss ? 'Swiss rounds' : 'Pool play'}
-                matches={poolMatches.filter((m) => m.pool === pool && isPlayable(m))}
+                matches={poolMatches.filter((m) => m.pool === pool && (isPlayable(m) || (isDirector && m.status === 'cancelled')))}
                 queueById={queueById}
                 timeZone={data.tournament.time_zone}
-                onCorrect={correct}
+                onOpen={onOpen}
+                onCancel={isDirector && canChangePools ? (m) => undo.run(() => cancelMatch(m.id), reload) : undefined}
+                onRestore={isDirector && !event.finalized_at ? (m) => undo.run(() => reopenMatch(m.id), reload) : undefined}
               />
             ))}
             {bracket.some(isPlayable) && (
@@ -438,20 +509,106 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
                 matches={bracket.filter(isPlayable).sort((a, b) => Number(a.queue_seq) - Number(b.queue_seq))}
                 queueById={queueById}
                 timeZone={data.tournament.time_zone}
-                onCorrect={correct}
+                onOpen={onOpen}
               />
             )}
           </section>
         )}
 
         {active === 'teams' && (
-          <TeamList tournamentId={id} eventId={eventId} teams={teams} director={isDirector} started={!!event.started_at} />
+          <>
+            {isDirector && canChangePools && (
+              <PoolChanges eventId={eventId} poolCount={event.pool_count} teams={teams} onChanged={reload} />
+            )}
+            <TeamList tournamentId={id} eventId={eventId} teams={teams} director={isDirector} started={!!event.started_at} onChanged={reload} />
+          </>
         )}
 
         {active === 'queue' && isDirector && <QueuePanel queue={queue} staff now={now} onChanged={reload} />}
       </>
       <ScoreDialog target={score} onClose={() => setScore(null)} onDone={reload} />
+      <MatchActionsDialog court={courtActions} courts={data.courts} onClose={() => setCourtActions(null)} onDone={reload} />
+      <QueuedMatchDialog match={queuedMatch} courts={data.courts} onClose={() => setQueuedMatch(null)} onDone={reload} />
     </div>
+  );
+}
+
+/** Directors change who plays where once pool play is under way: late entries, moves and swaps. */
+function PoolChanges({
+  eventId,
+  poolCount,
+  teams,
+  onChanged,
+}: {
+  eventId: string;
+  poolCount: number;
+  teams: Team[];
+  onChanged: () => void;
+}) {
+  const [team, setTeam] = useState('');
+  const [pool, setPool] = useState('1');
+  const [a, setA] = useState('');
+  const [b, setB] = useState('');
+  const { busy, error, run } = useAction();
+  const placedOptions = teams
+    .filter((t) => t.pool)
+    .map((t) => (
+      <option key={t.id} value={t.id}>
+        {t.name} ({poolName(t.pool!)})
+      </option>
+    ));
+  const movable = poolCount > 1 ? teams : teams.filter((t) => !t.pool);
+  return (
+    <Card className="mb-3 flex flex-col gap-4 p-4">
+      <div className="flex flex-col gap-2">
+        <h3 className="text-lg">{poolCount > 1 ? 'Add a team or move it to a pool' : 'Add a late team'}</h3>
+        <p className="text-sm text-muted">
+          It gets a match against each team in the pool, after what’s scheduled. Add new teams in Division settings first. A team that’s
+          already played can’t move.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Select className="min-w-48 flex-1" aria-label="Team" value={team} onChange={(e) => setTeam(e.target.value)}>
+            <option value="">Choose a team…</option>
+            {movable.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+                {t.pool ? ` (${poolName(t.pool)})` : ' (not scheduled)'}
+              </option>
+            ))}
+          </Select>
+          {poolCount > 1 && (
+            <Select aria-label="Pool" value={pool} onChange={(e) => setPool(e.target.value)}>
+              {Array.from({ length: poolCount }, (_, i) => (
+                <option key={i} value={i + 1}>
+                  {poolName(i + 1)}
+                </option>
+              ))}
+            </Select>
+          )}
+          <Button disabled={busy || !team} onClick={() => run(() => placeTeamInPool(team, Number(pool)), () => (setTeam(''), onChanged()))}>
+            Put in pool
+          </Button>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <h3 className="text-lg">Swap two teams’ places</h3>
+        <p className="text-sm text-muted">They trade pools and schedules. Neither can have played yet.</p>
+        <div className="flex flex-wrap gap-2">
+          <Select className="min-w-48 flex-1" aria-label="First team" value={a} onChange={(e) => setA(e.target.value)}>
+            <option value="">First team…</option>
+            {placedOptions}
+          </Select>
+          <Select className="min-w-48 flex-1" aria-label="Second team" value={b} onChange={(e) => setB(e.target.value)}>
+            <option value="">Second team…</option>
+            {placedOptions}
+          </Select>
+          <Button disabled={busy || !a || !b || a === b} onClick={() => run(() => swapPoolTeams(eventId, a, b), () => (setA(''), setB(''), onChanged()))}>
+            Swap
+          </Button>
+        </div>
+      </div>
+      <ErrorText>{error}</ErrorText>
+    </Card>
   );
 }
 
@@ -462,13 +619,16 @@ function TeamList({
   teams,
   director,
   started,
+  onChanged,
 }: {
   tournamentId: string;
   eventId: string;
   teams: Team[];
   director: boolean;
   started: boolean;
+  onChanged: () => void;
 }) {
+  const bringBack = useAction();
   const roster = useLoad(
     () => (director ? getTeamRoster(tournamentId) : Promise.resolve([])),
     [tournamentId, director, teams.length],
@@ -501,7 +661,7 @@ function TeamList({
                         : p.self_rating != null
                           ? ` · ${Number(p.self_rating).toFixed(1)} self`
                           : ''}
-                      {p.dupr_id ? '' : ' · no DUPR ID'}
+                      {p.dupr_id ? ` · ${p.dupr_id}` : ''}
                     </span>
                   </p>
                 ))}
@@ -513,6 +673,11 @@ function TeamList({
                 <Badge tone="live">Here</Badge>
               ) : (
                 <Badge tone={started ? 'called' : 'neutral'}>Not here</Badge>
+              )}
+              {director && t.no_show_at && (
+                <Button size="sm" disabled={bringBack.busy} onClick={() => bringBack.run(() => reinstateTeam(t.id), onChanged)}>
+                  Give more time
+                </Button>
               )}
               {director && (
                 <Link
@@ -526,6 +691,7 @@ function TeamList({
           </li>
         ))}
       </ul>
+      <ErrorText>{bringBack.error}</ErrorText>
     </section>
   );
 }
@@ -535,27 +701,54 @@ function MatchList({
   matches,
   queueById,
   timeZone,
-  onCorrect,
+  onOpen,
+  onCancel,
+  onRestore,
 }: {
   title: string;
   matches: MatchDetails[];
   queueById: Map<string, QueueRow>;
   timeZone: string;
-  /** Directors: a finished match opens its score to fix. */
-  onCorrect?: (m: MatchDetails) => void;
+  /** Directors: open a match to score or change it. */
+  onOpen?: (m: MatchDetails) => void;
+  /** Directors: take an unplayed pool match off the schedule. */
+  onCancel?: (m: MatchDetails) => void;
+  /** Directors: bring a cancelled one back. */
+  onRestore?: (m: MatchDetails) => void;
 }) {
   return (
     <div className="divide-y divide-border rounded-xl border border-border bg-surface">
       <h4 className="px-3 py-2 font-display text-lg font-bold uppercase">{title}</h4>
-      {matches.map((m) =>
-        onCorrect && m.status === 'completed' ? (
-          <button key={m.id} type="button" title="Fix this score" className="block w-full text-left hover:bg-surface-2" onClick={() => onCorrect(m)}>
-            <MatchRow match={m} queueRow={queueById.get(m.id)} timeZone={timeZone} />
-          </button>
-        ) : (
-          <MatchRow key={m.id} match={m} queueRow={queueById.get(m.id)} timeZone={timeZone} />
-        ),
-      )}
+      {matches.map((m) => {
+        const row = <MatchRow match={m} queueRow={queueById.get(m.id)} timeZone={timeZone} />;
+        const opens = onOpen && m.status !== 'waiting' && m.status !== 'cancelled';
+        const cancels = onCancel && m.stage === 'pool' && (m.status === 'waiting' || m.status === 'queued');
+        const restores = onRestore && m.status === 'cancelled';
+        return (
+          <div key={m.id}>
+            {opens ? (
+              <button type="button" title="Score or change this match" className="block w-full text-left hover:bg-surface-2" onClick={() => onOpen(m)}>
+                {row}
+              </button>
+            ) : (
+              row
+            )}
+            {(cancels || restores) && (
+              <div className="flex justify-end px-3 pb-2">
+                {restores ? (
+                  <Button size="sm" variant="ghost" onClick={() => onRestore(m)}>
+                    Restore
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="ghost" onClick={() => confirm('Cancel this match? It won’t be played or count in the standings. You can restore it.') && onCancel?.(m)}>
+                    Cancel match
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

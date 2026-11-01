@@ -25,6 +25,7 @@ import {
   setCourtChampionshipRank,
   setCourtCount,
   setCourtStream,
+  setTeamSeed,
   setTournamentStatus,
   updateTournament,
 } from '@/lib/api';
@@ -43,6 +44,7 @@ import {
   poolName,
   shortFormat,
   toZonedInput,
+  wasPlayed,
 } from '@/lib/format';
 import { isYoutubeUrl } from '@/lib/youtube';
 import { SaveAllProvider, useSaveAll, useUnsaved, useUnsavedSections } from './SaveAll';
@@ -1528,7 +1530,7 @@ function EventCard({
   const [text, setText] = useState('');
   const { busy, error, run } = useAction();
   const scheduled = matches.length > 0;
-  const started = matches.some((m) => m.status !== 'waiting' && m.status !== 'queued');
+  const played = matches.some((m) => m.status === 'completed' && wasPlayed(m));
   const nextSeed = Math.max(0, ...teams.map((t) => t.seed ?? 0)) + 1;
   const section = courts.filter((c) => event.court_ids.includes(c.court_id)).map((c) => c.court_name);
 
@@ -1589,7 +1591,7 @@ function EventCard({
             <ol className="flex max-h-72 flex-col overflow-y-auto rounded-lg border border-border text-sm">
               {[...teams]
                 .sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999))
-                .map((t) => (
+                .map((t, i, sorted) => (
                   <li key={t.id} className="flex items-center justify-between gap-2 border-b border-border px-2.5 py-1.5 last:border-0">
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="tnum w-5 text-right text-xs text-muted">{t.seed}</span>
@@ -1597,13 +1599,33 @@ function EventCard({
                       {t.pool && <span className="text-xs text-muted">{poolName(t.pool)}</span>}
                     </span>
                     {!scheduled && (
-                      <button
-                        className="text-xs text-muted hover:text-late"
-                        disabled={busy}
-                        onClick={() => run(() => deleteTeam(t.id), onChanged)}
-                      >
-                        Remove
-                      </button>
+                      <span className="flex shrink-0 items-center gap-1">
+                        <button
+                          aria-label={`Move ${t.name} up`}
+                          title="Better seed"
+                          className="text-muted hover:text-text disabled:opacity-30"
+                          disabled={busy || i === 0}
+                          onClick={() => run(() => setTeamSeed(t.id, i), onChanged)}
+                        >
+                          <Icon name="up" />
+                        </button>
+                        <button
+                          aria-label={`Move ${t.name} down`}
+                          title="Worse seed"
+                          className="text-muted hover:text-text disabled:opacity-30"
+                          disabled={busy || i === sorted.length - 1}
+                          onClick={() => run(() => setTeamSeed(t.id, i + 2), onChanged)}
+                        >
+                          <Icon name="down" />
+                        </button>
+                        <button
+                          className="text-xs text-muted hover:text-late"
+                          disabled={busy}
+                          onClick={() => run(() => deleteTeam(t.id), onChanged)}
+                        >
+                          Remove
+                        </button>
+                      </span>
                     )}
                   </li>
                 ))}
@@ -1615,7 +1637,8 @@ function EventCard({
           <h4 className="text-sm font-medium">{scheduled ? 'Add alternates' : 'Add teams'}</h4>
           {scheduled && (
             <p className="text-xs text-muted">
-              The schedule is built, so new teams aren’t in it. Swap one in for a dropped team on the Players page.
+              The schedule is built, so new teams aren’t in it. Put one in a pool from the division’s Teams tab, or swap one in for a
+              dropped team on the Players page.
             </p>
           )}
           <Textarea
@@ -1646,9 +1669,12 @@ function EventCard({
           </p>
         ) : (
           <Button
-            disabled={busy || started}
-            title={started ? 'Matches have already been played' : undefined}
-            onClick={() => confirm('Delete this event’s schedule so you can change teams or format?') && run(() => clearMatches(event.id), onChanged)}
+            disabled={busy || played}
+            title={played ? 'Matches have already been played' : undefined}
+            onClick={() =>
+              confirm('Delete this event’s schedule so you can change teams or format? Any match on court is called off.') &&
+              run(() => clearMatches(event.id), onChanged)
+            }
           >
             Clear schedule
           </Button>

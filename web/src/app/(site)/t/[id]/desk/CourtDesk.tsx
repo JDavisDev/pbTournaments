@@ -9,7 +9,7 @@ import { CourtCard, courtState } from '@/components/desk/CourtCard';
 import { MatchActionsDialog } from '@/components/desk/MatchActionsDialog';
 import { QueuePanel } from '@/components/desk/QueuePanel';
 import { ResultsPanel } from '@/components/desk/ResultsPanel';
-import { ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
+import { correctionTarget, ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
 import { Button, Card, Empty, ErrorText, Select, Spinner } from '@/components/ui';
 import {
   assignCourtsNow,
@@ -298,16 +298,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
               matches={matches}
               timeZone={t.time_zone}
               staff={admin}
-              onCorrect={(m) =>
-                setScore({
-                  matchId: m.id,
-                  team1: m.team1_name,
-                  team2: m.team2_name,
-                  rules: rulesOf(m),
-                  games: m.games,
-                  mode: 'correct',
-                })
-              }
+              onCorrect={(m) => setScore(correctionTarget(m, matches))}
             />
           )}
         </aside>

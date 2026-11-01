@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { forfeitMatch, moveMatchToCourt, requeueMatch, setCourtPaused } from '@/lib/api';
+import { assignMatchToCourt, forfeitMatch, holdMatch, moveMatchToCourt, requeueMatch, setCourtPaused } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
-import type { CourtBoardRow } from '@/lib/types';
-import { Button, ErrorText, Modal, Select } from '../ui';
+import type { CourtBoardRow, MatchDetails } from '@/lib/types';
+import { Button, Check, ErrorText, Modal, Select } from '../ui';
 
 /** Director actions for the match on a court: move/swap, send back to the queue, forfeit, pause. */
 export function MatchActionsDialog({
@@ -28,6 +28,95 @@ export function MatchActionsDialog({
   );
 }
 
+/** Director actions for a match still in the queue: send it out, hold it, forfeit. */
+export function QueuedMatchDialog({
+  match,
+  courts,
+  onClose,
+  onDone,
+}: {
+  match: MatchDetails | null;
+  courts: CourtBoardRow[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  return (
+    <Modal open={!!match} onClose={onClose} title={match ? match.label ?? 'Match' : ''}>
+      {match && <QueuedActions key={match.id} match={match} courts={courts} onClose={onClose} onDone={onDone} />}
+    </Modal>
+  );
+}
+
+function QueuedActions({
+  match: m,
+  courts,
+  onClose,
+  onDone,
+}: {
+  match: MatchDetails;
+  courts: CourtBoardRow[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [target, setTarget] = useState('');
+  const { busy, error, run } = useAction();
+  const done = () => {
+    onDone();
+    onClose();
+  };
+  const open = courts.filter((c) => !c.match_id && !c.out_of_service);
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-sm">
+        <span className="font-medium">{m.team1_name}</span> vs <span className="font-medium">{m.team2_name}</span>
+      </p>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="text-lg">Send to a court</h3>
+        <p className="text-xs text-muted">Goes out now, ahead of the queue. Its score can be entered once it’s on a court.</p>
+        {open.length === 0 ? (
+          <p className="text-sm text-muted">No courts are open right now.</p>
+        ) : (
+          <div className="flex gap-2">
+            <Select className="flex-1" aria-label="Court" value={target} onChange={(e) => setTarget(e.target.value)}>
+              <option value="">Choose a court…</option>
+              {open.map((c) => (
+                <option key={c.court_id} value={c.court_id}>
+                  {c.court_name}
+                </option>
+              ))}
+            </Select>
+            <Button disabled={!target || busy} onClick={() => run(() => assignMatchToCourt(m.id, target), done)}>
+              Send
+            </Button>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="text-lg">{m.on_hold ? 'On hold' : 'Hold'}</h3>
+        <Button disabled={busy} onClick={() => run(() => holdMatch(m.id, !m.on_hold), done)}>
+          {m.on_hold ? 'Release it' : 'Keep it off courts until I release it'}
+        </Button>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="text-lg">Forfeit</h3>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="danger" disabled={busy} onClick={() => run(() => forfeitMatch(m.id, m.team1_id!), done)}>
+            {m.team1_name} win by forfeit
+          </Button>
+          <Button variant="danger" disabled={busy} onClick={() => run(() => forfeitMatch(m.id, m.team2_id!), done)}>
+            {m.team2_name} win by forfeit
+          </Button>
+        </div>
+      </section>
+
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
 function Actions({
   court,
   courts,
@@ -43,6 +132,7 @@ function Actions({
 }) {
   const [target, setTarget] = useState('');
   const [absent, setAbsent] = useState<string>('none');
+  const [hold, setHold] = useState(false);
   const [winner, setWinner] = useState('');
   const { busy, error, run } = useAction();
   const done = () => {
@@ -84,7 +174,8 @@ function Actions({
       <section className="flex flex-col gap-2">
         <h3 className="text-lg">Send back to the queue</h3>
         <p className="text-xs text-muted">
-          It keeps its place in line. A team marked missing is checked out until they check in again.
+          It keeps its place in line, and goes back out as soon as a court is free unless you hold it. A team marked missing is
+          checked out until they check in again.
         </p>
         <Select value={absent} onChange={(e) => setAbsent(e.target.value)}>
           <option value="none">Everyone is here, just pull it off the court</option>
@@ -94,7 +185,8 @@ function Actions({
             </option>
           ))}
         </Select>
-        <Button disabled={busy} onClick={() => run(() => requeueMatch(matchId, absent === 'none' ? null : absent), done)}>
+        <Check label="Hold it until I release it from the queue" checked={hold} onChange={setHold} />
+        <Button disabled={busy} onClick={() => run(() => requeueMatch(matchId, absent === 'none' ? null : absent, hold), done)}>
           Send back to queue
         </Button>
       </section>

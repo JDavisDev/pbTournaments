@@ -445,6 +445,8 @@ export interface TeamRosterRow {
   withdrawn_at: string | null;
   match_count: number;
   players: RosterPlayer[];
+  no_show_at: string | null;
+  replaced_by_team_id: string | null;
 }
 
 /** checkin_roster view: one row per player */
@@ -510,6 +512,8 @@ export interface TournamentEvent {
   playoffs_seeded_at: string | null;
   /** A director reviewed pool play and finalized it, seeding the bracket (finalize_pool_play). */
   pools_finalized_at: string | null;
+  /** Swiss rounds planned before pool play was ended early. */
+  rounds_before_end: number | null;
   /** When a director started the division (start_event); its matches go on court only after. */
   started_at: string | null;
   /** When a director marked the results final (finalize_event): scores are locked and it can go to DUPR. */

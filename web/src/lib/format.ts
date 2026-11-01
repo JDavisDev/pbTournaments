@@ -82,6 +82,40 @@ export function advanceRule(pools: number, size: number) {
 export const isPlayable = (m: Pick<MatchDetails, 'is_bye' | 'status' | 'team1_bye' | 'team2_bye'>) =>
   !m.is_bye && !m.team1_bye && !m.team2_bye && m.status !== 'cancelled';
 
+/** Played, or on a court now. Byes and forfeits that never reached a court don't count. */
+export const wasPlayed = (m: Pick<MatchDetails, 'status' | 'is_bye' | 'forfeit' | 'games' | 'started_at'>) =>
+  m.status === 'assigned' ||
+  m.status === 'in_progress' ||
+  (m.status === 'completed' && !m.is_bye && !(m.forfeit && !m.games && !m.started_at));
+
+/** What correcting a finished match does beyond its score, when that's more than the bracket moving along. */
+export function correctionNote(m: MatchDetails, matches: MatchDetails[]): string | undefined {
+  const division = matches.filter((x) => x.event_id === m.event_id);
+  const bracket = division.filter((x) => x.stage === 'bracket');
+  if (m.stage === 'pool') {
+    if (!bracket.some((x) => x.team1_id || x.team2_id)) return undefined;
+    return bracket.some(wasPlayed)
+      ? 'The bracket has started, so it stays as it is: this fixes the score for the results and DUPR. To seed it again, reset the bracket first.'
+      : 'Saving seeds the bracket again from the new standings. Seeds you arranged by hand are reset.';
+  }
+  const startedAfter = (x: MatchDetails): MatchDetails | undefined => {
+    for (const next of bracket) {
+      const follows =
+        next.id === x.winner_to_match_id ||
+        next.id === x.loser_to_match_id ||
+        (x.round_key === 'grand_final' && x.round === 1 && next.round_key === 'grand_final' && next.round === 2);
+      if (!follows) continue;
+      if (wasPlayed(next)) return next;
+      const later = next.status === 'completed' ? startedAfter(next) : undefined;
+      if (later) return later;
+    }
+  };
+  const after = startedAfter(m);
+  return after
+    ? `${after.label} has started, so if the winner changes the bracket stays as it was played and this fixes the result for the record. If ${after.label} is still on court and has the wrong team, send it back to the queue on hold first; the right team then moves in.`
+    : undefined;
+}
+
 export interface Podium {
   gold: string | null;
   silver: string | null;

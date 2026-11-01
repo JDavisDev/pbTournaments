@@ -6,12 +6,11 @@ import { useState } from 'react';
 import { DivisionDupr } from '@/components/DivisionDupr';
 import { Icon } from '@/components/Icon';
 import { ResultsPanel } from '@/components/desk/ResultsPanel';
-import { ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
+import { correctionTarget, ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
 import { Button, Card, ErrorText } from '@/components/ui';
 import { finalizeEvent, getDuprResults, reopenEvent } from '@/lib/api';
 import { formatDate, formatTime, toZonedInput } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
-import { rulesOf } from '@/lib/scoring';
 import type { MatchDetails, Tournament, TournamentEvent } from '@/lib/types';
 
 export function FinalizeDivision({
@@ -84,16 +83,7 @@ export function FinalizeDivision({
           matches={matches}
           timeZone={tournament.time_zone}
           staff
-          onCorrect={(m) =>
-            setScore({
-              matchId: m.id,
-              team1: m.team1_name,
-              team2: m.team2_name,
-              rules: rulesOf(m),
-              games: m.games,
-              mode: 'correct',
-            })
-          }
+          onCorrect={(m) => setScore(correctionTarget(m, matches))}
         />
       )}
       <ScoreDialog target={score} onClose={() => setScore(null)} onDone={onChanged} />
