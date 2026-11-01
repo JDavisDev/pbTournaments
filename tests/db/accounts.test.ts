@@ -15,6 +15,38 @@ const emailed = async (email: string) => {
 const staff = async (t: string) => (await one(db, 'select public.is_tournament_staff($1) as v', [t])).v;
 const mine = () => rows(db, 'select * from public.my_tournaments()');
 
+describe('18 and older', () => {
+  const ago = (years: number, days = 0) => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - years);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  it('refuses a younger birth date on a profile and at registration', async () => {
+    await actAs(db, await emailed('kid@example.test'));
+    const save = (birth: string) =>
+      db.query('select public.save_my_profile($1::jsonb)', [JSON.stringify({ first_name: 'K', last_name: 'D', birth_date: birth })]);
+    await expect(save(ago(18, 2))).rejects.toThrow(/18 or older/);
+    await save(ago(18, -2));
+
+    const { director, tournamentId } = await createLiveTournament(db, { courts: 1, start: new Date() });
+    const eventId = await addEvent(db, tournamentId, 'Open');
+    await actAs(db, director);
+    await db.query(`update public.events set kind = 'singles' where id = $1`, [eventId]);
+    const register = (birth: string | null) =>
+      db.query('select public.start_registration($1, $2::jsonb, $3::jsonb)', [
+        tournamentId,
+        JSON.stringify({ first_name: 'K', last_name: 'D', email: `k${birth}@example.test`, birth_date: birth }),
+        JSON.stringify([{ event_id: eventId }]),
+      ]);
+    await expect(register(ago(17))).rejects.toThrow(/18 or older/);
+    await register(ago(18, -2));
+    await register(null);
+    expect(await rows(db, `select 1 from public.players where email = $1`, [`k${ago(17)}@example.test`])).toEqual([]);
+  });
+});
+
 describe('one account', () => {
   it('owns what it creates, with no organization needed', async () => {
     const me = await emailed('pat@example.test');

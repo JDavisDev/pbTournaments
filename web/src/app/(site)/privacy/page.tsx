@@ -104,9 +104,8 @@ export default function PrivacyPage() {
 
       <h2>6. Children</h2>
       <p>
-        The Service isn’t directed at children under 13, and we don’t knowingly collect their information except as entered
-        by a parent or guardian registering them. If you think a child’s information was given to us without that, contact
-        us and we’ll delete it.
+        The Service is only for people 18 or older, and we don’t knowingly collect information from or about anyone younger. If
+        you think someone under 18 has given us their information, or someone has given it for them, contact us and we’ll delete it.
       </p>
 
       <h2>7. Security</h2>

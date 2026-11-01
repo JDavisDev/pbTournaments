@@ -1164,7 +1164,7 @@ function EventForm({
           <Field label="Min age">
             <Input type="number" min={0} placeholder="Any" value={form.min_age} onChange={(e) => set('min_age', e.target.value)} />
           </Field>
-          <Field label="Max age">
+          <Field label="Max age" hint="Players must be 18 or older.">
             <Input type="number" min={0} placeholder="Any" value={form.max_age} onChange={(e) => set('max_age', e.target.value)} />
           </Field>
         </div>

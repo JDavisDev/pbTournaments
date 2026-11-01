@@ -74,6 +74,9 @@ export function ageOn(birthDate: string, on: Date) {
   return age;
 }
 
+/** Players must be 18 or older. A blank birth date passes: they've agreed they are. */
+export const isUnder18 = (birthDate: string) => !!birthDate && ageOn(birthDate, new Date()) < 18;
+
 /** Why this player can't enter, e.g. "is for ages 50 and up", or null. */
 export function entryProblem(e: Division, startsOn: string, p: PlayerFacts): string | null {
   if (e.gender === 'mens' && p.gender !== 'male') return 'is for men';

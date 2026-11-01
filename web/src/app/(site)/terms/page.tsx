@@ -20,8 +20,8 @@ export default function TermsPage() {
         Service.
       </p>
       <p>
-        If you register someone else, such as your child or a partner, you confirm you’re allowed to and you agree to these
-        Terms for them. A parent or guardian must register anyone under 18.
+        You must be 18 or older to create an account, register for a tournament or play in one. If you register someone else,
+        such as a partner, you confirm they’re 18 or older, that you’re allowed to, and that you agree to these Terms for them.
       </p>
 
       <h2>1. Who runs a tournament</h2>

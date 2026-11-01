@@ -615,7 +615,7 @@ function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
         <label className="flex items-start gap-3">
           <input type="checkbox" required className="mt-0.5 h-6 w-6 accent-[var(--accent)]" checked={termsOk} onChange={(e) => setTermsOk(e.target.checked)} />
           <span>
-            I agree to the{' '}
+            I’m 18 or older, and I agree to the{' '}
             <Link href="/terms" target="_blank" className="font-medium underline">
               Terms of Service
             </Link>{' '}

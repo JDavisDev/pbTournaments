@@ -9,11 +9,14 @@ import { Badge, Button, Card, ErrorText, Field, Input, Select, Spinner } from '@
 import { claimStaffInvites, getMyTournaments } from '@/lib/api';
 import { auth, isGuest, type AuthUser } from '@/lib/auth';
 import { isBackendConfigured, isDemoMode } from '@/lib/config';
+import { isUnder18 } from '@/lib/eligibility';
 import { formatDate } from '@/lib/format';
 import { useAction, useLoad, useSession } from '@/lib/hooks';
 import { logInPlayer, logOut, saveProfile, signUpPlayer, useProfile, type PlayerProfile } from '@/lib/profile';
 import { setViewMode } from '@/lib/viewMode';
 import { ConnectNotice } from '@/components/ConnectNotice';
+
+const under18 = 'You must be 18 or older to have an account.';
 
 const blank: PlayerProfile = {
   first_name: '',
@@ -162,6 +165,7 @@ function SignUp({ home, onLogIn }: { home: string; onLogIn: () => void }) {
       onSubmit={(e) => {
         e.preventDefault();
         run(async () => {
+          if (isUnder18(p.birth_date)) throw new Error(under18);
           if ((await signUpPlayer({ ...p, email: p.email.trim().toLowerCase() }, password)) === 'signed-in') router.push(home);
           else setConfirming(true);
         });
@@ -170,7 +174,7 @@ function SignUp({ home, onLogIn }: { home: string; onLogIn: () => void }) {
       <div>
         <h1 className="text-4xl">Sign up</h1>
         <p className="mt-1 text-muted">
-          One account to play in tournaments and run them. Already have one?{' '}
+          One account to play in tournaments and run them, for adults 18 and older. Already have one?{' '}
           <button type="button" className="font-medium text-text underline" onClick={onLogIn}>
             Log in
           </button>
@@ -195,7 +199,7 @@ function SignUp({ home, onLogIn }: { home: string; onLogIn: () => void }) {
           onChange={(e) => setAgreed(e.target.checked)}
         />
         <span>
-          By signing up, I agree to the{' '}
+          I’m 18 or older, and by signing up I agree to the{' '}
           <Link href="/terms" target="_blank" className="font-medium underline">
             Terms of Service
           </Link>{' '}
@@ -223,7 +227,13 @@ function Details({ user, saved, home }: { user: AuthUser; saved: PlayerProfile |
       className="flex flex-col gap-5"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => saveProfile(p), () => router.push(home));
+        run(
+          async () => {
+            if (isUnder18(p.birth_date)) throw new Error(under18);
+            await saveProfile(p);
+          },
+          () => router.push(home),
+        );
       }}
     >
       <h1 className="text-4xl">Your profile</h1>

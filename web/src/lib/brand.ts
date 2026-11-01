@@ -11,5 +11,5 @@ export const BRAND = {
   contactEmail: 'support@courtsidetournaments.com',
   domain: 'courtsidetournaments.com',
   /** The Terms and Privacy Policy's effective date (YYYY-MM-DD); change it with them. */
-  legalUpdated: '2026-10-30',
+  legalUpdated: '2026-11-01',
 };
