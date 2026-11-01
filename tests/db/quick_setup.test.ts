@@ -30,7 +30,8 @@ describe('new tournament', () => {
     const { organizationId } = await createOrganization(db);
     const t = await newTournament(organizationId);
     expect(t).toMatchObject({ name: 'New tournament', is_demo: false, organization_id: organizationId });
-    await expect(newTournament(null)).rejects.toThrow(/Choose an organization/);
+    // No organization: the account gets its own.
+    expect((await newTournament(null)).id).toBeTruthy();
     await actAs(db, await createUser(db));
     await expect(newTournament(organizationId)).rejects.toThrow(/Only members/);
   });

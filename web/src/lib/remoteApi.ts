@@ -29,6 +29,8 @@ import type {
   RegistrationRow,
   RegistrationView,
   StaffMember,
+  MyTournament,
+  PlayerProfile,
   StaffRole,
   StandingRow,
   StartedEvent,
@@ -147,6 +149,25 @@ export const getLiveTournaments = () =>
   select<Tournament[]>(
     supabase().from('tournaments').select('*').in('status', ['registration', 'live']).order('starts_on').limit(50),
   );
+
+/** A profile from the database: blank fields as '', the way forms hold them. */
+function mapProfile(row: Record<string, unknown> | null): PlayerProfile | null {
+  if (!row) return null;
+  const text = (key: string) => (row[key] == null ? '' : String(row[key]));
+  return {
+    first_name: text('first_name'),
+    last_name: text('last_name'),
+    email: text('email'),
+    phone: text('phone'),
+    sms_opt_in: row.sms_opt_in === true,
+    gender: text('gender') as PlayerProfile['gender'],
+    birth_date: text('birth_date'),
+    dupr_id: text('dupr_id'),
+    dupr_doubles: text('dupr_doubles'),
+    dupr_singles: text('dupr_singles'),
+    self_rating: text('self_rating'),
+  };
+}
 
 // Organizations and tournaments ------------------------------------------
 
@@ -458,6 +479,10 @@ export const getTournamentFees = (tournamentId: string) => rpc<TournamentFees>('
 /** 'admin', 'monitor' or null for the signed-in user. */
 export const getMyRole = (tournamentId: string) =>
   rpc<StaffRole | null>('my_tournament_role', { p_tournament: tournamentId });
+export const getMyProfile = async () => mapProfile(await rpc<Record<string, unknown> | null>('get_my_profile', {}));
+export const saveMyProfile = async (profile: PlayerProfile) =>
+  mapProfile(await rpc<Record<string, unknown> | null>('save_my_profile', { p_profile: profile }));
+export const getMyTournaments = () => rpc<MyTournament[]>('my_tournaments', {});
 export const getTournamentTeam = (tournamentId: string) =>
   rpc<StaffMember[]>('tournament_team', { p_tournament: tournamentId });
 /** Returns 'added', or 'invited' when they don't have an account yet. */

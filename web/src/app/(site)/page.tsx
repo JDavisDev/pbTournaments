@@ -36,8 +36,8 @@ export default function Home() {
           out the moment a score comes in.
         </p>
         <div className="mt-7 flex flex-wrap gap-3">
-          {/* One organization (or a demo site, where organizations are hidden): straight to Setup. */}
-          {isDemoMode || orgs.data?.length === 1 ? (
+          {/* One organization or none (the account gets its own), or a demo site: straight to Setup. */}
+          {isDemoMode || (session && orgs.data && orgs.data.length <= 1) ? (
             <Button
               variant="primary"
               disabled={create.busy || session === undefined}
@@ -45,7 +45,7 @@ export default function Home() {
                 create.run(async () => {
                   if (!session) await auth.signInAsGuest();
                   setViewMode('admin');
-                  const t = await newTournament(isDemoMode ? null : orgs.data![0].id);
+                  const t = await newTournament(isDemoMode ? null : (orgs.data?.[0]?.id ?? null));
                   router.push(`/t/${t.id}/setup`);
                 })
               }
@@ -55,7 +55,7 @@ export default function Home() {
           ) : (
             <LinkButton
               variant="primary"
-              href={!session ? '/login' : orgs.data && orgs.data.length > 1 ? '#your-organizations' : '/orgs/new'}
+              href={!session ? '/profile?mode=login' : '#your-organizations'}
             >
               Create Tournament
             </LinkButton>

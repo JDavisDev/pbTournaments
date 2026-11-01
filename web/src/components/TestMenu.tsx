@@ -4,9 +4,9 @@
 // tournament, pick who you are, register, and see what happened.
 import { useRouter } from 'next/navigation';
 import { useState, useSyncExternalStore } from 'react';
-import { auth } from '@/lib/auth';
+import { auth, isGuest } from '@/lib/auth';
 import { useAction, useSession } from '@/lib/hooks';
-import { becomeFakePlayer, clearProfile, useProfile, useTestPartner } from '@/lib/profile';
+import { backToTestPlayer, becomeFakePlayer, forgetTestPlayer, logOut, TEST_PASSWORD, useProfile, useTestPartner } from '@/lib/profile';
 import { scenarios } from '@/lib/testScenarios';
 import { clearTestLog, useTestLog } from '@/lib/testLog';
 import { setViewMode } from '@/lib/viewMode';
@@ -70,8 +70,9 @@ function Panel({ onClose }: { onClose: () => void }) {
               onClick={() =>
                 run(async () => {
                   const id = await s.run();
+                  await backToTestPlayer();
                   rememberTournament(id);
-                  setViewMode('player');
+                  setViewMode('admin');
                   go(`/t/${id}/register`);
                 })
               }
@@ -103,12 +104,13 @@ function Panel({ onClose }: { onClose: () => void }) {
             Partner to name: {partner.first_name} {partner.last_name}, {partner.email}
           </p>
         )}
+        <p className="text-xs text-muted">Fake players log in with the password {TEST_PASSWORD}.</p>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="primary" onClick={() => becomeFakePlayer(profile)}>
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => run(() => becomeFakePlayer(profile))}>
             New fake player
           </Button>
-          <Button size="sm" disabled={!profile} onClick={clearProfile}>
-            Be a new player
+          <Button size="sm" disabled={busy || !profile} onClick={() => run(async () => (forgetTestPlayer(), await logOut()))}>
+            Log out
           </Button>
           <Button size="sm" onClick={() => go('/profile')}>
             Sign-up page
@@ -119,7 +121,7 @@ function Panel({ onClose }: { onClose: () => void }) {
       <section className="flex flex-col gap-2">
         <h3 className="text-lg">3. Check the result</h3>
         <p className="text-sm text-muted">
-          {session === undefined ? '' : session ? 'Signed in as the director. ' : 'Signed out, like a player. '}
+          {session === undefined ? '' : !session ? 'Signed out. ' : isGuest(session) ? 'Signed in as the director of test tournaments. ' : `Logged in as ${session.email}. `}
           {tournament ? '' : 'Start a test tournament first.'}
         </p>
         {tournament && (
@@ -142,11 +144,10 @@ function Panel({ onClose }: { onClose: () => void }) {
             </Button>
             <Button
               size="sm"
-              disabled={busy || !session}
+              disabled={busy || !session || !isGuest(session)}
               onClick={() =>
                 run(async () => {
-                  await auth.signOut();
-                  setViewMode('player');
+                  await backToTestPlayer();
                 })
               }
             >

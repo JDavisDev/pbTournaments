@@ -28,6 +28,25 @@ async function updateColumns(tx: Transaction, table: string, id: string, changes
   return one(tx, `update public.${table} set ${sets} where id = $1 returning *`, [id, ...columns.map((c) => changes[c])]);
 }
 
+/** A profile from the database: blank fields as '', the way forms hold them. */
+function mapProfile(row: Row | null) {
+  if (!row) return null;
+  const text = (key: string) => (row[key] == null ? '' : String(row[key]));
+  return {
+    first_name: text('first_name'),
+    last_name: text('last_name'),
+    email: text('email'),
+    phone: text('phone'),
+    sms_opt_in: row.sms_opt_in === true,
+    gender: text('gender'),
+    birth_date: text('birth_date'),
+    dupr_id: text('dupr_id'),
+    dupr_doubles: text('dupr_doubles'),
+    dupr_singles: text('dupr_singles'),
+    self_rating: text('self_rating'),
+  };
+}
+
 const EVENT_COLUMNS = [
   'name',
   'kind',
@@ -78,7 +97,7 @@ const EVENT_COLUMNS = [
   'sort_order',
 ];
 
-const LISTING_COLUMNS = ['name', 'starts_on', 'ends_on', 'venue', 'city', 'state', 'signup_url', 'image_data', 'refund_policy'];
+const LISTING_COLUMNS = ['name', 'starts_on', 'ends_on', 'venue', 'city', 'state', 'signup_url', 'image_data', 'refund_policy', 'price_cents'];
 
 async function addTeams(tx: Transaction, eventId: string, text: string, firstSeed: number) {
   const teams = parseTeams(text);
@@ -165,6 +184,8 @@ const ops: Record<string, Op> = {
       'refund_fee_cents',
       'stream_url',
       'location',
+      'state',
+      'ball',
       'dupr_score_type',
       'max_players',
       'registration_closes_at',
@@ -364,6 +385,10 @@ const ops: Record<string, Op> = {
   getPlatformPricing: async (tx) => (await one<{ r: unknown }>(tx, 'select public.platform_pricing() as r')).r,
   getTournamentFees: async (tx, id: string) => (await one<{ r: unknown }>(tx, 'select public.tournament_fees($1) as r', [id])).r,
   getMyRole: async (tx, id: string) => (await one<{ r: string | null }>(tx, 'select public.my_tournament_role($1) as r', [id])).r,
+  getMyProfile: async (tx) => mapProfile((await one<{ p: Row | null }>(tx, 'select public.get_my_profile() as p')).p),
+  saveMyProfile: async (tx, profile: unknown) =>
+    mapProfile((await one<{ p: Row | null }>(tx, 'select public.save_my_profile($1::jsonb) as p', [JSON.stringify(profile)])).p),
+  getMyTournaments: (tx) => all(tx, 'select * from public.my_tournaments()'),
   getTournamentTeam: (tx, id: string) => all(tx, 'select * from public.tournament_team($1)', [id]),
   addTournamentStaff: async (tx, id: string, email: string, role: string) =>
     (await one<{ r: string }>(tx, 'select public.add_tournament_staff($1, $2, $3) as r', [id, email, role])).r,
@@ -401,7 +426,7 @@ const authOps: Record<string, Op> = {
     const address = email.trim().toLowerCase();
     if (password.length < 6) throw new Error('Use at least 6 characters for the password');
     if ((await all(tx, 'select 1 from auth.users where email = $1', [address])).length) {
-      throw new Error('An account with this email already exists. Sign in instead.');
+      throw new Error('An account with this email already exists. Log in instead.');
     }
     const user = await one<{ id: string; email: string }>(tx, 'insert into auth.users (email) values ($1) returning id, email', [address]);
     const salt = randomBytes(16).toString('hex');

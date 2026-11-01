@@ -15,7 +15,7 @@ interface Auth {
   signUp(email: string, password: string): Promise<'signed-in' | 'confirm-email'>;
   /** Demo sites: the shared guest account (Supabase), or a local guest without an email. */
   signInAsGuest(): Promise<void>;
-  /** Supabase only: a one-time sign-in link by email. */
+  /** Supabase only: a one-time sign-in link by email, for an existing account. */
   emailLink?(email: string): Promise<void>;
   signOut(): Promise<void>;
 }
@@ -55,8 +55,12 @@ const remoteAuth: Auth = {
     if (error) throw new Error(`Guest sign-in failed: ${error.message}`);
   },
   async emailLink(email) {
-    const { error } = await supabase().auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
-    if (error) throw new Error(error.message);
+    // Only logs in: signing up goes through the form, with its Terms checkbox.
+    const { error } = await supabase().auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
+    });
+    if (error) throw new Error(/signups? not allowed/i.test(error.message) ? 'No account with that email yet. Sign up first.' : error.message);
   },
   async signOut() {
     await supabase().auth.signOut();

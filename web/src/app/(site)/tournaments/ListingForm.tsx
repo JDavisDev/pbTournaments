@@ -27,6 +27,7 @@ export function ListingForm({ listing }: { listing?: TournamentListing }) {
     city: listing?.city ?? '',
     state: listing?.state ?? '',
     refund_policy: listing?.refund_policy ?? '',
+    price: listing?.price_cents != null ? (listing.price_cents / 100).toString() : '',
   });
   const [image, setImage] = useState(listing?.image_data ?? null);
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
@@ -45,7 +46,7 @@ export function ListingForm({ listing }: { listing?: TournamentListing }) {
               {guest.busy ? 'Signing in…' : 'Sign in'}
             </Button>
           ) : (
-            <LinkButton variant="primary" href="/login">
+            <LinkButton variant="primary" href="/profile?mode=login">
               Sign in
             </LinkButton>
           )}
@@ -71,6 +72,7 @@ export function ListingForm({ listing }: { listing?: TournamentListing }) {
               state: form.state,
               image_data: image,
               refund_policy: form.refund_policy.trim() || null,
+              price_cents: form.price.trim() === '' ? null : Math.round(Number(form.price) * 100),
             });
             router.push('/tournaments');
           });
@@ -119,6 +121,10 @@ export function ListingForm({ listing }: { listing?: TournamentListing }) {
             </Select>
           </Field>
         </div>
+
+        <Field label="Price for one event (optional)" hint="The full cost: registration plus the event fee. Enter 0 if it’s free.">
+          <Input type="number" min={0} step="0.01" inputMode="decimal" value={form.price} onChange={set('price')} placeholder="58.00" />
+        </Field>
 
         <Field label="Refund policy (optional)" hint="What players get back if they withdraw.">
           <Textarea

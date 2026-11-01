@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { HostedCard, ListingCard } from '@/components/ListingCard';
+import { HostedCard, isListed, ListingCard } from '@/components/ListingCard';
 import { Empty, Spinner } from '@/components/ui';
 import { getListings } from '@/lib/api';
 import { localToday } from '@/lib/format';
@@ -34,7 +34,7 @@ export function ListingsNearYou({ hosted = [] }: { hosted?: Tournament[] }) {
   const upcoming = data && [
     ...data.list.map((l) => ({ date: l.starts_on, card: <ListingCard key={l.id} listing={l} mine={l.created_by === session?.id} /> })),
     ...hosted
-      .filter((t) => t.status === 'registration' && !t.is_demo && t.starts_on >= data.today)
+      .filter((t) => isListed(t, data.today))
       .map((t) => ({ date: t.starts_on, card: <HostedCard key={t.id} tournament={t} /> })),
   ]
     .sort((a, b) => a.date.localeCompare(b.date))

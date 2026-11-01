@@ -71,6 +71,10 @@ export interface Tournament {
   refund_fee_cents: number;
   stream_url: string | null;
   location: string | null;
+  /** Two-letter code, e.g. 'TX', to find it by state. */
+  state: string | null;
+  /** The ball used, e.g. 'Franklin X-40'. */
+  ball: string | null;
   dupr_score_type: 'SIDEOUT' | 'RALLY';
   championship_mode: ChampionshipMode;
   /** Bracket rounds that go to championship courts first. */
@@ -121,6 +125,17 @@ export interface TournamentFees extends PlatformPricing {
 
 export type StaffRole = 'admin' | 'monitor';
 
+export type { PlayerProfile } from './profileTypes';
+
+/** my_tournaments(): a tournament this account runs. */
+export interface MyTournament {
+  id: string;
+  name: string;
+  starts_on: string;
+  status: TournamentStatus;
+  role: 'owner' | StaffRole;
+}
+
 /** tournament_team(): who can run a tournament. */
 export interface StaffMember {
   /** Null for a guest (demo sites). */
@@ -129,6 +144,7 @@ export interface StaffMember {
   /** organization: always an admin; tournament: added here; invite: not signed up yet. */
   source: 'organization' | 'tournament' | 'invite';
   is_me: boolean;
+  is_owner: boolean;
 }
 
 export interface DiscountCode {
@@ -158,13 +174,15 @@ export interface TournamentListing {
   /** A logo or flyer as a data URL. */
   image_data: string | null;
   refund_policy: string | null;
+  /** All-in price for one event, as the poster gives it. */
+  price_cents: number | null;
   created_by: string;
   created_at: string;
 }
 
 export type ListingFields = Pick<
   TournamentListing,
-  'name' | 'starts_on' | 'ends_on' | 'venue' | 'city' | 'state' | 'signup_url' | 'image_data' | 'refund_policy'
+  'name' | 'starts_on' | 'ends_on' | 'venue' | 'city' | 'state' | 'signup_url' | 'image_data' | 'refund_policy' | 'price_cents'
 >;
 
 /** demo_inbox(): a text sent to a demo team's player; links are paths (/s/<code>). */

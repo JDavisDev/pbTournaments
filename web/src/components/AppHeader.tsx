@@ -5,6 +5,8 @@ import { auth, isGuest } from '@/lib/auth';
 import { BRAND } from '@/lib/brand';
 import { isDemoMode, isLocalMode } from '@/lib/config';
 import { useAction, useSession } from '@/lib/hooks';
+import { setViewMode } from '@/lib/viewMode';
+import { Icon } from './Icon';
 import { LogoHorizontal } from './Logo';
 import { useProfile } from '@/lib/profile';
 import { TestMenu } from './TestMenu';
@@ -39,38 +41,48 @@ export function AppHeader() {
             Pricing
           </Link>
           <TextSizeButton />
-          {isDemoMode && (
+          {isDemoMode && <TestMenu />}
+          {user === undefined ? null : user && isGuest(user) ? (
             <>
-              <Link href="/profile" className="hidden h-11 items-center rounded-full px-3 font-medium text-muted hover:text-text sm:inline-flex">
-                {profile ? profile.first_name : 'Sign up'}
-              </Link>
-              <TestMenu />
-            </>
-          )}
-          {user === undefined ? null : user ? (
-            <>
-              <span className="hidden text-muted lg:inline">{isGuest(user) ? 'Guest' : user.email}</span>
+              <span className="hidden text-muted lg:inline">Guest</span>
               <button className="h-11 rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2" onClick={() => auth.signOut()}>
                 Sign out
               </button>
             </>
-          ) : isDemoMode ? (
-            /* Demo sites: one click signs in to the shared guest account, a director of every practice tournament. */
-            <>
-              {guest.error && <span className="max-w-xs text-xs text-late">{guest.error}</span>}
-              <button
-                className="h-11 rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2"
-                disabled={guest.busy}
-                onClick={() => guest.run(() => auth.signInAsGuest())}
-              >
-                {guest.busy ? 'Signing in…' : 'Sign in'}
-              </button>
-            </>
-          ) : (
-            /* Players never need an account; this is only for directors. */
-            <Link href="/login" className="inline-flex h-11 items-center rounded-full px-3 font-medium text-muted hover:text-text">
-              Directors
+          ) : user ? (
+            /* Far right, on every screen size. Phones show just the icon. */
+            <Link
+              href="/profile"
+              aria-label="Your profile"
+              title="View or edit your profile"
+              className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-surface-2 px-3 font-medium hover:brightness-95"
+            >
+              <Icon name="person" className="h-5 w-5" />
+              <span className="hidden max-w-32 truncate sm:inline">{profile?.first_name || 'Profile'}</span>
             </Link>
+          ) : (
+            <>
+              {isDemoMode ? (
+                /* Demo sites stay open: one click signs in to the shared guest account, to play with it. */
+                <>
+                  {guest.error && <span className="max-w-xs text-xs text-late">{guest.error}</span>}
+                  <button
+                    className="h-11 rounded-full px-3 font-medium whitespace-nowrap text-muted hover:text-text"
+                    disabled={guest.busy}
+                    onClick={() => guest.run(async () => (await auth.signInAsGuest(), setViewMode('admin')))}
+                  >
+                    {guest.busy ? 'Signing in…' : 'Sign in'}
+                  </button>
+                </>
+              ) : (
+                <Link href="/profile?mode=login" className="inline-flex h-11 items-center rounded-full px-3 font-medium whitespace-nowrap text-muted hover:text-text">
+                  Log in
+                </Link>
+              )}
+              <Link href="/profile" className="inline-flex h-11 items-center rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2">
+                Sign up
+              </Link>
+            </>
           )}
         </nav>
       </div>

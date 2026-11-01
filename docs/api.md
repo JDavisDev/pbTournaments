@@ -24,7 +24,7 @@ Call a function from TypeScript with `supabase.rpc('report_score', { p_match, p_
 | `create_organization(p_name, p_slug)` → organization | Signed-in user | Caller becomes owner |
 | `add_organization_member(p_organization, p_email, p_role = 'director')` | Owner/admin | Adds an existing account by email |
 | `create_tournament(p_organization, p_name, p_starts_on, p_court_count = 0)` → tournament | Org member | Draft tournament with "Court 1".."Court N" |
-| `new_tournament(p_organization = null)` → tournament | Org member (demo sites: anyone signed in, organization optional) | What "New tournament" does: a draft with 4 courts and one division (Mixed Doubles 3.5: round robin, top 4 to a bracket), named "New tournament" four weeks out for the director to change. On a demo site: "Demo #N" today, practice prices and venue, in the user's first organization (or a new "Demo Club") |
+| `new_tournament(p_organization = null)` → tournament | Org member, or any signed-in account with no organization given (it gets its own) | What "New tournament" does: a draft with 4 courts and one division (Mixed Doubles 3.5: round robin, top 4 to a bracket), named "New tournament" four weeks out for the director to change. On a demo site: "Demo #N" today, practice prices and venue, in the user's first organization (or a new "Demo Club") |
 | `copy_event(p_event)` → event | Staff | A new division with every setting of this one (not its teams), "<name> (copy)", listed last |
 | `add_mock_teams(p_event, p_count = 4)` → int | Staff, practice tournaments only | Made-up teams (players, for singles) who fit the division: gender, rating within its skill rule and team limit, ages, a DUPR ID; seeded after its teams |
 | `set_tournament_status(p_tournament, p_status)` → tournament | Staff | `draft` → `registration` → `live` → `complete`. Going live starts assignment |
@@ -180,7 +180,9 @@ Player and texting fees are tallied, not yet collected: collecting them automati
 
 ## Sharing, registration controls and the waitlist
 
-**Roles.** Admins: organization members, people added to `tournament_staff` with role `admin`, and (practice tournaments) anyone signed in. Court monitors (`role = 'monitor'`): the court desk without admin controls, score entry, check-in, and sending a no-show back (`report_score`, `check_in_player`, `check_in_team`, `requeue_match`).
+**Accounts.** One kind of account plays and runs tournaments. `new_tournament(null)` gives an account with no organization its own, and whoever creates a tournament owns it. `get_my_profile()` and `save_my_profile(p_profile)` read and write the account's own player details (its email is always its login's). `my_tournaments()` lists what it runs, with `role` `owner`, `admin` (a manager) or `monitor`. Practice tournaments are no longer open to everyone signed in: staff are their organization's members and those added to them, as for any tournament.
+
+**Roles.** Admins: organization members, and people added to `tournament_staff` with role `admin`. Court monitors (`role = 'monitor'`): the court desk without admin controls, score entry, check-in, and sending a no-show back (`report_score`, `check_in_player`, `check_in_team`, `requeue_match`).
 
 | Function | Who | What it does |
 |---|---|---|
@@ -233,6 +235,8 @@ Each player's money in a tournament is a ledger (`ledger_entries`); its sum is t
 | `record_ledger_entry(p_tournament, p_player, p_kind, p_amount_cents, p_method = null, p_note = null)` → ledger entry | Admin | `p_kind`: `payment`, `refund` (both need `p_method`: `stripe`, `cash`, `check`, `other`), `fee` or `credit`. `p_amount_cents` is positive. Refunds can't exceed what the player is owed, nor payments what they owe. Stripe refunds are made in the Stripe dashboard and recorded here |
 
 Withdrawn entries move from `registration_entries` to `registration_withdrawals` (with `credit_cents` and `withdrawn_by`: `player` or `director`); `withdrawal_details` adds the player. `get_registration` also returns `tournament_status`, `refund_policy`, `withdrawals`, the player's `balance` and `extra_event_fee_cents`, so the player's page can show what withdrawing credits.
+
+`tournaments.state` (two-letter code, to find it by state) and `tournaments.ball` are shown to players; staff edit them directly. `tournament_listings.price_cents` is the optional all-in price for one event, as the poster gives it.
 
 `tournaments.refund_policy` (and `tournament_listings.refund_policy`) is text players see before registering and withdrawing; staff edit it directly. `refund_fee_cents` is what the screens suggest keeping from a refund.
 

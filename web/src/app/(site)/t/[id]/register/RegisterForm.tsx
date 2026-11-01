@@ -14,9 +14,10 @@ import {
   getTournament,
   startRegistration,
 } from '@/lib/api';
+import { isGuest } from '@/lib/auth';
 import { describeDivision, entryProblem, type PlayerFacts } from '@/lib/eligibility';
 import { entryCost, formatMoney, formatTime, priceAt, priceSummary, registrationOpen } from '@/lib/format';
-import { useAction, useLoad, useNow, useStaffAccess } from '@/lib/hooks';
+import { useAction, useLoad, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { saveProfile, useProfile, type PlayerProfile } from '@/lib/profile';
 
 interface Choice {
@@ -34,7 +35,7 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const profile = useProfile();
   const staff = useStaffAccess(id);
-  if (staff.data === undefined) return <Spinner />;
+  if (staff.data === undefined || profile === undefined) return <Spinner />;
   // A director registers someone else, so their own profile doesn't fill it in.
   // Keyed so choosing another test player starts the form over.
   const saved = staff.data ? null : profile;
@@ -72,6 +73,7 @@ function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
     dupr_id: saved?.dupr_id ?? '',
   });
   const [editing, setEditing] = useState(false);
+  const session = useSession();
   const [chosen, setChosen] = useState<Record<string, Choice>>(() =>
     linkedEvent ? { [linkedEvent]: { partner_name: '', partner_email: '', pay_for_partner: false } } : {},
   );
@@ -195,7 +197,7 @@ function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
             })),
           });
           // Next time they only choose events.
-          if (!director) saveProfile({ ...me, ...facts });
+          if (!director && session && !isGuest(session)) await saveProfile({ ...me, ...facts }).catch(() => null);
           if (reg.status === 'paid' || reg.status === 'waitlisted') {
             router.push(`/t/${id}/register/done?r=${reg.registration_id}`);
             return;
@@ -259,6 +261,14 @@ function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
       ) : (
       <Card className="flex flex-col gap-3 p-5">
         <h3 className="text-xl">Your details</h3>
+        {!director && !session && (
+          <p className="text-sm text-muted">
+            Already have an account?{' '}
+            <Link href={`/profile?mode=login&next=${encodeURIComponent(`/t/${id}/register`)}`} className="font-medium text-text underline">
+              Log in
+            </Link>
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="First name">
             <Input required autoComplete="given-name" value={me.first_name} onChange={(e) => setMe({ ...me, first_name: e.target.value })} />

@@ -28,10 +28,18 @@ const division = (tournament_id: string, fields: Partial<TournamentEvent>) =>
   });
 
 async function build(name: string, fees: { entry: number; extra: number }) {
-  if (!(await auth.current())) await auth.signInAsGuest();
+  // The shared guest owns test tournaments, so test players are only players there.
+  await auth.signInAsGuest();
   const t = await newTournament(null);
   for (const e of await getEvents(t.id)) await deleteEvent(e.id);
-  await updateTournament(t.id, { name, entry_fee_cents: fees.entry, extra_event_fee_cents: fees.extra });
+  await updateTournament(t.id, {
+    name,
+    entry_fee_cents: fees.entry,
+    extra_event_fee_cents: fees.extra,
+    location: 'Test Pickleball Center, Denver',
+    state: 'CO',
+    ball: 'Franklin X-40',
+  });
   return t.id;
 }
 

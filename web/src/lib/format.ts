@@ -248,6 +248,20 @@ export function priceSummary(t: Priced, now: number = Date.now()) {
     : `${formatMoney(p.registration)} registration + ${formatMoney(p.event)} per event${until}`;
 }
 
+/** Where it is: the venue and the state. */
+export const venueLine = (t: Pick<Tournament, 'location' | 'state'>) => [t.location, t.state].filter(Boolean).join(', ');
+
+/**
+ * "$58 for one event", what one event really costs all in: the registration
+ * fee, plus the event fee unless registration includes the first event.
+ */
+export function oneEventPrice(t: Priced, now: number = Date.now()) {
+  const cost = registrationPrice(t, 1, now);
+  const { through } = priceAt(t, now);
+  if (cost === 0) return 'Free';
+  return `${formatMoney(cost)} for one event${through ? ` until ${formatDay(through)}` : ''}`;
+}
+
 /**
  * Same rule as private.registration_open: whether players can register now.
  * In registration, or live once a director reopens it, until any closing date.

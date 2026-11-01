@@ -119,12 +119,14 @@ describe('demo site', () => {
 });
 
 describe('guest directors', () => {
-  it('lets any signed-in visitor run a practice tournament, but not a real one', async () => {
+  it('lets an account run its own practice tournament, but not someone else’s or a real one', async () => {
     const real = await createLiveTournament(db, { courts: 1, start: new Date() });
-    const { id } = await demo();
+    const other = await demo();
     const guest = await createUser(db);
     await actAs(db, guest);
+    const { id } = (await one(db, 'select public.create_demo_tournament() as id')) as { id: string };
     expect((await one(db, 'select public.is_tournament_staff($1) as v', [id])).v).toBe(true);
+    expect((await one(db, 'select public.is_tournament_staff($1) as v', [other.id])).v).toBe(false);
     expect((await one(db, 'select public.is_tournament_staff($1) as v', [real.tournamentId])).v).toBe(false);
     await db.query('select public.advance_demo($1, 5)', [id]);
     await expect(db.query('select public.set_auto_assign($1, false)', [real.tournamentId])).rejects.toThrow();

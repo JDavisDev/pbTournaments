@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { formatDateRange } from '@/lib/format';
+import { isDemoMode } from '@/lib/config';
+import { formatDateRange, formatMoney, oneEventPrice, venueLine } from '@/lib/format';
 import type { Tournament, TournamentListing } from '@/lib/types';
 import { Icon } from './Icon';
 import { LogoMark } from './Logo';
@@ -34,13 +35,19 @@ function Frame({ image, children }: { image: string | null; children: ReactNode 
   );
 }
 
+/** Whether a tournament run here shows among the listings. Demo sites show their practice tournaments. */
+export const isListed = (t: Tournament, today: string) =>
+  t.status === 'registration' && (!t.is_demo || isDemoMode) && t.starts_on >= today;
+
 /** A tournament run here with registration open: like a listing, signing up on its own page. */
 export function HostedCard({ tournament: t }: { tournament: Tournament }) {
   return (
     <Frame image={t.image_data}>
       <h3 className="text-2xl leading-tight">{t.name}</h3>
       <p className="font-medium">{formatDateRange(t.starts_on, null)}</p>
-      {t.location && <p className="text-muted">{t.location}</p>}
+      {venueLine(t) && <p className="text-muted">{venueLine(t)}</p>}
+      {t.ball && <p className="text-muted">Ball: {t.ball}</p>}
+      <p className="font-semibold">{oneEventPrice(t)}</p>
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
         <Link
           href={`/t/${t.id}/register`}
@@ -66,6 +73,9 @@ export function ListingCard({ listing: l, mine = false }: { listing: TournamentL
         {l.venue && <>{l.venue} · </>}
         {l.city}, {l.state}
       </p>
+      {l.price_cents !== null && (
+        <p className="font-semibold">{l.price_cents === 0 ? 'Free' : `${formatMoney(l.price_cents)} for one event`}</p>
+      )}
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
         <a
           href={l.signup_url}

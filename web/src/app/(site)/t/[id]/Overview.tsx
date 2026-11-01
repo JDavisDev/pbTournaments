@@ -14,7 +14,7 @@ import { Button, Empty, Input, LinkButton, Select, Spinner } from '@/components/
 import { getCourtBoard, getEvents, getMatches, getTeams, getTournament } from '@/lib/api';
 import { describeDivision } from '@/lib/eligibility';
 import { StreamEmbed, WatchChip } from '@/components/StreamEmbed';
-import { formatTime, isPlayable, priceSummary, registrationOpen } from '@/lib/format';
+import { formatTime, isPlayable, priceSummary, registrationOpen, venueLine } from '@/lib/format';
 import { useLiveTournament, useNow } from '@/lib/hooks';
 
 async function load(id: string) {
@@ -75,6 +75,31 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
               Register
             </LinkButton>
           </div>
+        )}
+        {(venueLine(tournament) || tournament.ball) && (
+          <dl className="flex flex-wrap gap-x-10 gap-y-3">
+            {venueLine(tournament) && (
+              <div>
+                <dt className="text-sm text-muted">Venue</dt>
+                <dd>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venueLine(tournament))}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium underline underline-offset-4"
+                  >
+                    {venueLine(tournament)}
+                  </a>
+                </dd>
+              </div>
+            )}
+            {tournament.ball && (
+              <div>
+                <dt className="text-sm text-muted">Ball</dt>
+                <dd className="font-medium">{tournament.ball}</dd>
+              </div>
+            )}
+          </dl>
         )}
         {tournament.is_demo && !myTeam && (
           <div className="flex flex-col gap-3 rounded-2xl bg-called-soft p-5">

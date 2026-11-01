@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { getEvents, getTournament } from '@/lib/api';
-import { formatDate, registrationOpen } from '@/lib/format';
+import { formatDate, registrationOpen, venueLine } from '@/lib/format';
 import { auth } from '@/lib/auth';
 import { useAction, useLiveTournament, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { isBackendConfigured, isDemoMode } from '@/lib/config';
@@ -141,7 +141,7 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
         {t.status === 'live' && !t.auto_assign && <Badge tone="called">Paused</Badge>}
         <span className="text-muted">
           {formatDate(t.starts_on)}
-          {t.location && ` · ${t.location}`}
+          {venueLine(t) && ` · ${venueLine(t)}`}
         </span>
         {t.stream_url && <WatchChip url={t.stream_url} label="Watch live" />}
       </div>

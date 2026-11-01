@@ -46,6 +46,7 @@ import {
   toZonedInput,
   wasPlayed,
 } from '@/lib/format';
+import { US_STATES } from '@/lib/places';
 import { isYoutubeUrl } from '@/lib/youtube';
 import { SaveAllProvider, useSaveAll, useUnsaved, useUnsavedSections } from './SaveAll';
 import { AboutCard, DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SettingsGroup, SharingCard } from './SetupCards';
@@ -404,6 +405,8 @@ function SettingsCard({
     // Blank: teams that miss check-in never forfeit automatically.
     checkin_grace_minutes: tournament.checkin_grace_minutes?.toString() ?? '',
     location: tournament.location ?? '',
+    state: tournament.state ?? '',
+    ball: tournament.ball ?? '',
     contact_email: tournament.contact_email ?? '',
     dupr_score_type: tournament.dupr_score_type,
   });
@@ -417,6 +420,8 @@ function SettingsCard({
       ...form,
       name: form.name.trim(),
       location: form.location.trim() || null,
+      state: form.state || null,
+      ball: form.ball.trim() || null,
       contact_email: form.contact_email.trim() || null,
       checkin_grace_minutes: optionalNumber(form.checkin_grace_minutes),
     });
@@ -454,6 +459,19 @@ function SettingsCard({
         )}
         <Field label="Venue" hint="Sent to DUPR with results">
           <Input placeholder="Club name, street, city" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+        </Field>
+        <Field label="State" hint="So players can find it by state. Blank: it only shows under All states.">
+          <Select value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}>
+            <option value="">Choose…</option>
+            {US_STATES.map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Ball" hint="Shown to players">
+          <Input maxLength={120} placeholder="Franklin X-40" value={form.ball} onChange={(e) => setForm({ ...form, ball: e.target.value })} />
         </Field>
         <Field label="Contact email" hint="Players reach you from the tournament’s pages. Blank: no Contact button.">
           <Input type="email" placeholder="you@example.com" value={form.contact_email} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} />

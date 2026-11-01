@@ -26,7 +26,7 @@ import { ANNOUNCEMENT_MAX } from '@/components/Announcement';
 import { useUnsaved } from './SaveAll';
 import type { RegistrationQuestion, StaffRole, Tournament } from '@/lib/types';
 
-const roleText: Record<StaffRole, string> = { admin: 'Admin', monitor: 'Court monitor' };
+const roleText: Record<StaffRole, string> = { admin: 'Manager', monitor: 'Court monitor' };
 
 const columns = 'md:grid md:grid-cols-[13rem_1fr] md:gap-10';
 
@@ -83,25 +83,25 @@ export function SettingsGroup({
 export function SharingCard({ tournament }: { tournament: Tournament }) {
   const team = useLoad(() => getTournamentTeam(tournament.id), [tournament.id]);
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<StaffRole>('monitor');
+  const [role, setRole] = useState<StaffRole>('admin');
   const [note, setNote] = useState<string | null>(null);
   const { busy, error, run } = useAction();
   const people = team.data?.length ?? 0;
 
   return (
     <SettingsGroup
-      title="Sharing"
+      title="Managers"
       foldable
       summary={team.data ? (people === 1 ? 'Just you' : `${people} people`) : null}
       description={
         <>
-      <b>Admins</b> can change everything. <b>Court monitors</b> see the courts and queue, enter scores, check players in
+      <b>Managers</b> can change everything, using the same account they play on. <b>Court monitors</b> see the courts and queue, enter scores, check players in
       and send a no-show back to the queue.
     </>
   }
 >
   <ul className="flex flex-col divide-y divide-border text-sm">
-    {(team.data ?? []).map((m) => (
+    {[...(team.data ?? [])].sort((a, b) => Number(b.is_owner) - Number(a.is_owner)).map((m) => (
       <li key={`${m.source}-${m.email ?? 'guest'}`} className="flex items-center justify-between gap-2 py-2">
         <span className="min-w-0">
           <span className="block truncate font-medium">
@@ -109,8 +109,8 @@ export function SharingCard({ tournament }: { tournament: Tournament }) {
             {m.is_me ? ' (you)' : ''}
           </span>
           <span className="text-xs text-muted">
-            {roleText[m.role]}
-            {m.source === 'organization' ? ' · whole organization' : m.source === 'invite' ? ' · invited, not signed up yet' : ''}
+            {m.is_owner ? 'Owner' : roleText[m.role]}
+            {m.is_owner ? '' : m.source === 'organization' ? ' · whole organization' : m.source === 'invite' ? ' · invited, not signed up yet' : ''}
           </span>
         </span>
         {m.source !== 'organization' && !m.is_me && m.email && (
@@ -145,8 +145,8 @@ export function SharingCard({ tournament }: { tournament: Tournament }) {
     <Input type="email" required placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
     <div className="flex gap-2">
       <Select className="flex-1" value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>
+        <option value="admin">Manager</option>
         <option value="monitor">Court monitor</option>
-        <option value="admin">Admin</option>
       </Select>
       <Button type="submit" disabled={busy || !email}>
         Add
