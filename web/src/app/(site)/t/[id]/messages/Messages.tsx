@@ -35,6 +35,8 @@ const outcomeBadge: Record<Outcome, [string, 'info' | 'neutral' | 'late' | 'call
 };
 
 function Status({ m }: { m: TextLogRow }) {
+  // Went to their phone as an app alert instead of a text.
+  if (m.channel === 'push' && !m.error) return <Badge tone="live">App alert</Badge>;
   const [label, tone] = outcomeBadge[outcome(m)];
   return <Badge tone={tone}>{label}</Badge>;
 }

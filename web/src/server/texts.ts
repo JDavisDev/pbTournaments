@@ -2,8 +2,12 @@
 //   Texts:  real with TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER
 //           or TWILIO_MESSAGING_SERVICE_SID (and SMS_MODE not 'log'); otherwise
 //           logged. Twilio reports delivery to /api/twilio/status (docs/twilio.md).
+//   Alerts: a text for a player whose phone turned on match alerts goes there
+//           instead, free (server/push.ts); otherwise it's texted as above.
 //   Emails: real with RESEND_API_KEY and EMAIL_FROM; otherwise logged.
 // Directors can read every message, sent or logged, on the Messages page.
+import { BRAND } from '@/lib/brand';
+import { alertText, pushConfigured, sendPush, type PushTarget } from './push';
 import { appUrl, serverRpc } from './serverRpc';
 
 export type DeliveryMode = 'live' | 'log';
@@ -36,6 +40,8 @@ interface Claimed {
   sms_opt_in: boolean;
   email: string | null;
   report_code: string | null;
+  player_id: string;
+  tournament_id: string;
 }
 
 const finish = (id: number, channel: string, to: string | null, body: string, error: string | null) =>
@@ -75,8 +81,23 @@ async function sendEmail(to: string, subject: string, body: string): Promise<str
   return err.message ?? `Email error ${res.status}`;
 }
 
+/** Sends a text as an alert to the player's phones. True when at least one took it. */
+async function pushText(n: Claimed, url: string) {
+  if (!pushConfigured()) return false;
+  const targets = (await serverRpc<PushTarget[]>('push_targets', { p_player: n.player_id })) ?? [];
+  if (targets.length === 0) return false;
+  const { sent, gone } = await sendPush(targets, { title: BRAND.name, body: alertText(n.body), url, tag: n.kind });
+  await serverRpc('push_sent', { p_sent: sent, p_gone: gone });
+  return sent.length > 0;
+}
+
 async function deliver(n: Claimed) {
-  const body = n.body.replaceAll('{url}', n.report_code ? `${appUrl()}/s/${n.report_code}` : appUrl());
+  const url = n.report_code ? `${appUrl()}/s/${n.report_code}` : `${appUrl()}/t/${n.tournament_id}`;
+  const body = n.body.replaceAll('{url}', url);
+
+  if (n.via === 'sms' && (await pushText(n, url).catch((e: Error) => (console.error(`Push failed: ${e.message}`), false)))) {
+    return finish(n.id, 'push', null, body, null);
+  }
 
   if (n.via === 'email') {
     if (!n.email) return finish(n.id, 'none', null, body, 'No email address');

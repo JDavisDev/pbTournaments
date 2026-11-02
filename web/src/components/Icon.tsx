@@ -23,6 +23,8 @@ const paths = {
   sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
   message: 'M4 5h16v11H9l-5 4z',
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  home: 'M3 11l9-8 9 8M5 9.5V20h5v-6h4v6h5V9.5',
+  bell: 'M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
   upload: 'M12 15V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4',
   tv: 'M3 6h18v12H3zM8 21h8',
   people: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20a6 6 0 0 1 12 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3 5.5',

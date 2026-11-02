@@ -661,3 +661,20 @@ export async function setCourtStream(courtId: string, url: string | null) {
 export async function setCourtChampionshipRank(courtId: string, rank: number | null) {
   await select(supabase().from('courts').update({ championship_rank: rank }).eq('id', courtId).select('id'));
 }
+
+// Match alerts --------------------------------------------------------------------
+
+export const savePushSubscription = (endpoint: string, p256dh: string, auth: string) =>
+  rpc<void>('save_push_subscription', { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth });
+export const deletePushSubscription = (endpoint: string) => rpc<void>('delete_push_subscription', { p_endpoint: endpoint });
+/** A test alert to the signed-in account's phones; returns how many got it. */
+export async function sendTestPush() {
+  const { data } = await supabase().auth.getSession();
+  const res = await fetch('/api/push/test', {
+    method: 'POST',
+    headers: data.session ? { authorization: `Bearer ${data.session.access_token}` } : {},
+  });
+  const body = (await res.json()) as { sent?: number; error?: string };
+  if (!res.ok) throw new Error(body.error ?? 'Could not send a test alert');
+  return body.sent ?? 0;
+}

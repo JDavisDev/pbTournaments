@@ -6,6 +6,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { parseTeams, teamName } from '@/lib/teamText';
 import type { RegistrationForm } from '@/lib/types';
 import { runAs } from './localDb';
+import type { PushTarget } from './push';
 
 type Row = Record<string, unknown>;
 type Op = (tx: Transaction, ...args: never[]) => Promise<unknown>;
@@ -411,6 +412,19 @@ const ops: Record<string, Op> = {
   getDivisionEligibility: (tx, id: string) => all(tx, 'select * from public.division_eligibility($1)', [id]),
   importDuprRatings: async (tx, id: string, list: unknown) =>
     (await one<{ r: unknown }>(tx, 'select public.import_dupr_ratings($1, $2::jsonb) as r', [id, JSON.stringify(list)])).r,
+  savePushSubscription: (tx, endpoint: string, p256dh: string, auth: string) =>
+    tx.query('select public.save_push_subscription($1, $2, $3)', [endpoint, p256dh, auth]).then(() => null),
+  deletePushSubscription: (tx, endpoint: string) =>
+    tx.query('select public.delete_push_subscription($1)', [endpoint]).then(() => null),
+  sendTestPush: async (tx) => {
+    const { pushConfigured, sendPush } = await import('./push');
+    const { testAlert } = await import('./pushTest');
+    if (!pushConfigured()) throw new Error('Alerts aren’t set up: add the VAPID keys to web/.env.local');
+    const targets = (await one<{ r: PushTarget[] }>(tx, 'select public.my_push_subscriptions() as r')).r;
+    const { sent, gone } = await sendPush(targets, testAlert);
+    for (const endpoint of gone) await tx.query('select public.delete_push_subscription($1)', [endpoint]);
+    return sent.length;
+  },
   getDuprRefreshList: (tx, id: string) => all(tx, 'select * from public.dupr_refresh_list($1)', [id]),
   getEntryEligibility: (tx, id: string) => all(tx, 'select * from public.entry_eligibility($1)', [id]),
   getTeamMoveOptions: (tx, team: string) => all(tx, 'select * from public.team_move_options($1)', [team]),

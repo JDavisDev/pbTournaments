@@ -15,6 +15,7 @@ import { useAction, useLoad, useSession } from '@/lib/hooks';
 import { logInPlayer, logOut, saveProfile, signUpPlayer, useProfile, type PlayerProfile } from '@/lib/profile';
 import { setViewMode } from '@/lib/viewMode';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { MatchAlerts } from '@/components/MatchAlerts';
 
 const under18 = 'You must be 18 or older to have an account.';
 
@@ -47,6 +48,7 @@ export function ProfileForm() {
       <div className="mx-auto flex max-w-md flex-col gap-8">
         {/* Keyed so a fake player from the Test menu shows up here too. */}
         <Details key={session.id} user={session} saved={profile} home={home} />
+        <MatchAlerts />
         <MyTournaments />
       </div>
     );

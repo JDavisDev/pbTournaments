@@ -6,6 +6,7 @@ import { BRAND } from '@/lib/brand';
 import { isDemoMode, isLocalMode } from '@/lib/config';
 import { useAction, useSession } from '@/lib/hooks';
 import { setViewMode } from '@/lib/viewMode';
+import { AddToHomeButton } from './AddToHome';
 import { Icon } from './Icon';
 import { LogoHorizontal } from './Logo';
 import { useProfile } from '@/lib/profile';
@@ -40,6 +41,7 @@ export function AppHeader() {
           <Link href="/pricing" className="hidden h-11 items-center rounded-full px-3 font-medium text-muted hover:text-text sm:inline-flex">
             Pricing
           </Link>
+          <AddToHomeButton />
           <TextSizeButton />
           {isDemoMode && <TestMenu />}
           {user === undefined ? null : user && isGuest(user) ? (
@@ -86,6 +88,7 @@ export function AppHeader() {
           )}
         </nav>
       </div>
+      <AddToHomeButton bar />
     </header>
   );
 }

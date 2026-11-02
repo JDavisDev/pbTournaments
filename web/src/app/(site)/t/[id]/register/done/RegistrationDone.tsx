@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { AddToCalendar } from '@/components/AddToCalendar';
+import { MatchAlerts } from '@/components/MatchAlerts';
 import { Badge, Button, Card, Empty, ErrorText, Modal, Spinner } from '@/components/ui';
 import { getRegistration, withdrawRegistration } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
@@ -88,6 +90,13 @@ export function RegistrationDone() {
           <p className="mt-1 text-muted">
             {reg.tournament_name} · paid {formatMoney(reg.amount_cents)} · registered as {reg.email}
           </p>
+          {reg.entries.some((e) => !e.waitlisted) && (
+            <AddToCalendar
+              tournamentId={reg.tournament_id}
+              eventIds={reg.entries.filter((e) => !e.waitlisted).map((e) => e.event_id)}
+              uid={reg.id}
+            />
+          )}
         </>
       ) : reg.withdrawals.length > 0 && reg.entries.length === 0 ? (
         <>
@@ -188,6 +197,11 @@ export function RegistrationDone() {
         <p className="mt-3 text-sm text-muted">
           Your team is set once your partner registers with your email as their partner. The desk can also pair you.
         </p>
+      )}
+      {paid && (
+        <div className="mt-5">
+          <MatchAlerts next={`/t/${reg.tournament_id}/register/done?r=${reg.id}`} />
+        </div>
       )}
       <Link href={`/t/${reg.tournament_id}`} className="mt-5 inline-block text-accent hover:underline">
         Back to the tournament

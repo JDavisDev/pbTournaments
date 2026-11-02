@@ -1,5 +1,6 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next, Barlow_Condensed, Montserrat, Saira } from 'next/font/google';
+import { AppSetup } from '@/components/AppSetup';
 import { BRAND } from '@/lib/brand';
 import './globals.css';
 
@@ -44,7 +45,11 @@ const montserrat = Montserrat({
 export const metadata: Metadata = {
   title: { default: BRAND.name, template: `%s · ${BRAND.name}` },
   description: 'Tournament registration, brackets and live court assignment.',
+  // Opened from the Home Screen on iPhone: full screen, our name under the icon.
+  appleWebApp: { capable: true, title: BRAND.name, statusBarStyle: 'default' },
 };
+
+export const viewport: Viewport = { themeColor: '#0f2a20' };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
@@ -61,7 +66,10 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
           }}
         />
       </head>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <AppSetup />
+        {children}
+      </body>
     </html>
   );
 }

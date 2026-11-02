@@ -395,7 +395,7 @@ export interface TextLogRow {
   subject: string | null;
   created_at: string;
   sent_at: string | null;
-  channel: 'sms' | 'email' | 'log' | 'none' | null;
+  channel: 'sms' | 'email' | 'push' | 'log' | 'none' | null;
   to_phone: string | null;
   to_email: string | null;
   body: string;

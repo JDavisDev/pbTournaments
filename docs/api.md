@@ -164,6 +164,8 @@ Every court call queues one text per player in `notifications`, with the round's
 | `confirm_on_court_by_code(p_code)` | Anyone with the link | "We're on court" |
 | `report_score_by_code(p_code, p_games)` | Anyone with the link | Reports once; later fixes go through `correct_score` (staff) |
 | `claim_notifications(p_limit)`, `finish_notification(...)` | Service role | The sender's outbox |
+| `save_push_subscription(p_endpoint, p_p256dh, p_auth)`, `delete_push_subscription(p_endpoint)`, `my_push_subscriptions()` | Signed in | This phone's match alerts for the account (docs/alerts.md) |
+| `push_targets(p_player)`, `push_sent(p_sent, p_gone)` | Service role | A player's phones; after sending, notes them and forgets the gone ones. A text sent as an alert has `channel = 'push'` |
 | `set_notification_provider_id(p_id, p_provider_id)`, `record_delivery_status(p_provider_id, p_status, p_error)` | Service role | Twilio's message id, then its delivery reports (`notifications.delivery_status`: queued, sent, delivered, undelivered, failed) |
 
 `matches.report_code` is never readable through the API; it only reaches players in their texts.
