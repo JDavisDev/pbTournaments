@@ -15,10 +15,12 @@ import {
   deleteEvent,
   deleteTeam,
   getCourtBoard,
+  getEventMerges,
   getEvents,
   getMatches,
   getTeams,
   getTournament,
+  mergeEvents,
   renameCourt,
   saveEvent,
   setBracketSize,
@@ -27,6 +29,7 @@ import {
   setCourtStream,
   setTeamSeed,
   setTournamentStatus,
+  unmergeEvent,
   updateTournament,
 } from '@/lib/api';
 import { describeDivision, ratingLimits, ratingText, suggestEventName } from '@/lib/eligibility';
@@ -55,6 +58,7 @@ import type {
   BracketType,
   CourtBoardRow,
   EventFormat,
+  EventMerge,
   MatchDetails,
   PoolPlay,
   RoundFormat,
@@ -73,7 +77,8 @@ async function load(id: string) {
     getMatches(id),
     getCourtBoard(id),
   ]);
-  return { tournament, events, teams, matches, courts };
+  const merges = await getEventMerges(events.map((e) => e.id)).catch(() => []);
+  return { tournament, events, teams, matches, courts, merges };
 }
 
 type Step = 'settings' | 'divisions';
@@ -157,6 +162,8 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             teams={data.teams.filter((t) => t.event_id === e.id)}
             matches={data.matches.filter((m) => m.event_id === e.id)}
             isDemo={data.tournament.is_demo}
+            others={data.events.filter((o) => o.id !== e.id && o.kind === e.kind && !o.started_at)}
+            merges={data.merges.filter((m) => m.into_event_id === e.id)}
             onChanged={reload}
           />
         ))}
@@ -1532,9 +1539,15 @@ function EventCard({
   teams,
   matches,
   isDemo,
+  others,
+  merges,
   onChanged,
 }: {
   event: TournamentEvent;
+  /** Divisions this one could merge into. */
+  others: TournamentEvent[];
+  /** Divisions merged into this one. */
+  merges: EventMerge[];
   timeZone: string;
   firstEventIncluded: boolean;
   courts: CourtBoardRow[];
@@ -1546,6 +1559,7 @@ function EventCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
+  const [mergeInto, setMergeInto] = useState('');
   const { busy, error, run } = useAction();
   const scheduled = matches.length > 0;
   const played = matches.some((m) => m.status === 'completed' && wasPlayed(m));
@@ -1677,6 +1691,54 @@ function EventCard({
       </div>
 
       <ErrorText>{error}</ErrorText>
+      {merges.length > 0 && (
+        <ul className="mt-4 flex flex-col gap-1 text-sm">
+          {merges.map((m) => (
+            <li key={m.source_event_id} className="flex flex-wrap items-center gap-2">
+              <span>
+                <strong>{m.source_name}</strong> is merged in here.
+              </span>
+              {!scheduled && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() =>
+                    confirm(`Bring ${m.source_name} back as its own division? Its players are emailed.`) && run(() => unmergeEvent(m.source_event_id), onChanged)
+                  }
+                >
+                  Unmerge
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!scheduled && others.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <span className="text-sm font-medium">Too few teams?</span>
+          <Select aria-label={`Merge ${event.name} into`} className="min-w-48" value={mergeInto} onChange={(e) => setMergeInto(e.target.value)}>
+            <option value="">Merge into…</option>
+            {others.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </Select>
+          <Button
+            size="sm"
+            disabled={busy || !mergeInto}
+            onClick={() => {
+              const target = others.find((o) => o.id === mergeInto)?.name;
+              if (confirm(`Merge ${event.name} into ${target}? Its ${teams.length} team${teams.length === 1 ? '' : 's'} move there and its players are emailed. You can unmerge until ${target} has a schedule.`)) {
+                run(() => mergeEvents(event.id, mergeInto), onChanged);
+              }
+            }}
+          >
+            Merge
+          </Button>
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
         {!scheduled ? (
           <p className="text-sm text-muted">
@@ -1697,7 +1759,7 @@ function EventCard({
             Clear schedule
           </Button>
         )}
-        {!scheduled && (
+        {!scheduled && merges.length === 0 && (
           <Button
             variant="ghost"
             className="ml-auto text-late"

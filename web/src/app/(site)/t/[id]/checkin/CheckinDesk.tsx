@@ -7,6 +7,7 @@ import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Icon } from '@/components/Icon';
 import { dayHeading, divisionDay } from '@/components/DivisionStatus';
+import { SelfCheckInCard } from '@/components/desk/SelfCheckInCard';
 import { StartDivision } from '@/components/StartDivision';
 import { Badge, Button, Empty, ErrorText, Input, Spinner } from '@/components/ui';
 import { checkInPlayer, getCheckinRoster, getDivisionCheckin, getTournament } from '@/lib/api';
@@ -56,6 +57,7 @@ export function CheckinDesk({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <div className="flex flex-col gap-6">
+      <SelfCheckInCard tournamentId={id} />
       <section>
         {days.length > 1 && (
           <div className="mb-4 flex gap-1 overflow-x-auto rounded-full bg-surface-2 p-1" role="tablist" aria-label="Day">

@@ -59,6 +59,8 @@ Each match has `side` (`main`: pools, single elimination and the winners bracket
 | `end_pool_play(p_event)` → int | Staff | Ends pool play early: pool matches not yet on a court are `cancelled` (returns how many). Matches on court finish normally; then the director reviews and finalizes pool play (`finalize_pool_play`). Swiss play stops after the round being played (`max_rounds` becomes that round) Standings rank by win percentage, so uneven match counts are fair |
 | `resume_pool_play(p_event)` → int | Staff | Undoes `end_pool_play`, until pool play is finalized: cancelled matches come back and Swiss rounds carry on |
 | `reset_bracket(p_event)` → int | Staff | Starts the bracket over, until its second round has started. First-round results and matches on court are discarded (returns how many). After pools it goes back to reviewing pool play; a bracket-only division is rebuilt from the current seeds and held |
+| `merge_events(p_from, p_into)` → int | Staff | Moves a division's teams and entries into another of the same kind and removes it; players are emailed. Neither may have a schedule, and nobody may be in both. Returns teams moved. Merged divisions are in `event_merges` |
+| `unmerge_event(p_source)` | Staff | Brings a merged division back with the same id, while the one it went into has no schedule |
 | `place_team_in_pool(p_team, p_pool)` → int | Staff | During pool play: adds a late entry or alternate, or moves a team that hasn't played. It gets a match against each team in the pool. In Swiss it joins the next draw |
 | `swap_pool_teams(p_event, p_team_a, p_team_b)` | Staff | Two teams trade pools and schedules. Neither may have played |
 | `set_team_seed(p_team, p_seed)` | Staff | Moves a team in its division's seed order; the others shift. Used when the schedule or a bracket is next built |
@@ -116,7 +118,7 @@ Assignment runs after every score, check-in, queue or court change in a live, un
 | Function | Who | What it does |
 |---|---|---|
 | `confirm_on_court(p_match)` | Staff or the match's players | The "we're here" tap; stops the no-show timer |
-| `report_score(p_match, p_games)` | Staff or the match's players | `p_games` is team 1 first, e.g. `[[11,7],[9,11],[11,5]]`. Validates (to `games_to`, win by 2, `best_of`; playoff settings for bracket matches), completes the match, moves the winner on, pulls the next match |
+| `report_score(p_match, p_games)` | Staff or the match's players (staff can also score a queued match, for play on paper) | `p_games` is team 1 first, e.g. `[[11,7],[9,11],[11,5]]`. Validates (to `games_to`, win by 2, `best_of`; playoff settings for bracket matches), completes the match, moves the winner on, pulls the next match |
 | `correct_score(p_match, p_games)` | Staff | Fix a finished match, any time before the division is final. A new winner moves through the next matches, byes included, while nothing has been played on top of the old one; once something has, the bracket stands and the result changes for the record. A pool match fixed after the bracket is seeded seeds it again until a bracket match has been played. A Swiss round no one has played is drawn again. The match goes to DUPR again |
 | `forfeit_match(p_match, p_winner_team)` | Staff | Award without play. A finished match can be changed to a forfeit too, or its forfeit given to the other team (as `correct_score` for what happens to the bracket) |
 | `requeue_match(p_match, p_absent_team = null, p_hold = false)` | Staff or court monitors | Off the court and back to its queue spot. It can be called again straight away if a court is free, unless `p_hold` keeps it off courts until released (`hold_match`). `p_absent_team` checks that team out |
@@ -179,6 +181,8 @@ Prices are one row in `private.platform_pricing` (default: $15 setup per tournam
 Player and texting fees are tallied, not yet collected: collecting them automatically needs Stripe Connect (each director's own Stripe account, with the platform fee taken from each registration).
 
 ## Sharing, registration controls and the waitlist
+
+**Self check-in.** `set_self_checkin(p_tournament, p_on)` → code and `get_self_checkin(p_tournament)` (staff or court monitors) manage a link at `/k/<code>`. Anyone with the code can call `self_checkin_info(p_code)`, `self_checkin_search(p_code, p_query)` (2+ letters, no contact details) and `self_check_in(p_code, p_player, p_checked_in = true)`, only while the tournament is in registration or live.
 
 **Accounts.** One kind of account plays and runs tournaments. `new_tournament(null)` gives an account with no organization its own, and whoever creates a tournament owns it. `get_my_profile()` and `save_my_profile(p_profile)` read and write the account's own player details (its email is always its login's). `my_tournaments()` lists what it runs, with `role` `owner`, `admin` (a manager) or `monitor`. Practice tournaments are no longer open to everyone signed in: staff are their organization's members and those added to them, as for any tournament.
 

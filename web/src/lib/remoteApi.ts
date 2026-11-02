@@ -29,7 +29,9 @@ import type {
   RegistrationRow,
   RegistrationView,
   StaffMember,
+  EventMerge,
   MyTournament,
+  SelfCheckinPlayer,
   PlayerProfile,
   StaffRole,
   StandingRow,
@@ -479,6 +481,21 @@ export const getTournamentFees = (tournamentId: string) => rpc<TournamentFees>('
 /** 'admin', 'monitor' or null for the signed-in user. */
 export const getMyRole = (tournamentId: string) =>
   rpc<StaffRole | null>('my_tournament_role', { p_tournament: tournamentId });
+export const getSelfCheckin = (tournamentId: string) => rpc<string | null>('get_self_checkin', { p_tournament: tournamentId });
+export const setSelfCheckin = (tournamentId: string, on: boolean) =>
+  rpc<string | null>('set_self_checkin', { p_tournament: tournamentId, p_on: on });
+export const getSelfCheckinInfo = (code: string) => rpc<{ tournament_name: string } | null>('self_checkin_info', { p_code: code });
+export const searchSelfCheckin = (code: string, query: string) =>
+  rpc<SelfCheckinPlayer[]>('self_checkin_search', { p_code: code, p_query: query });
+export const selfCheckIn = (code: string, playerId: string, checkedIn = true) =>
+  rpc<void>('self_check_in', { p_code: code, p_player: playerId, p_checked_in: checkedIn });
+export const mergeEvents = (fromEventId: string, intoEventId: string) =>
+  rpc<number>('merge_events', { p_from: fromEventId, p_into: intoEventId });
+export const unmergeEvent = (sourceEventId: string) => rpc<void>('unmerge_event', { p_source: sourceEventId });
+export const getEventMerges = (eventIds: string[]) =>
+  select<EventMerge[]>(
+    supabase().from('event_merges').select('source_event_id, into_event_id, source_name').in('into_event_id', eventIds),
+  );
 export const getMyProfile = async () => mapProfile(await rpc<Record<string, unknown> | null>('get_my_profile', {}));
 export const saveMyProfile = async (profile: PlayerProfile) =>
   mapProfile(await rpc<Record<string, unknown> | null>('save_my_profile', { p_profile: profile }));

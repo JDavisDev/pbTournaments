@@ -385,6 +385,17 @@ const ops: Record<string, Op> = {
   getPlatformPricing: async (tx) => (await one<{ r: unknown }>(tx, 'select public.platform_pricing() as r')).r,
   getTournamentFees: async (tx, id: string) => (await one<{ r: unknown }>(tx, 'select public.tournament_fees($1) as r', [id])).r,
   getMyRole: async (tx, id: string) => (await one<{ r: string | null }>(tx, 'select public.my_tournament_role($1) as r', [id])).r,
+  getSelfCheckin: async (tx, id: string) => (await one<{ c: string | null }>(tx, 'select public.get_self_checkin($1) as c', [id])).c,
+  setSelfCheckin: async (tx, id: string, on: boolean) =>
+    (await one<{ c: string | null }>(tx, 'select public.set_self_checkin($1, $2) as c', [id, on])).c,
+  getSelfCheckinInfo: async (tx, code: string) => (await one<{ i: unknown }>(tx, 'select public.self_checkin_info($1) as i', [code])).i,
+  searchSelfCheckin: (tx, code: string, query: string) => all(tx, 'select * from public.self_checkin_search($1, $2)', [code, query]),
+  selfCheckIn: (tx, code: string, player: string, checkedIn = true) =>
+    tx.query('select public.self_check_in($1, $2, $3)', [code, player, checkedIn]).then(() => null),
+  mergeEvents: async (tx, from: string, into: string) => (await one<{ n: number }>(tx, 'select public.merge_events($1, $2) as n', [from, into])).n,
+  unmergeEvent: (tx, source: string) => tx.query('select public.unmerge_event($1)', [source]).then(() => null),
+  getEventMerges: (tx, ids: string[]) =>
+    all(tx, 'select source_event_id, into_event_id, source_name from public.event_merges where into_event_id = any($1::uuid[])', [ids]),
   getMyProfile: async (tx) => mapProfile((await one<{ p: Row | null }>(tx, 'select public.get_my_profile() as p')).p),
   saveMyProfile: async (tx, profile: unknown) =>
     mapProfile((await one<{ p: Row | null }>(tx, 'select public.save_my_profile($1::jsonb) as p', [JSON.stringify(profile)])).p),

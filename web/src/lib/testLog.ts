@@ -49,7 +49,7 @@ export function logged<T extends object>(api: T): T {
   return new Proxy({} as T, {
     get(_, name) {
       const fn = (api as Record<string | symbol, unknown>)[name];
-      if (typeof fn !== 'function' || typeof name !== 'string' || /^(get|is|check|claim)/.test(name)) return fn;
+      if (typeof fn !== 'function' || typeof name !== 'string' || /^(get|is|check|claim|search)/.test(name)) return fn;
       return async (...args: unknown[]) => {
         const started = Date.now();
         const add = (ok: boolean, result: unknown) =>

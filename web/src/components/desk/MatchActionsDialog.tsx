@@ -32,17 +32,20 @@ export function MatchActionsDialog({
 export function QueuedMatchDialog({
   match,
   courts,
+  onScore,
   onClose,
   onDone,
 }: {
   match: MatchDetails | null;
   courts: CourtBoardRow[];
+  /** Enter a score from a paper sheet. */
+  onScore: (m: MatchDetails) => void;
   onClose: () => void;
   onDone: () => void;
 }) {
   return (
     <Modal open={!!match} onClose={onClose} title={match ? match.label ?? 'Match' : ''}>
-      {match && <QueuedActions key={match.id} match={match} courts={courts} onClose={onClose} onDone={onDone} />}
+      {match && <QueuedActions key={match.id} match={match} courts={courts} onScore={onScore} onClose={onClose} onDone={onDone} />}
     </Modal>
   );
 }
@@ -50,11 +53,13 @@ export function QueuedMatchDialog({
 function QueuedActions({
   match: m,
   courts,
+  onScore,
   onClose,
   onDone,
 }: {
   match: MatchDetails;
   courts: CourtBoardRow[];
+  onScore: (m: MatchDetails) => void;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -72,8 +77,16 @@ function QueuedActions({
       </p>
 
       <section className="flex flex-col gap-2">
+        <h3 className="text-lg">Already played?</h3>
+        <Button variant="primary" onClick={() => onScore(m)}>
+          Enter the score
+        </Button>
+        <p className="text-xs text-muted">For a match played from a paper scoresheet, without going on a court here.</p>
+      </section>
+
+      <section className="flex flex-col gap-2">
         <h3 className="text-lg">Send to a court</h3>
-        <p className="text-xs text-muted">Goes out now, ahead of the queue. Its score can be entered once it’s on a court.</p>
+        <p className="text-xs text-muted">Goes out now, ahead of the queue.</p>
         {open.length === 0 ? (
           <p className="text-sm text-muted">No courts are open right now.</p>
         ) : (

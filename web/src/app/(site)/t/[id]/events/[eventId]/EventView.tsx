@@ -219,9 +219,14 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
           </p>
         </div>
         {isDirector && (
-          <Link href={`/t/${id}/setup?step=divisions`} className="text-sm font-medium text-muted underline hover:text-text">
-            Division settings
-          </Link>
+          <div className="flex flex-wrap gap-4">
+            <a href={`/print/${id}?event=${eventId}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-muted underline hover:text-text">
+              Print sheets
+            </a>
+            <Link href={`/t/${id}/setup?step=divisions`} className="text-sm font-medium text-muted underline hover:text-text">
+              Division settings
+            </Link>
+          </div>
         )}
       </div>
 
@@ -528,7 +533,16 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
       </>
       <ScoreDialog target={score} onClose={() => setScore(null)} onDone={reload} />
       <MatchActionsDialog court={courtActions} courts={data.courts} onClose={() => setCourtActions(null)} onDone={reload} />
-      <QueuedMatchDialog match={queuedMatch} courts={data.courts} onClose={() => setQueuedMatch(null)} onDone={reload} />
+      <QueuedMatchDialog
+        match={queuedMatch}
+        courts={data.courts}
+        onScore={(m) => {
+          setQueuedMatch(null);
+          setScore({ matchId: m.id, team1: m.team1_name, team2: m.team2_name, rules: rulesOf(m), mode: 'report' });
+        }}
+        onClose={() => setQueuedMatch(null)}
+        onDone={reload}
+      />
     </div>
   );
 }

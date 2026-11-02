@@ -127,6 +127,23 @@ export type StaffRole = 'admin' | 'monitor';
 
 export type { PlayerProfile } from './profileTypes';
 
+/** self_checkin_search(): who can be checked in, with no contact details. */
+export interface SelfCheckinPlayer {
+  player_id: string;
+  first_name: string;
+  last_name: string;
+  /** "Open Doubles: Davis/Lee" */
+  teams: string[];
+  checked_in: boolean;
+}
+
+/** A division merged into another, which can be brought back. */
+export interface EventMerge {
+  source_event_id: string;
+  into_event_id: string;
+  source_name: string;
+}
+
 /** my_tournaments(): a tournament this account runs. */
 export interface MyTournament {
   id: string;
