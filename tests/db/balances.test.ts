@@ -236,7 +236,7 @@ describe('moving divisions', () => {
     expect((await one(db, 'select event_id from public.teams')).event_id).toBe(open);
   });
 
-  it('refuses once the team has matches, and for anyone but admins', async () => {
+  it('refuses once the division has started, and for anyone but admins', async () => {
     const { tournamentId, director, mens, open } = await openTournament();
     const regs = [];
     for (const [x, y] of [['a', 'b'], ['c', 'd']]) {
@@ -250,8 +250,9 @@ describe('moving divisions', () => {
 
     await actAs(db, director);
     await generate(db, mens);
+    await db.query('update public.events set started_at = now() where id = $1', [mens]);
     await expect(
       asRole(db, 'authenticated', () => db.query('select public.move_registration_entry($1, $2, $3)', [regs[0].id, mens, open])),
-    ).rejects.toThrow(/already has matches/);
+    ).rejects.toThrow(/already started/);
   });
 });

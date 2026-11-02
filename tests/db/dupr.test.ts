@@ -120,7 +120,7 @@ describe('division eligibility', () => {
         ]),
       ])
     ).r;
-    expect(result).toEqual({ updated: 1, unknown: ['ZZZZZZ'] });
+    expect(result).toMatchObject({ updated: 1, unknown: ['ZZZZZZ'], changes: [{ name: 'Pat Able', doubles_from: null, doubles_to: 3.912 }] });
     const p = await one(db, 'select dupr_doubles, rating_checked_at from public.players where id = $1', [able.id]);
     expect(Number(p.dupr_doubles)).toBe(3.912);
     expect(p.rating_checked_at).not.toBeNull();

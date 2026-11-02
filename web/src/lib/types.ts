@@ -75,6 +75,8 @@ export interface Tournament {
   state: string | null;
   /** The ball used, e.g. 'Franklin X-40'. */
   ball: string | null;
+  /** When ratings were last refreshed from DUPR or a pasted list. */
+  ratings_refreshed_at: string | null;
   dupr_score_type: 'SIDEOUT' | 'RALLY';
   championship_mode: ChampionshipMode;
   /** Bracket rounds that go to championship courts first. */
@@ -429,6 +431,55 @@ export interface RosterPlayer {
   self_rating: number | null;
   /** Set when a director confirmed the ratings (by hand or from a DUPR list). */
   rating_checked_at: string | null;
+}
+
+/** entry_eligibility(): a player not on a team yet who doesn't meet their division's rules. */
+export interface EntryEligibilityRow {
+  registration_id: string;
+  event_id: string;
+  event_name: string;
+  player_id: string;
+  player_name: string;
+  problem: string;
+}
+
+/** team_move_options(): another division a team could move to. */
+export interface TeamMoveOption {
+  event_id: string;
+  event_name: string;
+  /** What's wrong with the team there; a move is still allowed. */
+  problems: string[];
+  /** Why the team can't move there. */
+  blocked: string | null;
+  teams: number;
+  max_teams: number | null;
+  /** A schedule built ahead of time gets cleared, and rebuilds when the division starts. */
+  clears_schedule: boolean;
+}
+
+export interface DuprRefreshPlayer {
+  player_id: string;
+  first_name: string;
+  last_name: string;
+  dupr_id: string | null;
+  dupr_doubles: number | null;
+  dupr_singles: number | null;
+}
+
+export interface RatingChange {
+  player_id: string;
+  name: string;
+  doubles_from: number | null;
+  doubles_to: number | null;
+  singles_from: number | null;
+  singles_to: number | null;
+}
+
+/** import_dupr_ratings(): who was updated and what changed. */
+export interface RatingsImport {
+  updated: number;
+  unknown: string[];
+  changes: RatingChange[];
 }
 
 /** division_eligibility(): one row per team; problems is empty when it's fine. */

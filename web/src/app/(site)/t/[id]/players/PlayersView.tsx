@@ -12,6 +12,7 @@ import { Badge, Button, Card, Empty, ErrorText, Field, Input, Modal, Select, Spi
 import {
   checkInTeam,
   getDivisionEligibility,
+  getEntryEligibility,
   getEvents,
   getMoney,
   getRegistrationAnswers,
@@ -29,23 +30,26 @@ import {
 import { poolName } from '@/lib/format';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import type { EligibilityRow, RegistrationRow, RosterPlayer, TeamRosterRow, WithdrawalRow } from '@/lib/types';
+import { DivisionCheck } from './DivisionCheck';
+import { MoveTeam } from './MoveTeam';
 import { AnswerCounts, RegistrationTotals, Unpaired, Waitlist } from './RegistrationCards';
 import { BalanceBadge, RegistrantDetails, type Registrant } from './RegistrantDetails';
 
 const statusTone = { paid: 'live', pending: 'called', cancelled: 'neutral', refunded: 'neutral', waitlisted: 'info' } as const;
 
 async function load(id: string) {
-  const [tournament, events, roster, eligibility, registrations, money, questions, answers] = await Promise.all([
+  const [tournament, events, roster, eligibility, entryProblems, registrations, money, questions, answers] = await Promise.all([
     getTournament(id),
     getEvents(id),
     getTeamRoster(id),
     getDivisionEligibility(id),
+    getEntryEligibility(id),
     getRegistrations(id),
     getMoney(id),
     getRegistrationQuestions(id),
     getRegistrationAnswers(id),
   ]);
-  return { tournament, events, roster, eligibility, registrations, money, questions, answers };
+  return { tournament, events, roster, eligibility, entryProblems, registrations, money, questions, answers };
 }
 
 /** One player: their profile (from a team when they're on one), teams and registration entries. */
@@ -72,7 +76,10 @@ export function PlayersView({ params }: { params: Promise<{ id: string }> }) {
     typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('q') ?? ''),
   );
   const [division, setDivision] = useState('');
-  const [onlyProblems, setOnlyProblems] = useState(false);
+  // ?problems=1 comes from the warning on the Overview.
+  const [onlyProblems, setOnlyProblems] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('problems'),
+  );
   const [open, setOpen] = useState<{ playerId: string; sheet: Sheet } | null>(null);
 
   if (error === 'not-configured') return <ConnectNotice />;
@@ -103,7 +110,10 @@ export function PlayersView({ params }: { params: Promise<{ id: string }> }) {
   for (const w of data.money.withdrawals) person(w.player_id, w).withdrawals.push(w);
 
   const eligibility = new Map(data.eligibility.map((e) => [e.team_id, e]));
-  const problemsOf = (p: Person) => p.teams.flatMap((t) => eligibility.get(t.team_id)?.problems ?? []);
+  const problemsOf = (p: Person) => [
+    ...p.teams.flatMap((t) => eligibility.get(t.team_id)?.problems ?? []),
+    ...data.entryProblems.filter((e) => e.player_id === p.playerId).map((e) => e.problem),
+  ];
   const flagged = [...people.values()].filter((p) => problemsOf(p).length > 0).length;
   const balanceOf = (playerId: string) => data.money.balances.find((b) => b.player_id === playerId) ?? null;
   const query = search.trim().toLowerCase();
@@ -147,6 +157,16 @@ export function PlayersView({ params }: { params: Promise<{ id: string }> }) {
       {data.registrations.length > 0 && <RegistrationTotals rows={data.registrations} balances={data.money.balances} />}
       <Waitlist rows={data.registrations} events={data.events} onChanged={reload} />
       <Unpaired rows={data.registrations} events={data.events} onChanged={reload} />
+      {people.size > 0 && (
+        <DivisionCheck
+          tournament={data.tournament}
+          events={data.events}
+          eligibility={data.eligibility}
+          entryProblems={data.entryProblems}
+          onOpenPlayer={(playerId) => setOpen({ playerId, sheet: 'registration' })}
+          onChanged={reload}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -384,7 +404,7 @@ function PersonSheet({
           {!team.withdrawn_at && (
             <>
               <TeamActions
-                key={team.team_id}
+                key={`${team.team_id}:${team.event_id}`}
                 tournamentId={tournamentId}
                 team={team}
                 alternates={alternatesFor(team)}
@@ -564,6 +584,11 @@ function TeamActions({
           )}
         </section>
       )}
+
+      <section className="flex flex-col gap-2">
+        <h3 className="text-lg">Move to another division</h3>
+        <MoveTeam teamId={team.team_id} teamName={team.name} onDone={onDone} />
+      </section>
 
       <section className="flex flex-col gap-2">
         <h3 className="text-lg">Drop this team</h3>

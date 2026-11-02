@@ -182,7 +182,7 @@ Player and texting fees are tallied, not yet collected: collecting them automati
 
 ## Sharing, registration controls and the waitlist
 
-**Self check-in.** `set_self_checkin(p_tournament, p_on)` → code and `get_self_checkin(p_tournament)` (staff or court monitors) manage a link at `/k/<code>`. Anyone with the code can call `self_checkin_info(p_code)`, `self_checkin_search(p_code, p_query)` (2+ letters, no contact details) and `self_check_in(p_code, p_player, p_checked_in = true)`, only while the tournament is in registration or live.
+**Self check-in.** `set_self_checkin(p_tournament, p_on)` → code and `get_self_checkin(p_tournament)` (staff or court monitors) manage a link at `/k/<code>`. Anyone with the code can call `self_checkin_info(p_code)`, `self_checkin_search(p_code, p_query)` (2+ letters, no contact details), `my_self_checkin(p_code)` (the logged-in account's entries, by user or email) and `self_check_in(p_code, p_player, p_checked_in = true)`, only while the tournament is in registration or live.
 
 **Accounts.** One kind of account plays and runs tournaments. `new_tournament(null)` gives an account with no organization its own, and whoever creates a tournament owns it. `get_my_profile()` and `save_my_profile(p_profile)` read and write the account's own player details (its email is always its login's). `my_tournaments()` lists what it runs, with `role` `owner`, `admin` (a manager) or `monitor`. Practice tournaments are no longer open to everyone signed in: staff are their organization's members and those added to them, as for any tournament.
 
@@ -221,7 +221,7 @@ See [dupr.md](dupr.md). Players have `dupr_id`, `dupr_doubles`, `dupr_singles` a
 | Function | Who | What it does |
 |---|---|---|
 | `division_eligibility(p_tournament)` → rows | Staff | Every team checked against its division with current player details: `problems` (empty when fine) and `unchecked_ratings` |
-| `import_dupr_ratings(p_tournament, p_rows)` → jsonb | Staff | `p_rows`: `[{dupr_id, doubles, singles}]`. Sets ratings for players in this tournament by DUPR ID and marks them checked. Returns `{updated, unknown}` |
+| `import_dupr_ratings(p_tournament, p_rows)` → jsonb | Staff | `p_rows`: `[{dupr_id or player_id, doubles, singles}]`. Sets ratings for players in this tournament and marks them checked, and notes `tournaments.ratings_refreshed_at`. Returns `{updated, unknown, changes: [{player_id, name, doubles_from, doubles_to, singles_from, singles_to}]}` |
 | `dupr_results(p_tournament)` → rows | Staff | Played matches of final divisions (no forfeits or byes) with match type, event, date, names, DUPR IDs, games, location, score type, `missing_ids` and `exported_at` |
 | `mark_dupr_exported(p_tournament, p_matches, p_exported = true)` → int | Staff | Marks matches as sent to DUPR (or clears it) |
 
@@ -235,7 +235,11 @@ Each player's money in a tournament is a ledger (`ledger_entries`); its sum is t
 | Function | Who | What it does |
 |---|---|---|
 | `withdraw_registration(p_registration, p_event = null)` → `{credit_cents, withdrawn}` | Anyone with the registration id (the player's link) until the division has started, or an admin at any time | Withdraws from one event, or every event (null). A paid entry is credited what it cost: the extra-event fee, or all that's left of the registration for its last event, so credits never add up to more than was paid. Waitlisted entries are credited nothing. The entry's team is dissolved if it has no matches yet (the partner waits for a new partner), otherwise dropped with its remaining matches forfeited. Withdrawn from everything: the registration is `cancelled` and stops counting toward the player limit. Not once the tournament is `complete`. Never refunds: see `record_ledger_entry` |
-| `move_registration_entry(p_registration, p_from_event, p_to_event)` | Admin | Moves an entry to another division; its team moves whole (partner too) while it has no matches. A player waiting for a partner may be paired in the new division. Price, limits and eligibility don't change or apply |
+| `move_registration_entry(p_registration, p_from_event, p_to_event)` | Admin | Moves an entry to another division; its team moves whole (partner too, see `move_team`) while it has no matches. A player waiting for a partner may be paired in the new division. Price, limits and eligibility don't change or apply |
+| `move_team(p_team, p_to_event)` → `{problems, cleared}` | Admin | Moves a team, partner included, with or without a registration. Clears seed and pool, keeps check-ins and the price, emails the players (`division_moved`). A schedule built ahead of time in either division is cleared (`cleared` names them). Refused once either division has started, or if a player is already in the new division. Rules and limits don't stop it; `problems` says what's wrong there |
+| `team_move_options(p_team)` → rows | Admin | Each other division: `problems`, `blocked` (why it can't move there), `teams`, `max_teams`, `clears_schedule` |
+| `entry_eligibility(p_tournament)` → rows | Admin | Players without a team yet who don't meet their division's rules (`division_eligibility` covers teams) |
+| `dupr_refresh_list(p_tournament)` → rows | Admin | Everyone in the tournament with their DUPR ID and ratings |
 | `record_ledger_entry(p_tournament, p_player, p_kind, p_amount_cents, p_method = null, p_note = null)` → ledger entry | Admin | `p_kind`: `payment`, `refund` (both need `p_method`: `stripe`, `cash`, `check`, `other`), `fee` or `credit`. `p_amount_cents` is positive. Refunds can't exceed what the player is owed, nor payments what they owe. Stripe refunds are made in the Stripe dashboard and recorded here |
 
 Withdrawn entries move from `registration_entries` to `registration_withdrawals` (with `credit_cents` and `withdrawn_by`: `player` or `director`); `withdrawal_details` adds the player. `get_registration` also returns `tournament_status`, `refund_policy`, `withdrawals`, the player's `balance` and `extra_event_fee_cents`, so the player's page can show what withdrawing credits.

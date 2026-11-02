@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { Linked } from '@/components/Announcement';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { EligibilityAlert } from '@/components/EligibilityAlert';
 import { CourtStatus } from '@/components/desk/CourtCard';
 import { DivisionStatus, dayHeading, divisionDay, divisionState } from '@/components/DivisionStatus';
 import { Expandable } from '@/components/Expandable';
@@ -57,6 +58,7 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className={`grid gap-10 ${aside ? 'lg:grid-cols-[1fr_22rem]' : ''}`}>
       <div className="flex min-w-0 flex-col gap-10">
+        <EligibilityAlert tournamentId={id} />
         {tournament.image_data && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={tournament.image_data} alt="" className="max-h-72 w-full rounded-2xl object-cover" />

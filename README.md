@@ -44,6 +44,7 @@ Local mode is always a demo: **Sign in** signs you in as the shared guest in one
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (or `TWILIO_MESSAGING_SERVICE_SID`) | Real texts with Twilio (`SMS_MODE=log` forces the log). Setup, delivery reports and checks: [docs/twilio.md](docs/twilio.md) |
 | `NEXT_PUBLIC_APP_URL` | Base for the score links in texts (default `http://localhost:3000`); with a public https address, Twilio also reports delivery to `/api/twilio/status` |
 | `SUPABASE_SECRET_KEY` | Supabase mode only: lets the server confirm payments and send texts |
+| `DUPR_CLIENT_KEY`, `DUPR_CLIENT_SECRET` | Partner keys from DUPR: "Refresh DUPR ratings" reads real ratings (see [docs/dupr.md](docs/dupr.md)) |
 | `CRON_SECRET` | Supabase mode only: protects `/api/texts/send`, which a scheduler calls every minute |
 
 Local mode sends queued texts automatically every few seconds.

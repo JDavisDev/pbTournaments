@@ -10,6 +10,7 @@ import { DivisionDupr } from '@/components/DivisionDupr';
 import { DivisionStatus, divisionState } from '@/components/DivisionStatus';
 import { Icon } from '@/components/Icon';
 import { Button, Card, Empty, ErrorText, Spinner, Textarea } from '@/components/ui';
+import type { RatingsImport } from '@/lib/types';
 import { getDuprResults, getEvents, getMatches, getTournament, importDuprRatings } from '@/lib/api';
 import { parseRatings } from '@/lib/dupr';
 import { formatDate } from '@/lib/format';
@@ -152,7 +153,7 @@ function Step({ n, done, title, children }: { n: number; done: boolean; title: s
 /** Paste confirmed ratings (e.g. copied from DUPR) to update players by DUPR ID. */
 function RatingsImport({ tournamentId, onDone }: { tournamentId: string; onDone: () => void }) {
   const [text, setText] = useState('');
-  const [result, setResult] = useState<{ updated: number; unknown: string[] } | null>(null);
+  const [result, setResult] = useState<RatingsImport | null>(null);
   const { busy, error, run } = useAction();
   const rows = parseRatings(text);
   return (

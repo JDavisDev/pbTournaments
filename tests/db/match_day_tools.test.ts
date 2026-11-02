@@ -88,6 +88,27 @@ describe('merging divisions', () => {
 });
 
 describe('self check-in', () => {
+  it('finds a logged-in player by their account, in this tournament only', async () => {
+    const { director, tournamentId } = await setup();
+    const eventId = await addEvent(db, tournamentId, 'Open');
+    const t = await addPair(db, eventId, ['Davis', 'Lee']);
+    await db.query(`update public.players set email = 'Josh@Example.test' where id = (select player_id from public.team_players where team_id = $1 limit 1)`, [t]);
+    await actAs(db, director);
+    const code = (await one(db, 'select public.set_self_checkin($1, true) as c', [tournamentId])).c;
+
+    await actAs(db, null);
+    expect(await rows(db, 'select * from public.my_self_checkin($1)', [code])).toEqual([]);
+    await actAs(db, (await one(db, `insert into auth.users (email) values ('someone@example.test') returning id`)).id);
+    expect(await rows(db, 'select * from public.my_self_checkin($1)', [code])).toEqual([]);
+
+    await actAs(db, (await one(db, `insert into auth.users (email) values ('josh@example.test') returning id`)).id);
+    expect(await rows(db, `select * from public.my_self_checkin('wrong')`)).toEqual([]);
+    const [me] = await rows(db, 'select * from public.my_self_checkin($1)', [code]);
+    expect(me).toMatchObject({ checked_in: false });
+    await db.query('select public.self_check_in($1, $2)', [code, me.player_id]);
+    expect((await rows(db, 'select * from public.my_self_checkin($1)', [code]))[0].checked_in).toBe(true);
+  });
+
   it('works only with the link, while it’s on, and shows no contact details', async () => {
     const { director, tournamentId } = await setup();
     const eventId = await addEvent(db, tournamentId, 'Open');

@@ -153,7 +153,7 @@ export function RegistrantDetails({
                         disabled={busy || !target}
                         onClick={() =>
                           confirm(
-                            `Move ${e.team_name ? `team ${e.team_name}` : who.name} from ${e.event_name} to ${events.find((ev) => ev.id === target)?.name}? The price stays the same.`,
+                            `Move ${e.team_name ? `team ${e.team_name}` : who.name} from ${e.event_name} to ${events.find((ev) => ev.id === target)?.name}? The price stays the same. A schedule built ahead of time in either division gets cleared and rebuilds when it starts.`,
                           ) && run(() => moveRegistrationEntry(e.registration_id, e.event_id, target), onChanged)
                         }
                       >

@@ -13,7 +13,11 @@ import type {
   DiscountCode,
   DivisionCheckin,
   DuprResultRow,
+  DuprRefreshPlayer,
   EligibilityRow,
+  EntryEligibilityRow,
+  RatingsImport,
+  TeamMoveOption,
   LedgerEntry,
   ListingFields,
   MatchDetails,
@@ -487,6 +491,7 @@ export const setSelfCheckin = (tournamentId: string, on: boolean) =>
 export const getSelfCheckinInfo = (code: string) => rpc<{ tournament_name: string } | null>('self_checkin_info', { p_code: code });
 export const searchSelfCheckin = (code: string, query: string) =>
   rpc<SelfCheckinPlayer[]>('self_checkin_search', { p_code: code, p_query: query });
+export const getMySelfCheckin = (code: string) => rpc<SelfCheckinPlayer[]>('my_self_checkin', { p_code: code });
 export const selfCheckIn = (code: string, playerId: string, checkedIn = true) =>
   rpc<void>('self_check_in', { p_code: code, p_player: playerId, p_checked_in: checkedIn });
 export const mergeEvents = (fromEventId: string, intoEventId: string) =>
@@ -611,8 +616,18 @@ export const getDemoInbox = (teamId: string) => rpc<DemoText[]>('demo_inbox', { 
 export const getDivisionEligibility = (tournamentId: string) =>
   rpcAll<EligibilityRow>('division_eligibility', { p_tournament: tournamentId });
 /** Confirmed ratings from a pasted list, matched by DUPR ID. */
-export const importDuprRatings = (tournamentId: string, list: { dupr_id: string; doubles?: number; singles?: number }[]) =>
-  rpc<{ updated: number; unknown: string[] }>('import_dupr_ratings', { p_tournament: tournamentId, p_rows: list });
+export const importDuprRatings = (
+  tournamentId: string,
+  list: { dupr_id?: string; player_id?: string; doubles?: number; singles?: number }[],
+) => rpc<RatingsImport>('import_dupr_ratings', { p_tournament: tournamentId, p_rows: list });
+export const getDuprRefreshList = (tournamentId: string) =>
+  rpcAll<DuprRefreshPlayer>('dupr_refresh_list', { p_tournament: tournamentId });
+export const getEntryEligibility = (tournamentId: string) =>
+  rpcAll<EntryEligibilityRow>('entry_eligibility', { p_tournament: tournamentId });
+export const getTeamMoveOptions = (teamId: string) => rpcAll<TeamMoveOption>('team_move_options', { p_team: teamId });
+/** Moves a team to another division; returns what's wrong with it there and any schedules cleared. */
+export const moveTeam = (teamId: string, toEventId: string) =>
+  rpc<{ problems: string[]; cleared: string[] }>('move_team', { p_team: teamId, p_to_event: toEventId });
 export const getDuprResults = (tournamentId: string) => rpcAll<DuprResultRow>('dupr_results', { p_tournament: tournamentId });
 export const markDuprExported = (tournamentId: string, matchIds: string[], exported = true) =>
   rpc<number>('mark_dupr_exported', { p_tournament: tournamentId, p_matches: matchIds, p_exported: exported });

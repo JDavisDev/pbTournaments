@@ -390,6 +390,7 @@ const ops: Record<string, Op> = {
     (await one<{ c: string | null }>(tx, 'select public.set_self_checkin($1, $2) as c', [id, on])).c,
   getSelfCheckinInfo: async (tx, code: string) => (await one<{ i: unknown }>(tx, 'select public.self_checkin_info($1) as i', [code])).i,
   searchSelfCheckin: (tx, code: string, query: string) => all(tx, 'select * from public.self_checkin_search($1, $2)', [code, query]),
+  getMySelfCheckin: (tx, code: string) => all(tx, 'select * from public.my_self_checkin($1)', [code]),
   selfCheckIn: (tx, code: string, player: string, checkedIn = true) =>
     tx.query('select public.self_check_in($1, $2, $3)', [code, player, checkedIn]).then(() => null),
   mergeEvents: async (tx, from: string, into: string) => (await one<{ n: number }>(tx, 'select public.merge_events($1, $2) as n', [from, into])).n,
@@ -410,6 +411,11 @@ const ops: Record<string, Op> = {
   getDivisionEligibility: (tx, id: string) => all(tx, 'select * from public.division_eligibility($1)', [id]),
   importDuprRatings: async (tx, id: string, list: unknown) =>
     (await one<{ r: unknown }>(tx, 'select public.import_dupr_ratings($1, $2::jsonb) as r', [id, JSON.stringify(list)])).r,
+  getDuprRefreshList: (tx, id: string) => all(tx, 'select * from public.dupr_refresh_list($1)', [id]),
+  getEntryEligibility: (tx, id: string) => all(tx, 'select * from public.entry_eligibility($1)', [id]),
+  getTeamMoveOptions: (tx, team: string) => all(tx, 'select * from public.team_move_options($1)', [team]),
+  moveTeam: async (tx, team: string, to: string) =>
+    (await one<{ r: unknown }>(tx, 'select public.move_team($1, $2) as r', [team, to])).r,
   getDuprResults: (tx, id: string) => all(tx, 'select * from public.dupr_results($1)', [id]),
   markDuprExported: async (tx, id: string, matchIds: string[], exported = true) =>
     (await one<{ n: number }>(tx, 'select public.mark_dupr_exported($1, $2::uuid[], $3) as n', [id, matchIds, exported])).n,

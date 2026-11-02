@@ -1,11 +1,15 @@
 'use client';
 
-// At the door: on a tablet, or a player's own phone from the QR code. No
-// account needed; the link is the permission, and it only checks people in.
+// At the desk: a player scans the QR code and, logged in, just confirms. Anyone
+// else finds their name, on their phone or a tablet at the door; no account is
+// needed. The link is the permission, and it only checks people in.
+import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
 import { Button, Empty, ErrorText, Input, Spinner } from '@/components/ui';
-import { getSelfCheckinInfo, searchSelfCheckin, selfCheckIn } from '@/lib/api';
-import { useAction, useLoad } from '@/lib/hooks';
+import { getMySelfCheckin, getSelfCheckinInfo, searchSelfCheckin, selfCheckIn } from '@/lib/api';
+import { isGuest } from '@/lib/auth';
+import { useAction, useLoad, useSession } from '@/lib/hooks';
+import { logOut } from '@/lib/profile';
 import type { SelfCheckinPlayer } from '@/lib/types';
 
 /** How long the "you're in" screen stays up, so a shared tablet is ready for the next person. */
@@ -14,6 +18,11 @@ const RESET_MS = 10_000;
 export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
   const info = useLoad(() => getSelfCheckinInfo(code), [code]);
+  const session = useSession();
+  const signedIn = !!session && !isGuest(session);
+  const me = useLoad(() => (signedIn ? getMySelfCheckin(code) : Promise.resolve([])), [code, session?.id]);
+  // Cancel on the confirm screen leads to finding a name instead.
+  const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [typed, setTyped] = useState('');
   const [done, setDone] = useState<SelfCheckinPlayer | null>(null);
@@ -37,8 +46,20 @@ export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
   }, [done]);
 
   if (info.error) return <Empty>{info.error}</Empty>;
-  if (info.data === undefined) return <Spinner />;
+  if (info.data === undefined || session === undefined || me.data === undefined) return <Spinner />;
   if (!info.data) return <Empty>Self check-in isn’t on right now. Please see the desk.</Empty>;
+
+  if (me.data.length > 0 && !searching) {
+    return (
+      <Mine
+        code={code}
+        tournament={info.data.tournament_name}
+        players={me.data}
+        onCancel={() => setSearching(true)}
+        onChanged={me.reload}
+      />
+    );
+  }
 
   if (done) {
     return (
@@ -71,6 +92,17 @@ export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
       <div>
         <p className="text-muted">{info.data.tournament_name}</p>
         <h1 className="text-5xl">Check in</h1>
+        {!signedIn ? (
+          <p className="mt-2 text-lg text-muted">
+            Have an account?{' '}
+            <Link href={`/profile?mode=login&next=${encodeURIComponent(`/k/${code}`)}`} className="font-medium text-text underline">
+              Log in
+            </Link>{' '}
+            and just tap Confirm. Or find your name:
+          </p>
+        ) : (
+          me.data.length === 0 && <p className="mt-2 text-lg text-muted">We can’t find an entry under {session?.email}. Try finding your name:</p>
+        )}
       </div>
       <Input
         aria-label="Your name"
@@ -114,6 +146,84 @@ export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
         ))}
       </ul>
       {typed.length >= 2 && results.data?.length === 0 && <p className="text-lg text-muted">No match. Please see the desk.</p>}
+    </main>
+  );
+}
+
+/** Logged in: "Josh Checking In", and a tap. One email can hold more than one entry, so all of them check in. */
+function Mine({
+  code,
+  tournament,
+  players,
+  onCancel,
+  onChanged,
+}: {
+  code: string;
+  tournament: string;
+  players: SelfCheckinPlayer[];
+  onCancel: () => void;
+  onChanged: () => void;
+}) {
+  const { busy, error, run } = useAction();
+  const [justIn, setJustIn] = useState(false);
+  const first = players[0];
+  const allIn = players.every((p) => p.checked_in);
+  const teams = [...new Set(players.flatMap((p) => p.teams))];
+  const setAll = (checkedIn: boolean) => Promise.all(players.map((p) => selfCheckIn(code, p.player_id, checkedIn)));
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-6 p-6 text-center">
+      <p className="text-lg text-muted">{tournament}</p>
+      <h1 className={`text-6xl ${allIn ? 'text-live' : ''}`}>{allIn ? `${first.first_name}, you’re in` : `${first.first_name} Checking In`}</h1>
+      <ul className="text-lg text-muted">
+        {teams.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
+      {allIn && <p className="text-lg">We’ll text you when it’s time to play. Your partner checks in too.</p>}
+      <ErrorText>{error}</ErrorText>
+      {allIn ? (
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={() =>
+            run(
+              async () => {
+                await setAll(false);
+                setJustIn(false);
+              },
+              onChanged,
+            )
+          }
+        >
+          {justIn ? 'Undo' : 'Undo my check-in'}
+        </Button>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <Button className="h-16 text-lg" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            className="h-16 text-lg"
+            disabled={busy}
+            onClick={() =>
+              run(
+                async () => {
+                  await setAll(true);
+                  setJustIn(true);
+                },
+                onChanged,
+              )
+            }
+          >
+            {busy ? 'Checking in…' : 'Confirm'}
+          </Button>
+        </div>
+      )}
+      <button type="button" className="text-muted underline" onClick={() => logOut()}>
+        Not {first.first_name}? Log out
+      </button>
     </main>
   );
 }

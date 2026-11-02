@@ -4,13 +4,28 @@ Players' **DUPR ID** is optional for now: registration only asks for it in a div
 
 ## Ratings and division rules
 
-DUPR has no public API for looking up ratings. Its API is for approved partners (CourtReserve, PickleballTournaments and others), so Courtside works from:
+Ratings come from:
 
 1. the rating the player enters at sign-up,
-2. ratings a director types on the Players page ("I checked these ratings on DUPR"), and
-3. a pasted list on the **DUPR** page, e.g. `7K2QXW 3.82 3.60` per line (ID, doubles, singles). Players are matched by DUPR ID.
+2. ratings a director types on the Players page ("I checked these ratings on DUPR"),
+3. a pasted list on the **DUPR** page, e.g. `7K2QXW 3.82 3.60` per line (ID, doubles, singles), matched by DUPR ID, and
+4. **Refresh DUPR ratings** on the Players page.
 
-Confirmed ratings show a check mark. If DUPR later approves us as a partner, the lookup can fill the same fields (`players.dupr_doubles`, `dupr_singles`, `rating_checked_at`).
+Confirmed ratings show a check mark.
+
+### Refresh DUPR ratings
+
+The button shows who changed and by how much, and lists anyone it couldn't check. Anyone now outside their division's rules shows up under **Division rules** on the Players page, with a warning on the Overview, and a team can be moved from there.
+
+- **Demo sites and local mode without keys:** ratings are made up, and the result says so.
+- **Live site without keys:** nothing changes; the result points to the pasted list.
+- **With keys:** `/api/dupr/refresh` calls DUPR's Partner API (`POST /auth/v1.0/token`, `POST /user/v1.0/batch`). **Not yet run against DUPR**: it follows their published spec, but we have no keys.
+
+### Connecting to DUPR
+
+1. Get partner keys: email tech@mydupr.com. DUPR reviews an integration against [its checklist](https://dupr.gitbook.io/dupr-raas), which typically takes up to 10 business days.
+2. Set `DUPR_CLIENT_KEY`, `DUPR_CLIENT_SECRET` and, for DUPR's test environment, `DUPR_API_URL=https://uat.mydupr.com/api`.
+3. Build **DUPR login** (not done). DUPR only returns data for players who connected through its login, embedded as an iframe, which is also the source of a verified DUPR ID. Its checklist doesn't allow typing DUPR IDs by hand, so the ID fields here would have to change for an approved integration.
 
 Each division has its own rules (Setup → event):
 
