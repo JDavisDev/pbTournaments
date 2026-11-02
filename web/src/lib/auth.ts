@@ -1,6 +1,7 @@
 // Director sign-in: Supabase Auth in production, a local account in local mode.
 import { demoGuest, isLocalMode } from './config';
 import { getLocalUser, localCall, setLocalUser, type LocalUser } from './localClient';
+import type { PlayerProfile } from './profileTypes';
 import { supabase } from './supabase';
 
 export type AuthUser = LocalUser;
@@ -11,8 +12,14 @@ interface Auth {
   current(): Promise<AuthUser | null>;
   subscribe(listener: Listener): () => void;
   signIn(email: string, password: string): Promise<void>;
-  /** 'confirm-email' when Supabase needs the address confirmed first. */
-  signUp(email: string, password: string): Promise<'signed-in' | 'confirm-email'>;
+  /**
+   * 'confirm-email' when Supabase needs the address confirmed first. The
+   * profile then waits on the account (pendingProfile) until it's logged in.
+   */
+  signUp(email: string, password: string, profile?: PlayerProfile): Promise<'signed-in' | 'confirm-email'>;
+  /** Supabase only: details from a sign-up that had to confirm its email, not saved yet. */
+  pendingProfile?(): Promise<PlayerProfile | null>;
+  clearPendingProfile?(): Promise<void>;
   /** Demo sites: the shared guest account (Supabase), or a local guest without an email. */
   signInAsGuest(): Promise<void>;
   /** Supabase only: a one-time sign-in link by email, for an existing account. */
@@ -36,15 +43,26 @@ const remoteAuth: Auth = {
     const { error } = await supabase().auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
   },
-  async signUp(email, password) {
+  async signUp(email, password, profile) {
     const { data, error } = await supabase().auth.signUp({
       email,
       password,
-      // When they agreed to the Terms of Service and Privacy Policy (the sign-up checkbox).
-      options: { emailRedirectTo: window.location.origin, data: { terms_accepted_at: new Date().toISOString() } },
+      options: {
+        emailRedirectTo: window.location.origin,
+        // When they agreed to the Terms of Service and Privacy Policy (the sign-up checkbox), and what
+        // they filled in, kept with the account until it's confirmed: the link may open on another browser.
+        data: { terms_accepted_at: new Date().toISOString(), ...(profile ? { pending_profile: profile } : {}) },
+      },
     });
     if (error) throw new Error(error.message);
     return data.session ? 'signed-in' : 'confirm-email';
+  },
+  async pendingProfile() {
+    const { data } = await supabase().auth.getUser();
+    return (data.user?.user_metadata?.pending_profile as PlayerProfile | undefined) ?? null;
+  },
+  async clearPendingProfile() {
+    await supabase().auth.updateUser({ data: { pending_profile: null } });
   },
   async signInAsGuest() {
     const { email, password } = demoGuest;

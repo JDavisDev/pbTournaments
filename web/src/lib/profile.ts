@@ -15,8 +15,6 @@ export type { PlayerProfile };
 export const TEST_PASSWORD = 'test1234';
 const PARTNER_KEY = 'courtside-test-partner';
 const TEST_PLAYER_KEY = 'courtside-test-player';
-// Details from a sign-up that must confirm its email first, saved at first log-in.
-const PENDING_KEY = 'courtside-pending-profile';
 
 interface State {
   userId: string | null | undefined;
@@ -38,12 +36,25 @@ async function load(userId: string | null) {
   if (loading === userId) return;
   loading = userId;
   try {
-    publish({ userId, profile: await getMyProfile() });
+    publish({ userId, profile: (await getMyProfile()) ?? (await savePending()) });
   } catch {
     publish({ userId, profile: null });
   } finally {
     loading = null;
   }
+}
+
+/**
+ * A sign-up that had to confirm its email: what they filled in waits on the
+ * account, and is saved the first time it's logged in (from the email's link,
+ * or a log-in on any browser).
+ */
+async function savePending() {
+  const pending = await auth.pendingProfile?.();
+  if (!pending) return null;
+  const saved = await saveMyProfile(pending);
+  await auth.clearPendingProfile?.().catch(() => null);
+  return saved;
 }
 
 /** The signed-in account's profile: undefined while loading, null if there's none. */
@@ -75,19 +86,13 @@ export async function saveProfile(profile: PlayerProfile) {
 
 /** Creates the account. 'confirm-email' when the address has to be confirmed before logging in. */
 export async function signUpPlayer(profile: PlayerProfile, password: string) {
-  const result = await auth.signUp(profile.email.trim().toLowerCase(), password);
+  const result = await auth.signUp(profile.email.trim().toLowerCase(), password, profile);
   if (result === 'signed-in') await saveProfile(profile);
-  else local(PENDING_KEY, JSON.stringify(profile));
   return result;
 }
 
 export async function logInPlayer(email: string, password: string) {
   await auth.signIn(email.trim().toLowerCase(), password);
-  const pending = local(PENDING_KEY);
-  if (pending && (JSON.parse(pending) as PlayerProfile).email.trim().toLowerCase() === email.trim().toLowerCase()) {
-    await saveProfile(JSON.parse(pending) as PlayerProfile);
-    local(PENDING_KEY, null);
-  }
 }
 
 export const logOut = () => auth.signOut();

@@ -93,6 +93,10 @@ export default function PrivacyPage() {
         We keep tournament records, including registrations, payments and results, for as long as needed to run the
         tournament, keep its results, meet accounting and legal requirements, and resolve disputes. Practice tournaments are
         deleted after about two weeks. You can ask us to delete your information sooner, subject to those requirements.
+        You can also delete your account yourself from your profile: we remove your login and your details (name, contact
+        details, birthday, gender, ratings and DUPR ID), your answers to registration questions and your messages. We keep
+        tournament registration and payment records and results without your name; team names in past results stay as they
+        were.
       </p>
 
       <h2>5. Your choices and rights</h2>

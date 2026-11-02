@@ -182,6 +182,10 @@ export function HelpContent() {
             Home Screen app.
           </li>
           <li>Edit your details any time from the person icon at the top right.</li>
+          <li>
+            To delete your account, go to the bottom of your profile. Tournaments keep their payment records and results, without
+            your name.
+          </li>
           {isDemoMode && <li>On this demo site, Sign in uses a shared guest account to look around. Sign up for your own to test alerts.</li>}
         </ul>
       </Section>

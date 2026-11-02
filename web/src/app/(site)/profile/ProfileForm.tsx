@@ -16,6 +16,7 @@ import { logInPlayer, logOut, saveProfile, signUpPlayer, useProfile, type Player
 import { setViewMode } from '@/lib/viewMode';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { MatchAlerts } from '@/components/MatchAlerts';
+import { DeleteAccount } from './DeleteAccount';
 
 const under18 = 'You must be 18 or older to have an account.';
 
@@ -50,10 +51,20 @@ export function ProfileForm() {
         <Details key={session.id} user={session} saved={profile} home={home} />
         <MatchAlerts />
         <MyTournaments />
+        <DeleteAccount />
       </div>
     );
   }
-  return logIn ? <LogIn home={home} onSignUp={() => setLogIn(false)} /> : <SignUp home={home} onLogIn={() => setLogIn(true)} />;
+  return (
+    <>
+      {params.has('deleted') && (
+        <p role="status" className="mx-auto mb-6 max-w-md rounded-lg bg-surface-2 px-4 py-3">
+          Your account has been deleted.
+        </p>
+      )}
+      {logIn ? <LogIn home={home} onSignUp={() => setLogIn(false)} /> : <SignUp home={home} onLogIn={() => setLogIn(true)} />}
+    </>
+  );
 }
 
 function GuestNote() {

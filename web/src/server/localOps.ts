@@ -505,6 +505,12 @@ const authOps: Record<string, Op> = {
 // ---------------------------------------------------------------------------
 
 const demoOps: Record<string, Op> = {
+  // Not a demo tool, but like them it needs the database's own rights (to remove the login).
+  deleteMyAccount: async (tx) => {
+    await tx.query('select public.delete_my_account()');
+    await tx.query(`delete from auth.users where id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid`);
+    return null;
+  },
   createDemoTournament: async (tx, arrived: boolean = true) =>
     (await one<{ id: string }>(tx, 'select public.create_demo_tournament($1) as id', [arrived])).id,
   advanceDemo: async (tx, tournamentId: string, minutes: number) =>

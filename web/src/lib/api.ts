@@ -92,6 +92,7 @@ export const {
   sendMessage,
   getDivisionEligibility,
   importDuprRatings,
+  deleteMyAccount,
   savePushSubscription,
   deletePushSubscription,
   sendTestPush,

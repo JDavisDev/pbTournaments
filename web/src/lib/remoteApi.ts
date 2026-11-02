@@ -678,3 +678,17 @@ export async function sendTestPush() {
   if (!res.ok) throw new Error(body.error ?? 'Could not send a test alert');
   return body.sent ?? 0;
 }
+
+// Account ---------------------------------------------------------------------
+
+/** Deletes the signed-in account (see public.delete_my_account), then signs out. */
+export async function deleteMyAccount() {
+  const { data } = await supabase().auth.getSession();
+  const res = await fetch('/api/account/delete', {
+    method: 'POST',
+    headers: data.session ? { authorization: `Bearer ${data.session.access_token}` } : {},
+  });
+  const body = (await res.json()) as { error?: string };
+  if (!res.ok) throw new Error(body.error ?? 'Could not delete your account');
+  await supabase().auth.signOut();
+}
