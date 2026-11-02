@@ -6,6 +6,7 @@ import { Icon } from '@/components/Icon';
 import { Button, Modal } from '@/components/ui';
 import { BRAND } from '@/lib/brand';
 import { promptInstall, useInstallWay, type InstallWay } from '@/lib/install';
+import { AlertSteps, AndroidInstallSteps, IosInstallSteps } from './HelpSteps';
 
 const DISMISSED = 'courtside-add-to-home-dismissed';
 
@@ -69,41 +70,27 @@ export function AddToHomeButton({ bar = false }: { bar?: boolean }) {
   );
 }
 
-/** The steps for this phone; for a browser that can prompt, a button. */
-export function InstallSteps({ way }: { way: InstallWay }) {
-  if (way === 'prompt') {
-    return (
-      <Button variant="primary" onClick={() => promptInstall()}>
-        <Icon name="home" className="h-5 w-5" />
-        Add {BRAND.name} to your Home Screen
-      </Button>
-    );
-  }
+/** The steps for this phone (or, where the browser can prompt, a button), then how to turn on alerts. */
+export function InstallSteps({ way, alerts = true }: { way: InstallWay; alerts?: boolean }) {
   return (
-    <div className="flex flex-col gap-3">
-      <p>{BRAND.name} opens like an app, full screen, with your matches a tap away. It’s free and takes no space.</p>
-      {way === 'ios' ? (
-        <ol className="flex list-decimal flex-col gap-2 pl-6 text-lg">
-          <li>
-            Tap the <b>Share</b> button <Icon name="share" className="inline h-5 w-5 align-text-bottom" /> (at the bottom in
-            Safari, at the top in Chrome).
-          </li>
-          <li>
-            Scroll down and tap <b>Add to Home Screen</b>.
-          </li>
-          <li>
-            Tap <b>Add</b>, then open {BRAND.name} from your Home Screen.
-          </li>
-        </ol>
+    <div className="flex flex-col gap-3 text-lg">
+      {way === 'prompt' ? (
+        <Button variant="primary" onClick={() => promptInstall()}>
+          <Icon name="home" className="h-5 w-5" />
+          Add {BRAND.name} to your Home Screen
+        </Button>
       ) : (
-        <ol className="flex list-decimal flex-col gap-2 pl-6 text-lg">
-          <li>
-            Open your browser’s menu (<b>⋮</b>, top right).
-          </li>
-          <li>
-            Tap <b>Add to Home screen</b> or <b>Install app</b>.
-          </li>
-        </ol>
+        <>
+          <p className="text-base">{BRAND.name} opens like an app, full screen, with your matches a tap away. It’s free and takes no space.</p>
+          {way === 'ios' ? <IosInstallSteps /> : <AndroidInstallSteps />}
+        </>
+      )}
+      {alerts && (
+        <>
+          <h3 className="mt-2 text-xl">Then turn on match alerts</h3>
+          <p className="text-base text-muted">A notification when your match is called to a court, with a tap to report the score.</p>
+          <AlertSteps />
+        </>
       )}
     </div>
   );

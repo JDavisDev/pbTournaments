@@ -7,6 +7,7 @@ import { isDemoMode, isLocalMode } from '@/lib/config';
 import { useAction, useSession } from '@/lib/hooks';
 import { setViewMode } from '@/lib/viewMode';
 import { AddToHomeButton } from './AddToHome';
+import { HelpButton } from './Help';
 import { Icon } from './Icon';
 import { LogoHorizontal } from './Logo';
 import { useProfile } from '@/lib/profile';
@@ -42,6 +43,7 @@ export function AppHeader() {
             Pricing
           </Link>
           <AddToHomeButton />
+          <HelpButton />
           <TextSizeButton />
           {isDemoMode && <TestMenu />}
           {user === undefined ? null : user && isGuest(user) ? (

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { HelpButton } from '@/components/Help';
 import { AppHeader } from '@/components/AppHeader';
 import { BRAND } from '@/lib/brand';
 
@@ -13,6 +14,7 @@ export default function SiteLayout({ children }: LayoutProps<'/'>) {
             {BRAND.name} © {BRAND.since} {BRAND.owner}. All rights reserved.
           </p>
           <nav className="flex gap-5">
+            <HelpButton link />
             <Link href="/terms" className="hover:text-text hover:underline">
               Terms of Service
             </Link>

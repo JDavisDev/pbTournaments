@@ -60,7 +60,7 @@ export function MatchAlerts({ next }: { next?: string }) {
         return (
           <>
             <p className="font-medium">On iPhone, add {BRAND.name} to your Home Screen first, then turn alerts on from there.</p>
-            <InstallSteps way={way ?? 'ios'} />
+            <InstallSteps way={way ?? 'ios'} alerts={false} />
           </>
         );
       case 'unsupported':
