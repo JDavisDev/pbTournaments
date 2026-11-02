@@ -15,6 +15,9 @@ export default function SiteLayout({ children }: LayoutProps<'/'>) {
           </p>
           <nav className="flex gap-5">
             <HelpButton link />
+            <Link href="/docs" className="hover:text-text hover:underline">
+              Guides
+            </Link>
             <Link href="/terms" className="hover:text-text hover:underline">
               Terms of Service
             </Link>

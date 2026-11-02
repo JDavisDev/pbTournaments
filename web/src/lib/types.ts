@@ -123,6 +123,67 @@ export interface TournamentFees extends PlatformPricing {
   players: number;
   texts_enabled: boolean;
   player_fees_cents: number;
+  /** Courtside's fee taken from card payments so far. */
+  fees_collected_cents: number;
+  /** Players no card payment covered, and Courtside's fees for them still due. */
+  uncovered_players: number;
+  fees_owed_cents: number;
+}
+
+/** tournament_finance(): the Finance page. Money in cents. */
+export interface TournamentFinance {
+  money: {
+    entry_fees_cents: number;
+    discounts_cents: number;
+    card_payments_cents: number;
+    card_payment_count: number;
+    desk_payments_cents: number;
+    card_refunds_cents: number;
+    other_refunds_cents: number;
+    kept_fees_cents: number;
+  };
+  balances: { owed_by_players_cents: number; players_owing: number; owed_to_players_cents: number; players_owed: number };
+  courtside: {
+    from_cards_cents: number;
+    paid_separately_cents: number;
+    /** For players no card payment covered, not paid yet. */
+    owed_cents: number;
+    uncovered_players: number;
+    rate_cents: number;
+  };
+  registrations: { paid: number; pending: number; waitlisted: number; cancelled: number };
+  players: number;
+  withdrawals: number;
+  divisions: {
+    event_id: string;
+    name: string;
+    kind: 'singles' | 'doubles';
+    max_teams: number | null;
+    teams: number;
+    players: number;
+    waitlisted: number;
+    unpaired: number;
+  }[];
+}
+
+/** card_refund_plan(): what a player is owed and the card payments it can go back to. */
+export interface CardRefundPlan {
+  owed_cents: number;
+  refund_fee_cents: number;
+  payments: { registration_id: string; provider: 'stripe' | 'test'; refundable_cents: number }[];
+}
+
+/** payments_status(): the organization's connected Stripe account. */
+export interface PaymentsStatus {
+  connected: boolean;
+  /** Stripe lets it take payments. */
+  ready: boolean;
+  details_submitted: boolean;
+  /** A pretend account from test mode. */
+  test: boolean;
+  account_hint: string | null;
+  /** The organization's owner or admin, who can connect or change it. */
+  can_manage: boolean;
 }
 
 export type StaffRole = 'admin' | 'monitor';

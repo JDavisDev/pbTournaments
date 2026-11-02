@@ -10,6 +10,7 @@ import { AddToHomeButton } from './AddToHome';
 import { HelpButton } from './Help';
 import { Icon } from './Icon';
 import { LogoHorizontal } from './Logo';
+import { PhoneMenu } from './PhoneMenu';
 import { useProfile } from '@/lib/profile';
 import { TestMenu } from './TestMenu';
 import { TextSizeButton } from './TextSizeButton';
@@ -42,19 +43,22 @@ export function AppHeader() {
           <Link href="/pricing" className="hidden h-11 items-center rounded-full px-3 font-medium text-muted hover:text-text sm:inline-flex">
             Pricing
           </Link>
+          {/* Phones have these in the Menu (PhoneMenu) instead. */}
           <AddToHomeButton />
-          <HelpButton />
-          <TextSizeButton />
-          {isDemoMode && <TestMenu />}
+          <div className="hidden items-center gap-2 sm:flex">
+            <HelpButton />
+            <TextSizeButton />
+            {isDemoMode && <TestMenu />}
+          </div>
           {user === undefined ? null : user && isGuest(user) ? (
             <>
               <span className="hidden text-muted lg:inline">Guest</span>
-              <button className="h-11 rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2" onClick={() => auth.signOut()}>
+              <button className="hidden h-11 rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2 sm:block" onClick={() => auth.signOut()}>
                 Sign out
               </button>
             </>
           ) : user ? (
-            /* Far right, on every screen size. Phones show just the icon. */
+            /* On every screen size (phones: just the icon, then the Menu). */
             <Link
               href="/profile"
               aria-label="Your profile"
@@ -83,11 +87,12 @@ export function AppHeader() {
                   Log in
                 </Link>
               )}
-              <Link href="/profile" className="inline-flex h-11 items-center rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2">
+              <Link href="/profile" className="hidden h-11 items-center rounded-full px-3 font-medium whitespace-nowrap hover:bg-surface-2 sm:inline-flex">
                 Sign up
               </Link>
             </>
           )}
+          <PhoneMenu />
         </nav>
       </div>
       <AddToHomeButton bar />

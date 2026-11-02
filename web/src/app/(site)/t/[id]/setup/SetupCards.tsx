@@ -18,6 +18,8 @@ import {
   getTournamentTeam,
   removeTournamentStaff,
   updateTournament,
+  connectPayments,
+  getPaymentsStatus,
 } from '@/lib/api';
 import { formatMoney, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
@@ -336,6 +338,60 @@ export function DiscountCodesCard({ tournament }: { tournament: Tournament }) {
 }
 
 /** What this tournament costs on the platform, the setup fee, and the texting switch. */
+/** Where players' money goes: the organization's own Stripe account (Stripe Connect). */
+export function PaymentsCard({ tournament }: { tournament: Tournament }) {
+  const status = useLoad(() => getPaymentsStatus(tournament.id), [tournament.id]);
+  const { busy, error, run } = useAction();
+  const p = status.data;
+  if (tournament.is_demo || !p) return null;
+
+  const connect = () =>
+    run(async () => {
+      window.location.href = await connectPayments(tournament.id);
+    });
+
+  return (
+    <SettingsGroup
+      title="Payments"
+      foldable
+      summary={p.ready ? 'Stripe connected' : p.connected ? 'Finish Stripe setup' : 'Stripe not connected'}
+      description="Players pay into your own Stripe account. Stripe’s card fee and Courtside’s per-player fee come out of each payment, and Stripe pays out the rest to your bank."
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-2 p-3">
+        <span>
+          <span className="block font-semibold">
+            {p.ready ? `Stripe account ••••${p.account_hint}` : p.connected ? 'Stripe needs a few more details' : 'No Stripe account yet'}
+          </span>
+          <span className="text-sm text-muted">
+            {p.ready
+              ? 'Payouts, refunds and disputes are handled in your Stripe account.'
+              : 'Needed before players can pay by card. Takes about 10 minutes: your business details and a bank account for payouts.'}
+          </span>
+        </span>
+        {p.ready ? (
+          <Badge tone="live">{p.test ? 'Connected (test)' : 'Connected'}</Badge>
+        ) : p.can_manage ? (
+          <Button size="sm" variant="primary" disabled={busy} onClick={connect}>
+            {p.connected ? 'Finish setup' : 'Connect Stripe'}
+          </Button>
+        ) : (
+          <Badge>Owner only</Badge>
+        )}
+      </div>
+      {!p.can_manage && <p className="text-sm text-muted">Only the tournament’s owner can connect or change the Stripe account.</p>}
+      {p.test && (
+        <p className="text-sm text-muted">Test mode: a pretend Stripe account. Nothing is charged until the site has Stripe keys.</p>
+      )}
+      {p.ready && !p.test && (
+        <a href="https://dashboard.stripe.com" target="_blank" rel="noopener noreferrer" className="self-start text-sm font-medium underline">
+          Open your Stripe dashboard
+        </a>
+      )}
+      <ErrorText>{error}</ErrorText>
+    </SettingsGroup>
+  );
+}
+
 export function FeesCard({ tournament, onChanged }: { tournament: Tournament; onChanged: () => void }) {
   const fees = useLoad(() => getTournamentFees(tournament.id), [tournament.id, tournament.texts_enabled, tournament.setup_paid_at]);
   const { busy, error, run } = useAction();
@@ -394,6 +450,14 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
           {formatMoney(f.is_demo ? f.players * (f.per_player_cents + (f.texts_enabled ? f.texting_per_player_cents : 0)) : f.player_fees_cents)}
         </dd>
       </dl>
+
+      {!f.is_demo && (
+        <p className="text-sm text-muted">
+          Player fees come out of each card payment automatically ({formatMoney(f.fees_collected_cents)} so far). Players who didn’t
+          pay by card (added at the desk, free entries) are billed to you
+          {f.fees_owed_cents > 0 ? `: ${formatMoney(f.fees_owed_cents)} due for ${f.uncovered_players} on the Finance page` : ''}.
+        </p>
+      )}
 
       <label className="flex items-start gap-3 rounded-xl bg-surface-2 p-3">
         <input

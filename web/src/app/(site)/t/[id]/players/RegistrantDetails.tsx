@@ -5,9 +5,9 @@
 // payments, refunds and fees recorded by hand.
 import { useState } from 'react';
 import { Badge, Button, ErrorText, Field, Input, Select } from '@/components/ui';
-import { moveRegistrationEntry, recordLedgerEntry, withdrawRegistration } from '@/lib/api';
+import { getCardRefundPlan, moveRegistrationEntry, recordLedgerEntry, refundPlayerToCard, withdrawRegistration } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
-import { useAction } from '@/lib/hooks';
+import { useAction, useLoad } from '@/lib/hooks';
 import { balanceText, describeLedger, extraEventFee, withdrawalCredit } from '@/lib/money';
 import type { LedgerEntry, PaymentMethod, PlayerBalance, RegistrationRow, Tournament, TournamentEvent, WithdrawalRow } from '@/lib/types';
 
@@ -270,6 +270,7 @@ function MoneyActions({ who, tournament, onChanged }: { who: Registrant; tournam
   const [refund, setRefund] = useState(() => toDollars(Math.max(0, owed - tournament.refund_fee_cents)));
   const [payment, setPayment] = useState(() => toDollars(Math.max(0, balance)));
   const [method, setMethod] = useState<PaymentMethod>('stripe');
+  const [refundMethod, setRefundMethod] = useState<PaymentMethod>('cash');
   const [adjust, setAdjust] = useState({ kind: 'fee' as 'fee' | 'credit', amount: '', note: '' });
   const { busy, error, run } = useAction();
   const record = (kind: 'payment' | 'refund' | 'fee' | 'credit', cents: number, m: PaymentMethod | null, note: string | null) =>
@@ -296,19 +297,23 @@ function MoneyActions({ who, tournament, onChanged }: { who: Registrant; tournam
           ) : (
             <p className="text-sm text-muted">No refund policy yet: add one in Settings → Registration.</p>
           )}
-          <div className="flex flex-wrap items-end gap-2">
-            <Field label="Refund ($)">
-              <Input className="h-10 w-28" inputMode="decimal" value={refund} onChange={(e) => setRefund(e.target.value)} />
-            </Field>
-            {methods}
-            <Button size="sm" variant="primary" disabled={busy || !(toCents(refund) > 0)} onClick={() => record('refund', toCents(refund), method, null)}>
-              Record refund
-            </Button>
-          </div>
-          {method === 'stripe' && <p className="text-sm text-muted">Refund the card in your Stripe dashboard, then record it here.</p>}
-          {tournament.refund_fee_cents > 0 && owed > tournament.refund_fee_cents && (
-            <p className="text-sm text-muted">Filled in less the {formatMoney(tournament.refund_fee_cents)} you keep on refunds (Setup).</p>
-          )}
+          <CardRefund who={who} tournament={tournament} owed={owed} onChanged={onChanged} />
+          <details>
+            <summary className="cursor-pointer text-sm font-medium">Refunded another way (cash, check)? Record it</summary>
+            <div className="mt-2 flex flex-wrap items-end gap-2">
+              <Field label="Refund ($)">
+                <Input className="h-10 w-28" inputMode="decimal" value={refund} onChange={(e) => setRefund(e.target.value)} />
+              </Field>
+              <Select className="h-10 text-sm" aria-label="How" value={refundMethod} onChange={(e) => setRefundMethod(e.target.value as PaymentMethod)}>
+                <option value="cash">Cash</option>
+                <option value="check">Check</option>
+                <option value="other">Other</option>
+              </Select>
+              <Button size="sm" disabled={busy || !(toCents(refund) > 0)} onClick={() => record('refund', toCents(refund), refundMethod, null)}>
+                Record refund
+              </Button>
+            </div>
+          </details>
           <Button
             size="sm"
             className="self-start"
@@ -362,6 +367,68 @@ function MoneyActions({ who, tournament, onChanged }: { who: Registrant; tournam
       </details>
       <ErrorText>{error}</ErrorText>
     </section>
+  );
+}
+
+/**
+ * Refund what they're owed to the card they paid with. Stripe's card fee and
+ * Courtside's fee aren't returned: the tournament covers them, and can keep
+ * its refund fee from what goes back.
+ */
+function CardRefund({ who, tournament, owed, onChanged }: { who: Registrant; tournament: Tournament; owed: number; onChanged: () => void }) {
+  const plan = useLoad(() => getCardRefundPlan(tournament.id, who.playerId), [tournament.id, who.playerId, owed]);
+  const fee = tournament.refund_fee_cents;
+  const [keep, setKeep] = useState(fee > 0 && owed > fee);
+  const [amount, setAmount] = useState(() => toDollars(Math.max(0, owed - (fee > 0 && owed > fee ? fee : 0))));
+  const { busy, error, run } = useAction();
+  const p = plan.data;
+  if (!p) return null;
+  const refundable = p.payments.reduce((sum, x) => sum + Math.max(0, x.refundable_cents), 0);
+  if (refundable === 0) return <p className="text-sm text-muted">They didn’t pay by card here, so there’s no card to refund to.</p>;
+  const cents = toCents(amount);
+  const kept = keep ? fee : 0;
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3">
+      <h4 className="font-semibold">Refund to their card</h4>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Back to card ($)">
+          <Input className="h-10 w-28" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={busy || !(cents > 0) || cents + kept > owed || cents > refundable}
+          onClick={() =>
+            confirm(
+              `Refund ${formatMoney(cents)} to ${who.name}’s card${kept ? `, keeping the ${formatMoney(kept)} refund fee` : ''}? This sends the money back through Stripe and can’t be undone.`,
+            ) && run(() => refundPlayerToCard(tournament.id, who.playerId, cents, kept), onChanged)
+          }
+        >
+          {busy ? 'Refunding…' : 'Refund to card'}
+        </Button>
+      </div>
+      {fee > 0 && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-5 w-5 accent-[var(--accent)]"
+            checked={keep}
+            onChange={(e) => {
+              setKeep(e.target.checked);
+              setAmount(toDollars(Math.max(0, Math.min(owed, refundable) - (e.target.checked ? fee : 0))));
+            }}
+          />
+          Keep the {formatMoney(fee)} refund fee (Setup)
+        </label>
+      )}
+      {cents + kept > owed && <p className="text-sm text-late">That’s more than the {formatMoney(owed)} they’re owed.</p>}
+      {cents > refundable && <p className="text-sm text-late">Only {formatMoney(refundable)} of their card payments is left to refund.</p>}
+      <p className="text-sm text-muted">
+        Stripe’s card fee and Courtside’s fee on the payment aren’t returned; they stay with the tournament. To refund more than
+        they’re owed, add a credit first.
+      </p>
+      <ErrorText>{error}</ErrorText>
+    </div>
   );
 }
 

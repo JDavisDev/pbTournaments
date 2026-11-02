@@ -60,6 +60,7 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
         : { href: `${base}/setup`, label: 'Settings', icon: 'sliders', hint: 'Details, divisions, prices and registration' },
       { href: `${base}/planner`, label: 'Planner', icon: 'calendar', hint: 'Plan the day’s divisions and courts' },
       { href: `${base}/messages`, label: 'Messages', icon: 'message', hint: 'Text and email players' },
+      { href: `${base}/finance`, label: 'Finance', icon: 'money', hint: 'Money in and out, and player numbers' },
       ...(draft ? [] : [{ href: `${base}/dupr`, label: 'DUPR', icon: 'upload', hint: 'Send final results to DUPR' } as MoreItem]),
       // Directors can register someone even when registration is closed to players.
       ...(t.status === 'registration' || t.status === 'live'

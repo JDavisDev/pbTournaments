@@ -29,15 +29,15 @@ function rememberTournament(id: string) {
 }
 const subscribe = (l: () => void) => (listeners.add(l), () => listeners.delete(l));
 
-export function TestMenu() {
+export function TestMenu({ wide = false }: { wide?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button
-        className="h-9 rounded-full bg-called-soft px-3 font-semibold whitespace-nowrap text-called hover:brightness-95"
+        className={`rounded-full bg-called-soft px-3 font-semibold whitespace-nowrap text-called hover:brightness-95 ${wide ? 'h-12 w-full text-left' : 'h-9'}`}
         onClick={() => setOpen(true)}
       >
-        Test
+        {wide ? 'Test sign-ups' : 'Test'}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Test sign-ups">
         {open && <Panel onClose={() => setOpen(false)} />}

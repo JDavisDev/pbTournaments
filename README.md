@@ -40,6 +40,7 @@ Local mode is always a demo: **Sign in** signs you in as the shared guest in one
 |---|---|
 | none | **Test checkout**: a built-in page with Pay/Cancel stands in for Stripe; nothing is charged |
 | `STRIPE_SECRET_KEY=sk_test_…`, `STRIPE_WEBHOOK_SECRET=whsec_…` | Real Stripe Checkout (test mode with a test key). Webhook: `/api/stripe/webhook`, event `checkout.session.completed`. Locally: `stripe listen --forward-to localhost:3000/api/stripe/webhook` |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | The connected-accounts webhook: players pay into each director's own Stripe account ([docs/payments.md](docs/payments.md)) |
 | none | **Text log**: texts are recorded on the tournament's Texts page, not sent |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (or `TWILIO_MESSAGING_SERVICE_SID`) | Real texts with Twilio (`SMS_MODE=log` forces the log). Setup, delivery reports and checks: [docs/twilio.md](docs/twilio.md) |
 | `NEXT_PUBLIC_APP_URL` | Base for the score links in texts (default `http://localhost:3000`); with a public https address, Twilio also reports delivery to `/api/twilio/status` |

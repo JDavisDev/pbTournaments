@@ -3,13 +3,60 @@
 // Stands in for Stripe Checkout while no Stripe key is set. Nothing is charged.
 import { useSearchParams } from 'next/navigation';
 import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
-import { getPlatformPricing, getRegistration, getTournament } from '@/lib/api';
+import { getPlatformPricing, getRegistration, getTournament, getTournamentFinance } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
 
 export function TestCheckout() {
-  const setup = useSearchParams().get('setup');
+  const params = useSearchParams();
+  const setup = params.get('setup');
+  const fees = params.get('fees');
+  if (fees) return <PlayerFeesCheckout tournamentId={fees} />;
   return setup ? <SetupFeeCheckout tournamentId={setup} /> : <RegistrationCheckout />;
+}
+
+/** Courtside's fees for players who didn't pay by card. */
+function PlayerFeesCheckout({ tournamentId }: { tournamentId: string }) {
+  const data = useLoad(() => Promise.all([getTournament(tournamentId), getTournamentFinance(tournamentId)]), [tournamentId]);
+  const pay = useAction();
+  if (data.error) return <Empty>{data.error}</Empty>;
+  if (!data.data) return <Spinner />;
+  const [t, f] = data.data;
+  const finish = (outcome: 'pay' | 'cancel') =>
+    pay.run(async () => {
+      const res = await fetch('/api/checkout/test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ feesTournamentId: tournamentId, outcome }),
+      });
+      const body = (await res.json()) as { url?: string; error?: string };
+      if (!body.url) throw new Error(body.error ?? 'Test checkout failed');
+      window.location.href = body.url;
+    });
+  return (
+    <Card className="mx-auto max-w-md p-6">
+      <p className="inline-block rounded-full bg-called-soft px-2.5 py-0.5 text-xs font-semibold text-called">
+        Test checkout · no real payment
+      </p>
+      <h2 className="mt-3 text-3xl">Player fees</h2>
+      <p className="text-muted">
+        {t.name} · {f.courtside.uncovered_players} players not paid by card
+      </p>
+      <div className="mt-4 flex items-baseline justify-between border-t border-border pt-4">
+        <span className="text-muted">Due to Courtside</span>
+        <span className="tnum font-display text-5xl font-extrabold">{formatMoney(f.courtside.owed_cents)}</span>
+      </div>
+      <ErrorText>{pay.error}</ErrorText>
+      <div className="mt-5 grid grid-cols-2 gap-2">
+        <Button className="h-12" disabled={pay.busy} onClick={() => finish('cancel')}>
+          Cancel
+        </Button>
+        <Button variant="primary" className="h-12" disabled={pay.busy || f.courtside.owed_cents === 0} onClick={() => finish('pay')}>
+          {f.courtside.owed_cents === 0 ? 'Nothing due' : `Pay ${formatMoney(f.courtside.owed_cents)}`}
+        </Button>
+      </div>
+    </Card>
+  );
 }
 
 /** The director's one-time setup fee. */

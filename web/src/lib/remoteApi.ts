@@ -46,6 +46,9 @@ import type {
   Tournament,
   TournamentEvent,
   TournamentFees,
+  PaymentsStatus,
+  TournamentFinance,
+  CardRefundPlan,
   TournamentListing,
   TournamentStatus,
   WithdrawalRow,
@@ -479,6 +482,40 @@ export async function deleteListing(id: string) {
 
 export const getPlatformPricing = () => rpc<PlatformPricing>('platform_pricing', {});
 export const getTournamentFees = (tournamentId: string) => rpc<TournamentFees>('tournament_fees', { p_tournament: tournamentId });
+export const getTournamentFinance = (tournamentId: string) =>
+  rpc<TournamentFinance>('tournament_finance', { p_tournament: tournamentId });
+export const getCardRefundPlan = (tournamentId: string, playerId: string) =>
+  rpc<CardRefundPlan>('card_refund_plan', { p_tournament: tournamentId, p_player: playerId });
+/** Refunds to the player's card (newest payments first), keeping keepCents as the refund fee. */
+export async function refundPlayerToCard(tournamentId: string, playerId: string, amountCents: number, keepCents: number) {
+  const { data } = await supabase().auth.getSession();
+  const res = await fetch('/api/refunds', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(data.session ? { authorization: `Bearer ${data.session.access_token}` } : {}),
+    },
+    body: JSON.stringify({ tournamentId, playerId, amountCents, keepCents }),
+  });
+  const body = (await res.json()) as { error?: string };
+  if (!res.ok) throw new Error(body.error ?? 'Could not refund');
+}
+export const getPaymentsStatus = (tournamentId: string) => rpc<PaymentsStatus>('payments_status', { p_tournament: tournamentId });
+/** The owner: where to go to connect (or finish connecting) their Stripe account. */
+export async function connectPayments(tournamentId: string) {
+  const { data } = await supabase().auth.getSession();
+  const res = await fetch('/api/connect/onboard', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(data.session ? { authorization: `Bearer ${data.session.access_token}` } : {}),
+    },
+    body: JSON.stringify({ tournamentId }),
+  });
+  const body = (await res.json()) as { url?: string; error?: string };
+  if (!body.url) throw new Error(body.error ?? 'Could not connect Stripe');
+  return body.url;
+}
 
 // Sharing with other admins and court monitors -------------------------------
 

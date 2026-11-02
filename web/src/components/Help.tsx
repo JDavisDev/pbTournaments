@@ -1,19 +1,26 @@
 'use client';
 
 // Help for players: tournament day, the Home Screen, alerts and accounts.
+import Link from 'next/link';
 import { useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { Modal } from '@/components/ui';
 import { BRAND } from '@/lib/brand';
 import { isDemoMode } from '@/lib/config';
+import { menuItem } from './AddToHome';
 import { AlertSteps, AlertTroubles, AndroidInstallSteps, IosInstallSteps } from './HelpSteps';
 
 /** The header's Help button, or a plain link (the footer). */
-export function HelpButton({ link = false }: { link?: boolean }) {
+export function HelpButton({ link = false, item = false }: { link?: boolean; item?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      {link ? (
+      {item ? (
+        <button type="button" className={menuItem} onClick={() => setOpen(true)}>
+          <Icon name="help" className="h-5 w-5" />
+          Help
+        </button>
+      ) : link ? (
         <button type="button" className="hover:text-text hover:underline" onClick={() => setOpen(true)}>
           Help
         </button>
@@ -210,6 +217,13 @@ export function HelpContent() {
           ]}
         />
       </Section>
+
+      <p className="text-base">
+        <Link href="/docs" className="font-medium underline">
+          More in the guides
+        </Link>
+        : step-by-step, with screenshots.
+      </p>
 
       <Section id="questions">
         <p className="text-muted">

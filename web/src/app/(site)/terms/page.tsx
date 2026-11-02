@@ -44,7 +44,7 @@ export default function TermsPage() {
       <h2>3. Registration and payments</h2>
       <ul>
         <li>Directors set each tournament’s prices, which may include a registration fee, event fees, and prices that change on set dates. The price shown when you register is the price you pay.</li>
-        <li>Payments are processed by our payment processor, Stripe, under its own terms. We don’t store your full card number. Depending on the tournament, payment may be collected by {owner} on the Director’s behalf or paid to the Director’s own payment account.</li>
+        <li>Payments are processed by our payment processor, Stripe, under its own terms. We don’t store your full card number. Entry fees are paid to the Director’s own Stripe account, and the Director is the seller: refunds and disputes go through them. {name}’s fee comes out of each payment.</li>
         <li>A spot is held while you pay, for a limited time. Divisions that are full take a waitlist; you aren’t charged unless a spot is offered and you accept it.</li>
         <li>You can pay a partner’s entry. That payment covers their spot; they still register to add their details and agree to any waiver.</li>
         <li>Refunds follow the tournament’s refund policy, which its Director sets and decides. Withdrawing may credit you, as the tournament’s page and registration explain. {name} isn’t responsible for a Director’s refund decisions.</li>

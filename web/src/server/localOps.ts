@@ -7,6 +7,7 @@ import { parseTeams, teamName } from '@/lib/teamText';
 import type { RegistrationForm } from '@/lib/types';
 import { runAs } from './localDb';
 import type { PushTarget } from './push';
+import type { RefundPlan } from './refunds';
 
 type Row = Record<string, unknown>;
 type Op = (tx: Transaction, ...args: never[]) => Promise<unknown>;
@@ -385,6 +386,10 @@ const ops: Record<string, Op> = {
   deleteListing: (tx, id: string) => tx.query('delete from public.tournament_listings where id = $1', [id]).then(() => null),
   getPlatformPricing: async (tx) => (await one<{ r: unknown }>(tx, 'select public.platform_pricing() as r')).r,
   getTournamentFees: async (tx, id: string) => (await one<{ r: unknown }>(tx, 'select public.tournament_fees($1) as r', [id])).r,
+  getTournamentFinance: async (tx, id: string) => (await one<{ r: unknown }>(tx, 'select public.tournament_finance($1) as r', [id])).r,
+  getCardRefundPlan: async (tx, id: string, player: string) =>
+    (await one<{ r: unknown }>(tx, 'select public.card_refund_plan($1, $2) as r', [id, player])).r,
+  getPaymentsStatus: async (tx, id: string) => (await one<{ r: unknown }>(tx, 'select public.payments_status($1) as r', [id])).r,
   getMyRole: async (tx, id: string) => (await one<{ r: string | null }>(tx, 'select public.my_tournament_role($1) as r', [id])).r,
   getSelfCheckin: async (tx, id: string) => (await one<{ c: string | null }>(tx, 'select public.get_self_checkin($1) as c', [id])).c,
   setSelfCheckin: async (tx, id: string, on: boolean) =>
@@ -505,6 +510,28 @@ const authOps: Record<string, Op> = {
 // ---------------------------------------------------------------------------
 
 const demoOps: Record<string, Op> = {
+  // Local payments are all test checkouts, so refunds are pretend too.
+  refundPlayerToCard: async (tx, id: string, player: string, amountCents: number, keepCents: number) => {
+    const plan = (await one<{ r: RefundPlan }>(tx, 'select public.card_refund_plan($1, $2) as r', [id, player])).r;
+    const { refundToCard } = await import('./refunds');
+    const refunds = await refundToCard(plan, amountCents, keepCents);
+    await tx.query(
+      `select public.record_card_refunds($1, $2, $3::jsonb, $4, nullif(current_setting('request.jwt.claim.sub', true), '')::uuid)`,
+      [id, player, JSON.stringify(refunds), keepCents],
+    );
+    return null;
+  },
+  // Local mode is always test mode: a pretend Stripe account, connected at once.
+  connectPayments: async (tx, id: string) => {
+    const setup = (await one<{ r: { organization_id: string; stripe_account_id: string | null } }>(
+      tx,
+      'select public.payment_account_for_setup($1) as r',
+      [id],
+    )).r;
+    const account = setup.stripe_account_id ?? `acct_test_${setup.organization_id.replace(/-/g, '').slice(0, 16)}`;
+    await tx.query('select public.save_payment_account($1, $2, true, true)', [setup.organization_id, account]);
+    return `/t/${id}/setup?payments=connected`;
+  },
   // Not a demo tool, but like them it needs the database's own rights (to remove the login).
   deleteMyAccount: async (tx) => {
     await tx.query('select public.delete_my_account()');

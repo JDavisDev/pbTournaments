@@ -52,7 +52,7 @@ import {
 import { US_STATES } from '@/lib/places';
 import { isYoutubeUrl } from '@/lib/youtube';
 import { SaveAllProvider, useSaveAll, useUnsaved, useUnsavedSections } from './SaveAll';
-import { AboutCard, DiscountCodesCard, FeesCard, QuestionsCard, RegistrationCard, SettingsGroup, SharingCard } from './SetupCards';
+import { AboutCard, DiscountCodesCard, FeesCard, PaymentsCard, QuestionsCard, RegistrationCard, SettingsGroup, SharingCard } from './SetupCards';
 import { useAction, useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import type {
   BracketType,
@@ -127,6 +127,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
           <div className="mt-2 border-b border-border">
             <QuestionsCard tournament={data.tournament} />
             <DiscountCodesCard tournament={data.tournament} />
+            <PaymentsCard tournament={data.tournament} />
             <FeesCard tournament={data.tournament} onChanged={reload} />
             <SharingCard tournament={data.tournament} />
             <StreamsCard tournament={data.tournament} courts={data.courts} />

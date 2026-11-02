@@ -10,11 +10,14 @@ import { AlertSteps, AndroidInstallSteps, IosInstallSteps } from './HelpSteps';
 
 const DISMISSED = 'courtside-add-to-home-dismissed';
 
+/** A row in the phone menu (PhoneMenu). */
+export const menuItem = 'flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-lg font-medium hover:bg-surface-2';
+
 /**
  * In the header on wider screens; on phones, where the header has no room
  * for it, a bar under the header that can be put away.
  */
-export function AddToHomeButton({ bar = false }: { bar?: boolean }) {
+export function AddToHomeButton({ bar = false, item = false }: { bar?: boolean; item?: boolean }) {
   const way = useInstallWay();
   const [steps, setSteps] = useState(false);
   const [dismissed, setDismissed] = useState(() => {
@@ -31,6 +34,17 @@ export function AddToHomeButton({ bar = false }: { bar?: boolean }) {
       <InstallSteps way={way} />
     </Modal>
   );
+  if (item) {
+    return (
+      <>
+        <button type="button" className={menuItem} onClick={add}>
+          <Icon name="home" className="h-5 w-5" />
+          Add to Home Screen
+        </button>
+        {dialog}
+      </>
+    );
+  }
   if (bar) {
     return (
       <div className="flex items-center gap-2 border-t border-border px-4 py-1.5 sm:hidden">

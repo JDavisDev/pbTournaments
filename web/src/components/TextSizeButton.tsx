@@ -16,7 +16,7 @@ const subscribe = (l: () => void) => (listeners.add(l), () => listeners.delete(l
 const read = () => document.documentElement.dataset.text ?? '';
 
 /** Cycles the page's text size; remembered on this device. */
-export function TextSizeButton() {
+export function TextSizeButton({ labelled = false }: { labelled?: boolean }) {
   const size = useSyncExternalStore(subscribe, read, () => '');
   const current = sizes.findIndex((s) => s.key === size);
   const next = sizes[(current + 1) % sizes.length];
@@ -36,7 +36,7 @@ export function TextSizeButton() {
       aria-label={`Text size: ${sizes[Math.max(current, 0)].label}. Change to ${next.label}.`}
     >
       <Icon name="text" />
-      <span className="max-sm:sr-only">{current > 0 ? `${sizes[current].label} text` : 'Text size'}</span>
+      <span className={labelled ? '' : 'max-sm:sr-only'}>{current > 0 ? `${sizes[current].label} text` : 'Text size'}</span>
     </button>
   );
 }
