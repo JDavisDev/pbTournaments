@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { BRAND } from '@/lib/brand';
+import { BRAND, OPERATOR } from '@/lib/brand';
 
 /** The Terms of Service and Privacy Policy: a long read, in plain type. */
 export function LegalPage({ title, children }: { title: string; children: ReactNode }) {
@@ -9,7 +9,7 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
       <header>
         <h1 className="text-5xl">{title}</h1>
         <p className="mt-2 text-muted">
-          Effective {updated}. {BRAND.name} {BRAND.descriptor} is operated by {BRAND.owner}.
+          Effective {updated}. {BRAND.name} {BRAND.descriptor} is operated by {OPERATOR}.
         </p>
       </header>
       {children}

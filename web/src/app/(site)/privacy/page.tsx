@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LegalPage } from '@/components/LegalPage';
-import { BRAND } from '@/lib/brand';
+import { BRAND, OPERATOR } from '@/lib/brand';
 
 export const metadata: Metadata = { title: 'Privacy Policy' };
 
@@ -9,11 +9,11 @@ export const metadata: Metadata = { title: 'Privacy Policy' };
 // (registration form, accounts, device storage) and who it shares with.
 export default function PrivacyPage() {
   const name = BRAND.name;
-  const owner = BRAND.owner;
+  const operator = OPERATOR;
   return (
     <LegalPage title="Privacy Policy">
       <p>
-        This policy explains what {owner} (“{name}”, “we”) collects when you use {BRAND.domain}, our texts and emails (the
+        This policy explains what {operator} (“{name}”, “we”) collects when you use {BRAND.domain}, our texts and emails (the
         “Service”), how we use it, and the choices you have. It’s part of our <Link href="/terms">Terms of Service</Link>.
         We don’t sell your information, and we don’t show ads.
       </p>
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
 
       <h2>10. Contact</h2>
       <p>
-        {owner} · <a href={`mailto:${BRAND.contactEmail}`}>{BRAND.contactEmail}</a>
+        {operator} · <a href={`mailto:${BRAND.contactEmail}`}>{BRAND.contactEmail}</a>
       </p>
     </LegalPage>
   );

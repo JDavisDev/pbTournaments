@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LegalPage } from '@/components/LegalPage';
-import { BRAND } from '@/lib/brand';
+import { BRAND, OPERATOR } from '@/lib/brand';
 
 export const metadata: Metadata = { title: 'Terms of Service' };
 
@@ -10,10 +10,11 @@ export const metadata: Metadata = { title: 'Terms of Service' };
 export default function TermsPage() {
   const name = BRAND.name;
   const owner = BRAND.owner;
+  const operator = OPERATOR;
   return (
     <LegalPage title="Terms of Service">
       <p>
-        These Terms of Service (“Terms”) are an agreement between you and {owner} (“{name}”, “we”, “us”). They cover{' '}
+        These Terms of Service (“Terms”) are an agreement between you and {operator} (“{name}”, “we”, “us”). They cover{' '}
         {BRAND.domain}, the text messages and emails we send, and everything else we provide to run pickleball tournaments
         (together, the “Service”). By creating an account, registering for a tournament, or otherwise using the Service, you
         agree to these Terms and to our <Link href="/privacy">Privacy Policy</Link>. If you don’t agree, don’t use the
@@ -158,7 +159,7 @@ export default function TermsPage() {
 
       <h2>19. Contact</h2>
       <p>
-        {owner} · <a href={`mailto:${BRAND.contactEmail}`}>{BRAND.contactEmail}</a>
+        {operator} · <a href={`mailto:${BRAND.contactEmail}`}>{BRAND.contactEmail}</a>
       </p>
     </LegalPage>
   );
