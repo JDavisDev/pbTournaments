@@ -87,10 +87,19 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
           <h2 className="text-2xl">No division in play</h2>
           <p className="text-muted">
             The court desk opens when a division starts. Start {waitingToday.length ? 'today’s divisions' : 'a division'} from{' '}
-            <Link href={`/t/${id}/checkin`} className="font-semibold underline">
-              Check-in
-            </Link>{' '}
-            or the division’s page.
+            {t.simple ? (
+              <Link href={`/t/${id}`} className="font-semibold underline">
+                its page
+              </Link>
+            ) : (
+              <>
+                <Link href={`/t/${id}/checkin`} className="font-semibold underline">
+                  Check-in
+                </Link>{' '}
+                or the division’s page
+              </>
+            )}
+            .
           </p>
         </Card>
       </div>
@@ -222,8 +231,8 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
       {waitingToday.length > 0 && (
         <p className="rounded-lg bg-surface-2 px-3 py-2 text-sm">
           Not started yet today: {waitingToday.map((e) => e.name).join(', ')}.{' '}
-          <Link href={`/t/${id}/checkin`} className="font-semibold underline">
-            Start from Check-in
+          <Link href={t.simple ? `/t/${id}/events/${waitingToday[0].id}` : `/t/${id}/checkin`} className="font-semibold underline">
+            {t.simple ? 'Start it from its page' : 'Start from Check-in'}
           </Link>
         </p>
       )}
@@ -241,7 +250,8 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
           tabs={[
             ['courts', `Courts`],
             ['queue', `Queue ${queue.length}`],
-            ['checkin', notIn ? `Check-in ${notIn}` : 'Check-in'],
+            // Simple tournaments have no check-in.
+            ...(t.simple ? [] : [['checkin', notIn ? `Check-in ${notIn}` : 'Check-in'] as [Tab, string]]),
             ['results', 'Results'],
           ]}
         />
@@ -286,7 +296,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
               onChange={setTab}
               tabs={[
                 ['queue', `Queue (${queue.length})`],
-                ['checkin', `Check-in${notIn ? ` (${notIn})` : ''}`],
+                ...(t.simple ? [] : [['checkin', `Check-in${notIn ? ` (${notIn})` : ''}`] as [Tab, string]]),
                 ['results', 'Results'],
               ]}
             />

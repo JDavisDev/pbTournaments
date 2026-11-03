@@ -18,7 +18,7 @@ export function shareLinks(t: Tournament, events: TournamentEvent[], origin: str
   const links: ShareLink[] = [
     { key: 'page', label: 'Tournament page', hint: 'Schedules, courts, standings and brackets', url: base },
   ];
-  if (t.status === 'registration') {
+  if (t.status === 'registration' && !t.simple) {
     links.push({ key: 'register', label: 'Sign-up link', hint: 'Every open division', url: `${base}/register` });
     for (const e of events) {
       links.push({ key: `register-${e.id}`, label: `Sign up: ${e.name}`, hint: 'Opens with this division picked', url: `${base}/register?event=${e.id}` });

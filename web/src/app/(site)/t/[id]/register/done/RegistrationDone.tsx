@@ -9,6 +9,7 @@ import { Badge, Button, Card, Empty, ErrorText, Modal, Spinner } from '@/compone
 import { getRegistration, withdrawRegistration } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
+import { goToCheckout } from '@/lib/http';
 import { withdrawalCredit } from '@/lib/money';
 import type { RegistrationView } from '@/lib/types';
 
@@ -48,17 +49,7 @@ export function RegistrationDone() {
   const paid = reg.status === 'paid';
   const canWithdraw = reg.tournament_status !== 'complete' && reg.entries.length > 0 && reg.status !== 'cancelled';
   const offered = reg.entries.some((e) => e.offered);
-  const startCheckout = () =>
-    pay.run(async () => {
-      const res = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ registrationId: reg.id }),
-      });
-      const body = (await res.json()) as { url?: string; error?: string };
-      if (!body.url) throw new Error(body.error ?? 'Could not start checkout');
-      window.location.href = body.url;
-    });
+  const startCheckout = () => pay.run(() => goToCheckout('/api/checkout', { registrationId: reg.id }));
   return (
     <Card className="mx-auto max-w-xl p-6">
       {reg.status === 'waitlisted' ? (

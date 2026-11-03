@@ -49,7 +49,12 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   const tv: MoreItem = { href: `/tv/${id}`, label: 'TV board', icon: 'tv', hint: 'Courts and results for a big screen', newTab: true };
   let tabs: Tab[];
   let more: MoreItem[] = [];
-  if (staff.data) {
+  if (staff.data && t.simple) {
+    // Simple: no check-in, players, money, texts or DUPR. Teams are added in Setup, so it stays a tab.
+    const setup = { href: `${base}/setup`, label: 'Setup' };
+    tabs = draft ? [setup, { href: base, label: 'Overview' }] : [{ href: base, label: 'Overview' }, ...desk, setup];
+    more = [{ href: `${base}/planner`, label: 'Planner', icon: 'calendar', hint: 'Plan the day’s divisions and courts' }, tv];
+  } else if (staff.data) {
     // A draft is set up first; the other tabs come once registration opens.
     tabs = draft
       ? [{ href: `${base}/setup`, label: 'Setup' }, { href: base, label: 'Overview' }]
@@ -69,7 +74,7 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
       tv,
     ];
   } else if (staff.monitor) {
-    tabs = [{ href: base, label: 'Overview' }, { href: `${base}/checkin`, label: 'Check-in' }, ...desk];
+    tabs = [{ href: base, label: 'Overview' }, ...(t.simple ? [] : [{ href: `${base}/checkin`, label: 'Check-in' }]), ...desk];
     more = [tv];
   } else {
     tabs = [
@@ -88,7 +93,19 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
     switching.run(async () => {
       if (mode === 'admin' && !session) await auth.signInAsGuest();
       setViewMode(mode);
-      router.push(mode === 'player' ? (myTeam ? `${base}/teams/${myTeam}` : base) : draft ? `${base}/setup` : playing ? `${base}/desk` : `${base}/checkin`);
+      router.push(
+        mode === 'player'
+          ? myTeam
+            ? `${base}/teams/${myTeam}`
+            : base
+          : draft
+            ? `${base}/setup`
+            : playing
+              ? `${base}/desk`
+              : t.simple
+                ? base
+                : `${base}/checkin`,
+      );
     });
   const showDemoBar = isDemoMode && (staff.account || t.is_demo);
 
@@ -138,7 +155,7 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
         </div>
       )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Badge tone={statusTone[t.status]}>{statusText[t.status]}</Badge>
+        <Badge tone={statusTone[t.status]}>{t.simple && t.status === 'registration' ? 'Upcoming' : statusText[t.status]}</Badge>
         {t.status === 'live' && !t.auto_assign && <Badge tone="called">Paused</Badge>}
         <span className="text-muted">
           {formatDate(t.starts_on)}

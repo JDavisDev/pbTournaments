@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useEffectEvent, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { claimStaffInvites, getMyRole } from './api';
 import { auth, isGuest, type AuthUser } from './auth';
-import { isBackendConfigured, isLocalMode } from './config';
-import { localCall } from './localClient';
-import { supabase } from './supabase';
+import { isBackendConfigured } from './config';
+import { invalidateTournament, serverNow, watchTournament } from './live';
+import type { StaffRole } from './types';
 import { useViewMode } from './viewMode';
 
 /** The signed-in director (null when signed out, undefined while loading). */
@@ -29,28 +29,29 @@ interface LiveState<T> {
 function useLoader<T>(load: () => Promise<T>) {
   const [data, setData] = useState<T>();
   const [error, setError] = useState<string | null>(isBackendConfigured ? null : 'not-configured');
+  // Loads overlap (a change, a poll and a focus at once) and can finish out of
+  // order: only the latest one counts, so older data never replaces newer.
+  const latest = useRef(0);
   const reload = () => {
     if (!isBackendConfigured) return;
+    const n = ++latest.current;
     load()
       .then((d) => {
+        if (n !== latest.current) return;
         setData(d);
         setError(null);
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => {
+        if (n === latest.current) setError(e.message);
+      });
   };
   return { data, error, reload };
 }
 
-// In local mode the demo clock can run ahead of real time; elapsed times and
-// countdowns use the server's clock.
-let clockOffset = 0;
-
-let channelCount = 0;
-
 /**
  * Loads data for a tournament and reloads it whenever anything in the
- * tournament changes. Screens watch one row (tournament_live): over Realtime
- * with Supabase, by polling in local mode. A slow poll covers dropped connections.
+ * tournament changes (lib/live.ts: one feed per tournament, shared by every
+ * component watching it). `pollMs`: the safety net while Realtime is down.
  */
 export function useLiveTournament<T>(tournamentId: string, load: () => Promise<T>, pollMs = 20_000): LiveState<T> {
   const state = useLoader(load);
@@ -58,54 +59,15 @@ export function useLiveTournament<T>(tournamentId: string, load: () => Promise<T
 
   useEffect(() => {
     if (!isBackendConfigured) return;
-
-    if (isLocalMode) {
-      let revision: string | null | undefined;
-      const check = () =>
-        localCall<{ revision: string | null; now: string }>('getLiveState', [tournamentId])
-          .then((live) => {
-            clockOffset = new Date(live.now).getTime() - Date.now();
-            if (live.revision !== revision) {
-              revision = live.revision;
-              refresh();
-            }
-          })
-          .catch(() => refresh());
-      check();
-      const poll = setInterval(check, 1500);
-      return () => clearInterval(poll);
-    }
-
-    refresh();
-    // Many rows change at once (a score report assigns several courts), so
-    // wait a beat and reload once.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const refreshSoon = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => refresh(), 250);
-    };
-    // Several components on one page watch the same tournament, and supabase-js
-    // hands back an existing channel of the same name, already subscribed.
-    const channel = supabase()
-      .channel(`tournament-${tournamentId}-${++channelCount}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'tournament_live', filter: `tournament_id=eq.${tournamentId}` },
-        refreshSoon,
-      )
-      .subscribe();
-    const poll = setInterval(() => refresh(), pollMs);
-    const onFocus = () => refresh();
-    window.addEventListener('focus', onFocus);
-    return () => {
-      supabase().removeChannel(channel);
-      clearInterval(poll);
-      clearTimeout(timer);
-      window.removeEventListener('focus', onFocus);
-    };
+    return watchTournament(tournamentId, refresh, pollMs);
   }, [tournamentId, pollMs]);
 
-  return state;
+  // Asked for (after an action): fetch again, not a read another component shared.
+  const reload = () => {
+    invalidateTournament(tournamentId);
+    state.reload();
+  };
+  return { ...state, reload };
 }
 
 /** Loads data when `deps` change (and on demand) for screens that don't need live updates. */
@@ -117,6 +79,22 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): LiveState<T
   return state;
 }
 
+// The nav and the page ask at the same time: one request answers both.
+const roleRequests = new Map<string, Promise<StaffRole | null>>();
+
+function myRole(user: AuthUser, tournamentId: string) {
+  const key = `${user.id}:${tournamentId}`;
+  let request = roleRequests.get(key);
+  if (!request) {
+    request = (async () => {
+      if (!isGuest(user)) await claimStaffInvites().catch(() => 0);
+      return getMyRole(tournamentId);
+    })().finally(() => roleRequests.delete(key));
+    roleRequests.set(key, request);
+  }
+  return request;
+}
+
 /**
  * What the signed-in user may do in this tournament. `data`: admin tools
  * (an admin, not viewing as a player on a demo site). `monitor`: court
@@ -125,11 +103,7 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): LiveState<T
  */
 export function useStaffAccess(tournamentId: string) {
   const session = useSession();
-  const role = useLoad(async () => {
-    if (!session) return null;
-    if (!isGuest(session)) await claimStaffInvites().catch(() => 0);
-    return getMyRole(tournamentId);
-  }, [tournamentId, session?.id]);
+  const role = useLoad(async () => (session ? myRole(session, tournamentId) : null), [tournamentId, session?.id]);
   const view = useViewMode();
   const loading = session === undefined || role.data === undefined;
   return {
@@ -143,9 +117,9 @@ export function useStaffAccess(tournamentId: string) {
 
 /** Re-renders every `ms` so elapsed times and no-show countdowns stay current. */
 export function useNow(ms = 15_000): number {
-  const [now, setNow] = useState(() => Date.now() + clockOffset);
+  const [now, setNow] = useState(serverNow);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now() + clockOffset), ms);
+    const t = setInterval(() => setNow(serverNow()), ms);
     return () => clearInterval(t);
   }, [ms]);
   return now;

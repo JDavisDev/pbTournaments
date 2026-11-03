@@ -4,18 +4,20 @@
 import Link from 'next/link';
 import { Icon } from '@/components/Icon';
 import { getDivisionEligibility, getEntryEligibility } from '@/lib/api';
-import { useLiveTournament, useStaffAccess } from '@/lib/hooks';
+import { useLoad, useStaffAccess } from '@/lib/hooks';
 
 export function EligibilityAlert({ tournamentId }: { tournamentId: string }) {
   const staff = useStaffAccess(tournamentId);
   return staff.data ? <Warning tournamentId={tournamentId} /> : null;
 }
 
+// Checked when the page opens, not on every live change: eligibility moves with
+// teams and ratings (the Players page), not with scores, and checking is heavy.
 function Warning({ tournamentId }: { tournamentId: string }) {
-  const { data } = useLiveTournament(tournamentId, async () => {
+  const { data } = useLoad(async () => {
     const [teams, entries] = await Promise.all([getDivisionEligibility(tournamentId), getEntryEligibility(tournamentId)]);
     return { teams: teams.filter((t) => t.problems.length > 0).length, entries: entries.length };
-  });
+  }, [tournamentId]);
   if (!data || data.teams + data.entries === 0) return null;
   const parts = [
     data.teams ? `${data.teams} team${data.teams === 1 ? '' : 's'}` : '',

@@ -118,12 +118,23 @@ async function deliver(n: Claimed) {
   }
   const sent = await sendText(n.phone, body).catch((e: Error) => ({ error: e.message, sid: undefined }));
   await finish(n.id, 'sms', n.phone, body, sent.error ?? null);
-  if (sent.sid) await serverRpc('set_notification_provider_id', { p_id: n.id, p_provider_id: sent.sid });
+  // It's sent: without the id it only misses its delivery report.
+  if (sent.sid) {
+    await serverRpc('set_notification_provider_id', { p_id: n.id, p_provider_id: sent.sid }).catch((e: Error) =>
+      console.error(`Text ${n.id} sent, but its Twilio id wasn’t saved: ${e.message}`),
+    );
+  }
 }
 
 /** Sends (or logs) one batch of queued messages. Returns how many it handled. */
 export async function sendPendingTexts(limit = 50): Promise<number> {
   const batch = (await serverRpc<Claimed[]>('claim_notifications', { p_limit: limit })) ?? [];
-  for (const n of batch) await deliver(n);
+  for (const n of batch) {
+    // Claimed messages aren't claimed again, so one that fails is marked failed
+    // (the Messages page shows why) rather than stopping the rest of the batch.
+    await deliver(n).catch((err: Error) =>
+      finish(n.id, 'none', null, n.body, err.message).catch((e: Error) => console.error(`Message ${n.id} failed: ${err.message}; ${e.message}`)),
+    );
+  }
   return batch.length;
 }

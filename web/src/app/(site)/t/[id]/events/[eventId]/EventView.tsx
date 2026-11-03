@@ -240,6 +240,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
             teams={teams.length}
             teamsReady={teams.filter((t) => t.checked_in_at).length}
             graceMinutes={grace}
+            simple={data.tournament.simple}
             scheduledFor={event.not_before}
             timeZone={data.tournament.time_zone}
             onStarted={reload}
@@ -409,7 +410,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
                 disabled={undo.busy}
                 onClick={() =>
                   confirm(
-                    `Reset the bracket?${bracketPlayed.length ? ` ${bracketPlayed.length} match${bracketPlayed.length === 1 ? '' : 'es'} played or on court ${bracketPlayed.length === 1 ? 'is' : 'are'} discarded, and players on court get a text.` : ''} ` +
+                    `Reset the bracket?${bracketPlayed.length ? ` ${bracketPlayed.length} match${bracketPlayed.length === 1 ? '' : 'es'} played or on court ${bracketPlayed.length === 1 ? 'is' : 'are'} discarded${data.tournament.simple ? '' : ', and players on court get a text'}.` : ''} ` +
                       (event.format === 'single_elim'
                         ? 'It’s built again from the current seeds, and held until you start it.'
                         : 'You go back to reviewing pool play, and seed it again when you finalize.'),

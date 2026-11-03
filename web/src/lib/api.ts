@@ -1,13 +1,15 @@
 // The app's data functions. Supabase in production; the local dev database
 // when NEXT_PUBLIC_DATA_MODE=local. Same names, arguments and results.
 import { isDemoMode, isLocalMode } from './config';
+import { shareReads } from './live';
 import { localApi } from './localClient';
 import * as remote from './remoteApi';
 import { logged } from './testLog';
 
 const backend = (isLocalMode ? localApi : remote) as typeof remote;
 // Demo and local sites log every change for the Test menu.
-const api = isDemoMode ? logged(backend) : backend;
+// Live screens share their reads (lib/live.ts).
+const api = shareReads(isDemoMode ? logged(backend) : backend);
 
 export const {
   getTournament,

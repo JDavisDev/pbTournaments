@@ -3,7 +3,8 @@
 // local sign-in and demo tools.
 import type { Transaction } from '@electric-sql/pglite';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { parseTeams, teamName } from '@/lib/teamText';
+import { mapProfile } from '@/lib/profileTypes';
+import { pastedTeams } from '@/lib/teamText';
 import type { RegistrationForm } from '@/lib/types';
 import { runAs } from './localDb';
 import type { PushTarget } from './push';
@@ -28,25 +29,6 @@ async function updateColumns(tx: Transaction, table: string, id: string, changes
   if (columns.length === 0) return one(tx, `select * from public.${table} where id = $1`, [id]);
   const sets = columns.map((c, i) => `${c} = $${i + 2}`).join(', ');
   return one(tx, `update public.${table} set ${sets} where id = $1 returning *`, [id, ...columns.map((c) => changes[c])]);
-}
-
-/** A profile from the database: blank fields as '', the way forms hold them. */
-function mapProfile(row: Row | null) {
-  if (!row) return null;
-  const text = (key: string) => (row[key] == null ? '' : String(row[key]));
-  return {
-    first_name: text('first_name'),
-    last_name: text('last_name'),
-    email: text('email'),
-    phone: text('phone'),
-    sms_opt_in: row.sms_opt_in === true,
-    gender: text('gender'),
-    birth_date: text('birth_date'),
-    dupr_id: text('dupr_id'),
-    dupr_doubles: text('dupr_doubles'),
-    dupr_singles: text('dupr_singles'),
-    self_rating: text('self_rating'),
-  };
 }
 
 const EVENT_COLUMNS = [
@@ -101,30 +83,6 @@ const EVENT_COLUMNS = [
 
 const LISTING_COLUMNS = ['name', 'starts_on', 'ends_on', 'venue', 'city', 'state', 'signup_url', 'image_data', 'refund_policy', 'price_cents'];
 
-async function addTeams(tx: Transaction, eventId: string, text: string, firstSeed: number) {
-  const teams = parseTeams(text);
-  for (const [i, players] of teams.entries()) {
-    const ids: string[] = [];
-    for (const p of players) {
-      const row = await one<{ id: string }>(
-        tx,
-        'insert into public.players (first_name, last_name) values ($1, $2) returning id',
-        [p.first_name, p.last_name],
-      );
-      ids.push(row.id);
-    }
-    const team = await one<{ id: string }>(
-      tx,
-      'insert into public.teams (event_id, name, seed) values ($1, $2, $3) returning id',
-      [eventId, teamName(players), firstSeed + i],
-    );
-    for (const id of ids) {
-      await tx.query('insert into public.team_players (team_id, player_id) values ($1, $2)', [team.id, id]);
-    }
-  }
-  return teams.length;
-}
-
 const games = (g: unknown) => JSON.stringify(g);
 
 /** Same names and results as src/lib/remoteApi.ts. */
@@ -159,7 +117,8 @@ const ops: Record<string, Op> = {
     tx.query('select public.add_organization_member($1, $2, $3)', [org, email, role]).then(() => null),
   createTournament: (tx, org: string, name: string, startsOn: string, courts: number) =>
     one(tx, 'select * from public.create_tournament($1, $2, $3, $4)', [org, name, startsOn, courts]),
-  newTournament: (tx, org: string | null) => one(tx, 'select * from public.new_tournament($1)', [org]),
+  newTournament: (tx, org: string | null, simple = false) =>
+    one(tx, `select * from public.${simple ? 'new_simple_tournament' : 'new_tournament'}($1)`, [org]),
   copyEvent: (tx, id: string) => one(tx, 'select * from public.copy_event($1)', [id]),
   addMockTeams: async (tx, id: string, count = 4) =>
     (await one<{ n: number }>(tx, 'select public.add_mock_teams($1, $2) as n', [id, count])).n,
@@ -202,6 +161,7 @@ const ops: Record<string, Op> = {
       'championship_rounds',
       'championship_wait_minutes',
       'final_wait_minutes',
+      'anyone_scores',
     ]).then(() => null),
 
   saveEvent: async (tx, event: Row) => {
@@ -212,7 +172,8 @@ const ops: Record<string, Op> = {
     return one(tx, `insert into public.events (${columns.join(', ')}) values (${params}) returning *`, columns.map((c) => event[c]));
   },
   deleteEvent: (tx, id: string) => tx.query('delete from public.events where id = $1', [id]).then(() => null),
-  addTeamsFromText: (tx, eventId: string, text: string, firstSeed: number) => addTeams(tx, eventId, text, firstSeed),
+  addTeamsFromText: async (tx, eventId: string, text: string, firstSeed: number) =>
+    (await one<{ n: number }>(tx, 'select public.add_teams($1, $2::jsonb, $3) as n', [eventId, JSON.stringify(pastedTeams(text)), firstSeed])).n,
   deleteTeam: (tx, id: string) => tx.query('delete from public.teams where id = $1', [id]).then(() => null),
   generateMatches: async (tx, id: string) => (await one<{ n: number }>(tx, 'select public.generate_matches($1) as n', [id])).n,
   clearMatches: (tx, id: string) => tx.query('select public.clear_matches($1)', [id]).then(() => null),
@@ -514,7 +475,9 @@ const demoOps: Record<string, Op> = {
   refundPlayerToCard: async (tx, id: string, player: string, amountCents: number, keepCents: number) => {
     const plan = (await one<{ r: RefundPlan }>(tx, 'select public.card_refund_plan($1, $2) as r', [id, player])).r;
     const { refundToCard } = await import('./refunds');
-    const refunds = await refundToCard(plan, amountCents, keepCents);
+    const { refunds, error } = await refundToCard(plan, amountCents, keepCents);
+    // Nothing really moved, so nothing is recorded.
+    if (error) throw error;
     await tx.query(
       `select public.record_card_refunds($1, $2, $3::jsonb, $4, nullif(current_setting('request.jwt.claim.sub', true), '')::uuid)`,
       [id, player, JSON.stringify(refunds), keepCents],

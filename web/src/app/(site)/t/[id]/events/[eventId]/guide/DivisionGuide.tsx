@@ -64,17 +64,19 @@ export function DivisionGuide({
 
       <Section title="When">
         <Item>{startLine(e, t)}</Item>
-        <Item>Check in at the desk when you arrive. Your division can start before every team is here.</Item>
-        {t.checkin_grace_minutes !== null && (
+        {!t.simple && <Item>Check in at the desk when you arrive. Your division can start before every team is here.</Item>}
+        {!t.simple && t.checkin_grace_minutes !== null && (
           <Item>
             Once it starts, a team that isn’t checked in has {t.checkin_grace_minutes} minutes to check in, or it forfeits its
             matches until it does. A team that isn’t here sits out round 1 when there’s a sit-out.
           </Item>
         )}
-        <Item>
-          When your match is called, go straight to the court: after {t.no_show_minutes} minutes the desk is told you haven’t
-          arrived.
-        </Item>
+        {!t.simple && (
+          <Item>
+            When your match is called, go straight to the court: after {t.no_show_minutes} minutes the desk is told you haven’t
+            arrived.
+          </Item>
+        )}
       </Section>
 
       <Section title="Format">
@@ -86,8 +88,21 @@ export function DivisionGuide({
       {team && <YourTeam event={e} team={team} teams={teams} matches={matches} />}
 
       <Section title="On match day">
-        <Item>You’ll get a text when your match is called, with your court. Your team page shows where you are in line.</Item>
-        <Item>Play your match, then enter the score from the link in your text or on your team page. That frees the court for the next match.</Item>
+        {t.simple ? (
+          <>
+            <Item>Watch the tournament page or the TV board: when your name is on a court, go straight there and play.</Item>
+            <Item>
+              {t.anyone_scores
+                ? 'When you finish, enter the score on the tournament page or your team page. That frees the court for the next match.'
+                : 'When you finish, tell the director the score. That frees the court for the next match.'}
+            </Item>
+          </>
+        ) : (
+          <>
+            <Item>You’ll get a text when your match is called, with your court. Your team page shows where you are in line.</Item>
+            <Item>Play your match, then enter the score from the link in your text or on your team page. That frees the court for the next match.</Item>
+          </>
+        )}
         <Item>If you need to leave or can’t play on, tell the desk: they can drop a team or bring in an alternate.</Item>
       </Section>
 

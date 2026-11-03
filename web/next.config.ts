@@ -7,8 +7,19 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@electric-sql/pglite', 'web-push'],
   partialPrefetching: true,
   async headers() {
-    // The service worker (public/sw.js) must never be served stale.
-    return [{ source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }] }];
+    return [
+      // The service worker (public/sw.js) must never be served stale.
+      { source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }] },
+      // Other sites can't frame the app (a hidden Refund or Delete button under
+      // a click), except the TV board, which a venue may put on its own page.
+      {
+        source: '/((?!tv/).*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+        ],
+      },
+    ];
   },
   async redirects() {
     // Registrations are part of the Players page now.

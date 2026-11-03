@@ -35,9 +35,12 @@ function Frame({ image, children }: { image: string | null; children: ReactNode 
   );
 }
 
-/** Whether a tournament run here shows among the listings. Demo sites show their practice tournaments. */
+/**
+ * Whether a tournament run here shows among the listings (it takes sign-ups).
+ * Demo sites show their practice tournaments.
+ */
 export const isListed = (t: Tournament, today: string) =>
-  t.status === 'registration' && (!t.is_demo || isDemoMode) && t.starts_on >= today;
+  t.status === 'registration' && !t.simple && (!t.is_demo || isDemoMode) && t.starts_on >= today;
 
 /** A tournament run here with registration open: like a listing, signing up on its own page. */
 export function HostedCard({ tournament: t }: { tournament: Tournament }) {

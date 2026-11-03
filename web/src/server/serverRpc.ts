@@ -33,4 +33,11 @@ export async function serverRpc<T>(fn: string, args: Record<string, unknown>): P
   return runAs(null, async (tx) => (await tx.query<{ result: T }>(call, values)).rows[0]?.result, { system: true });
 }
 
-export const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+/** The site's public address, for links in texts, emails and Stripe's return pages. */
+export const appUrl = () =>
+  (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    // Vercel sets this on every deployment, so links work before NEXT_PUBLIC_APP_URL is.
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) ||
+    'http://localhost:3000'
+  ).replace(/\/$/, '');

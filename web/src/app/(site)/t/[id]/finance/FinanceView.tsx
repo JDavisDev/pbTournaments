@@ -9,6 +9,7 @@ import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
 import { getTournament, getTournamentFinance } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
+import { goToCheckout } from '@/lib/http';
 import { CARD_FIXED_CENTS, CARD_PERCENT } from '@/lib/pricing';
 import type { TournamentFinance } from '@/lib/types';
 
@@ -131,17 +132,7 @@ export function FinanceView({ params }: { params: Promise<{ id: string }> }) {
 function OpenItems({ tournamentId, finance: f }: { tournamentId: string; finance: TournamentFinance }) {
   const { busy, error, run } = useAction();
   const b = f.balances;
-  const payFees = () =>
-    run(async () => {
-      const res = await fetch('/api/checkout/fees', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ tournamentId }),
-      });
-      const body = (await res.json()) as { url?: string; error?: string };
-      if (!body.url) throw new Error(body.error ?? 'Could not start checkout');
-      window.location.href = body.url;
-    });
+  const payFees = () => run(() => goToCheckout('/api/checkout/fees', { tournamentId }));
   if (!b.players_owing && !b.players_owed && !f.courtside.owed_cents) return null;
   return (
     <section className="flex flex-col gap-3">

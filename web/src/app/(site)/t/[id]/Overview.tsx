@@ -12,11 +12,13 @@ import { Expandable } from '@/components/Expandable';
 import { Icon } from '@/components/Icon';
 import { useMyTeam } from '@/components/MatchDay';
 import { Button, Empty, Input, LinkButton, Select, Spinner } from '@/components/ui';
-import { getCourtBoard, getEvents, getMatches, getTeams, getTournament } from '@/lib/api';
+import { ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
+import { getCourtBoard, getEvents, getMatches, getQueue, getTeams, getTournament } from '@/lib/api';
 import { describeDivision } from '@/lib/eligibility';
 import { StreamEmbed, WatchChip } from '@/components/StreamEmbed';
 import { formatTime, isPlayable, priceSummary, registrationOpen, venueLine } from '@/lib/format';
-import { useLiveTournament, useNow } from '@/lib/hooks';
+import { useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
+import { rulesOf } from '@/lib/scoring';
 
 async function load(id: string) {
   const [tournament, events, teams, matches, courts] = await Promise.all([
@@ -26,13 +28,17 @@ async function load(id: string) {
     getMatches(id),
     getCourtBoard(id),
   ]);
-  return { tournament, events, teams, matches, courts };
+  // Simple tournaments send no texts, so players watch the line here.
+  const queue = tournament.simple && tournament.status === 'live' ? await getQueue(id) : [];
+  return { tournament, events, teams, matches, courts, queue };
 }
 
 export function Overview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { data, error } = useLiveTournament(id, () => load(id));
+  const { data, error, reload } = useLiveTournament(id, () => load(id));
   const now = useNow();
+  const staff = useStaffAccess(id);
+  const [scoring, setScoring] = useState<ScoreTarget | null>(null);
   const [search, setSearch] = useState('');
   const [myTeamId, setMyTeam] = useMyTeam(id);
   const [playAs, setPlayAs] = useState('');
@@ -41,7 +47,9 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
   if (error === 'not-configured') return <ConnectNotice />;
   if (error) return <Empty>{error}</Empty>;
   if (!data) return <Spinner />;
-  const { tournament, events, teams, matches, courts } = data;
+  const { tournament, events, teams, matches, courts, queue } = data;
+  // Court monitors and directors score from here too; anyone, when a simple tournament allows it.
+  const canScore = !!staff.monitor || (tournament.simple && tournament.anyone_scores);
   const found = search.length >= 2 ? teams.filter((t) => t.name.toLowerCase().includes(search.toLowerCase())) : [];
   const eventName = (eventId: string) => events.find((e) => e.id === eventId)?.name ?? '';
   const activeCourts = courts.filter((c) => c.match_id);
@@ -58,7 +66,7 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className={`grid gap-10 ${aside ? 'lg:grid-cols-[1fr_22rem]' : ''}`}>
       <div className="flex min-w-0 flex-col gap-10">
-        <EligibilityAlert tournamentId={id} />
+        {!tournament.simple && <EligibilityAlert tournamentId={id} />}
         {tournament.image_data && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={tournament.image_data} alt="" className="max-h-72 w-full rounded-2xl object-cover" />
@@ -263,10 +271,48 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
                       <p className="text-sm text-muted">
                         {c.event_name} · {c.label}
                       </p>
+                      {canScore && c.match_id && (
+                        <Button
+                          size="sm"
+                          className="mt-2"
+                          onClick={() =>
+                            setScoring({
+                              matchId: c.match_id!,
+                              team1: c.team1_name ?? '',
+                              team2: c.team2_name ?? '',
+                              rules: rulesOf(c),
+                              mode: 'report',
+                            })
+                          }
+                        >
+                          Enter score
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
+            </section>
+          )}
+          {queue.length > 0 && (
+            <section className="flex flex-col gap-3">
+              <h2 className="text-2xl">Up next</h2>
+              <ol className="flex flex-col divide-y divide-border rounded-2xl border border-border">
+                {queue.slice(0, 8).map((q) => (
+                  <li key={q.match_id} className="flex gap-3 px-4 py-3">
+                    <span className="tnum w-6 shrink-0 font-display text-xl font-bold">{q.queue_rank}</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm">
+                        {q.team1_name} <span className="text-muted">v</span> {q.team2_name}
+                      </span>
+                      <span className="block text-sm text-muted">
+                        {q.event_name} · {q.label}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              {queue.length > 8 && <p className="text-sm text-muted">{queue.length - 8} more after these.</p>}
             </section>
           )}
           {tournament.details && (
@@ -279,6 +325,7 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
           )}
         </aside>
       )}
+      <ScoreDialog target={scoring} onClose={() => setScoring(null)} onDone={reload} />
     </div>
   );
 }

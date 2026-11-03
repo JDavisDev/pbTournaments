@@ -25,7 +25,8 @@ const blank: PlayerProfile = {
   last_name: '',
   email: '',
   phone: '',
-  sms_opt_in: true,
+  // Asked when they register (the "Text me" box), never assumed.
+  sms_opt_in: false,
   gender: '',
   birth_date: '',
   dupr_doubles: '',

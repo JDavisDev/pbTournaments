@@ -18,6 +18,7 @@ import { isGuest } from '@/lib/auth';
 import { describeDivision, entryProblem, type PlayerFacts } from '@/lib/eligibility';
 import { entryCost, formatMoney, formatTime, priceAt, priceSummary, registrationOpen } from '@/lib/format';
 import { useAction, useLoad, useNow, useSession, useStaffAccess } from '@/lib/hooks';
+import { goToCheckout } from '@/lib/http';
 import { saveProfile, useProfile, type PlayerProfile } from '@/lib/profile';
 
 interface Choice {
@@ -39,10 +40,10 @@ export function RegisterForm({ params }: { params: Promise<{ id: string }> }) {
   // A director registers someone else, so their own profile doesn't fill it in.
   // Keyed so choosing another test player starts the form over.
   const saved = staff.data ? null : profile;
-  return <Form key={saved?.email ?? 'new'} id={id} saved={saved} />;
+  return <Form key={saved?.email ?? 'new'} id={id} saved={saved} isStaff={staff.data} />;
 }
 
-function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
+function Form({ id, saved, isStaff }: { id: string; saved: PlayerProfile | null; isStaff: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const cancelled = searchParams.get('cancelled');
@@ -62,7 +63,8 @@ function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
     last_name: saved?.last_name ?? '',
     email: saved?.email ?? '',
     phone: saved?.phone ?? '',
-    sms_opt_in: saved?.sms_opt_in ?? true,
+    // Texts need a yes the player gave: never ticked for them.
+    sms_opt_in: saved?.sms_opt_in ?? false,
   });
   const [facts, setFacts] = useState<PlayerFacts>({
     gender: saved?.gender ?? '',
@@ -88,8 +90,6 @@ function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
   const codeCheck = useAction();
   const [waiverOk, setWaiverOk] = useState(false);
   const [termsOk, setTermsOk] = useState(false);
-  // Directors can register someone any time until the tournament is over.
-  const staff = useStaffAccess(id);
 
   if (data.error === 'not-configured') return <ConnectNotice />;
   if (data.error) return <Empty>{data.error}</Empty>;
@@ -100,10 +100,12 @@ function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
   const spotsLeft = new Map(availability.map((a) => [a.event_id, a.spots_left]));
   const closesAt = t.registration_closes_at ? new Date(t.registration_closes_at).getTime() : null;
 
+  // Simple tournaments: the director pastes in the teams.
+  if (t.simple) return <Empty>This tournament doesn’t take registrations. Ask the director to add you.</Empty>;
   const open = registrationOpen(t, now);
-  const director = !!staff.data && t.status !== 'complete';
+  // Directors can register someone any time until the tournament is over.
+  const director = isStaff && t.status !== 'complete';
   if (!open && !director) {
-    if (staff.data === undefined) return <Spinner />;
     if ((t.status === 'registration' || t.status === 'live') && closesAt !== null && closesAt < now) {
       return <Empty>Registration closed on {new Date(closesAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.</Empty>;
     }
@@ -202,14 +204,7 @@ function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
             router.push(`/t/${id}/register/done?r=${reg.registration_id}`);
             return;
           }
-          const res = await fetch('/api/checkout', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ registrationId: reg.registration_id }),
-          });
-          const body = (await res.json()) as { url?: string; error?: string };
-          if (!body.url) throw new Error(body.error ?? 'Could not start checkout');
-          window.location.href = body.url;
+          await goToCheckout('/api/checkout', { registrationId: reg.registration_id });
         });
       }}
     >
@@ -389,7 +384,8 @@ function Form({ id, saved }: { id: string; saved: PlayerProfile | null }) {
           <span>
             <span className="font-medium">Text me match and court updates</span>
             <span className="block text-muted">
-              Only tournament updates, like which court to go to. Reply STOP to opt out.
+              Only tournament updates, like which court to go to. Message frequency varies; msg &amp; data rates may apply.
+              Reply STOP to opt out, HELP for help.
             </span>
           </span>
         </label>

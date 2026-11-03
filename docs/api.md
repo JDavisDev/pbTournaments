@@ -25,6 +25,8 @@ Call a function from TypeScript with `supabase.rpc('report_score', { p_match, p_
 | `add_organization_member(p_organization, p_email, p_role = 'director')` | Owner/admin | Adds an existing account by email |
 | `create_tournament(p_organization, p_name, p_starts_on, p_court_count = 0)` → tournament | Org member | Draft tournament with "Court 1".."Court N" |
 | `new_tournament(p_organization = null)` → tournament | Org member, or any signed-in account with no organization given (it gets its own) | What "New tournament" does: a draft with 4 courts and one division (Mixed Doubles 3.5: round robin, top 4 to a bracket), named "New tournament" four weeks out for the director to change. On a demo site: "Demo #N" today, practice prices and venue, in the user's first organization (or a new "Demo Club") |
+| `new_simple_tournament(p_organization = null)` → tournament | As `new_tournament` | The same draft as a simple tournament (see below): free, texts off, no check-in deadline, prices zero, one open "Doubles" division that isn't DUPR rated |
+| `add_teams(p_event, p_teams, p_first_seed)` → int | Staff | Pasted teams in one call, all or none: `p_teams` = `[{"name": "Davis/Lee", "players": [{"first_name": "Pat", "last_name": "Davis"}, …]}, …]` (1–256 teams of 1–4 players), best seed first, seeded from `p_first_seed` |
 | `copy_event(p_event)` → event | Staff | A new division with every setting of this one (not its teams), "<name> (copy)", listed last |
 | `add_mock_teams(p_event, p_count = 4)` → int | Staff, practice tournaments only | Made-up teams (players, for singles) who fit the division: gender, rating within its skill rule and team limit, ages, a DUPR ID; seeded after its teams |
 | `set_tournament_status(p_tournament, p_status)` → tournament | Staff | `draft` → `registration` → `live` → `complete`. Going live starts assignment |
@@ -32,6 +34,8 @@ Call a function from TypeScript with `supabase.rpc('report_score', { p_match, p_
 | `set_court_count(p_tournament, p_count)` → int | Staff | Any number of courts, any time. Removed courts' live matches go back to the queue; courts with history are retired, not deleted |
 
 Tournament settings (`no_show_minutes`, `checkin_grace_minutes`, `overdue_after_minutes`, `match_slot_minutes`, name, date, time zone) are plain column updates.
+
+**Simple tournaments** (`tournaments.simple`, set only by `new_simple_tournament`): free, with no registration, payments or texts, like a bracket site. The director pastes in the teams (`add_teams`) and runs pools and brackets on the same engine; players find their names on the court board. `registration` status means published (public, not taking sign-ups). The database enforces it: registrations are refused, no notifications of any kind are created, the setup and per-player fees are zero, and every player put on a team is checked in at once (there's no check-in). `anyone_scores` (staff update it directly): anyone with the link, signed in or not, may `report_score` a match on court; corrections stay with staff.
 
 ## Events
 
@@ -118,7 +122,7 @@ Assignment runs after every score, check-in, queue or court change in a live, un
 | Function | Who | What it does |
 |---|---|---|
 | `confirm_on_court(p_match)` | Staff or the match's players | The "we're here" tap; stops the no-show timer |
-| `report_score(p_match, p_games)` | Staff or the match's players (staff can also score a queued match, for play on paper) | `p_games` is team 1 first, e.g. `[[11,7],[9,11],[11,5]]`. Validates (to `games_to`, win by 2, `best_of`; playoff settings for bracket matches), completes the match, moves the winner on, pulls the next match |
+| `report_score(p_match, p_games)` | Staff or the match's players (staff can also score a queued match, for play on paper); anyone, at a simple tournament with `anyone_scores` | `p_games` is team 1 first, e.g. `[[11,7],[9,11],[11,5]]`. Validates (to `games_to`, win by 2, `best_of`; playoff settings for bracket matches), completes the match, moves the winner on, pulls the next match |
 | `correct_score(p_match, p_games)` | Staff | Fix a finished match, any time before the division is final. A new winner moves through the next matches, byes included, while nothing has been played on top of the old one; once something has, the bracket stands and the result changes for the record. A pool match fixed after the bracket is seeded seeds it again until a bracket match has been played. A Swiss round no one has played is drawn again. The match goes to DUPR again |
 | `forfeit_match(p_match, p_winner_team)` | Staff | Award without play. A finished match can be changed to a forfeit too, or its forfeit given to the other team (as `correct_score` for what happens to the bracket) |
 | `requeue_match(p_match, p_absent_team = null, p_hold = false)` | Staff or court monitors | Off the court and back to its queue spot. It can be called again straight away if a court is free, unless `p_hold` keeps it off courts until released (`hold_match`). `p_absent_team` checks that team out |
@@ -164,7 +168,7 @@ Every court call queues one text per player in `notifications`, with the round's
 | `confirm_on_court_by_code(p_code)` | Anyone with the link | "We're on court" |
 | `report_score_by_code(p_code, p_games)` | Anyone with the link | Reports once; later fixes go through `correct_score` (staff) |
 | `claim_notifications(p_limit)`, `finish_notification(...)` | Service role | The sender's outbox |
-| `payments_status(p_tournament)`, `payment_account_for_setup(p_tournament)` | Staff; the second owners and admins of the organization | The organization's connected Stripe account (docs/payments.md) |
+| `payments_status(p_tournament)`, `payment_account_for_setup(p_tournament)` | Staff; the second is for owners and admins of the organization | The organization's connected Stripe account (docs/payments.md) |
 | `save_payment_account`, `update_payment_account`, `payment_account_for_tournament` | Service role | Onboarding and `account.updated` |
 | `tournament_finance(p_tournament)` → jsonb | Staff | The Finance page: `money`, `balances`, `tax_cents`, `courtside` (from cards, paid separately, owed for players not paid by card), `registrations`, `players`, `withdrawals`, `divisions` |
 | `card_refund_plan(p_tournament, p_player)` → jsonb | Staff | What they're owed and the card payments it can go back to (`refundable_cents` each). `/api/refunds` refunds on Stripe, then `record_card_refunds` (service role) writes the `refund` rows (`stripe_refund_id`) and any refund `fee` kept |
@@ -284,4 +288,4 @@ Streams: `tournaments.stream_url` and `courts.stream_url` hold YouTube links (st
 | `registration_answers` | No | Staff of the tournament; written at registration |
 | `notifications`, `notification_log` (view) | No | Staff of the tournament can read; only the service role writes |
 
-**Live updates:** subscribe over Realtime to your tournament's `tournament_live` row and re-read what the screen shows when it changes. One subscription per screen, however many tables change.
+**Live updates:** subscribe over Realtime to your tournament's `tournament_live` row and re-read what the screen shows when it changes. One subscription per screen, however many tables change. (The website keeps one per tournament for the whole page, and its components share the reads that follow; see `web/src/lib/live.ts`.)

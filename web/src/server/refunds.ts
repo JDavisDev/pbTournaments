@@ -24,8 +24,16 @@ export interface CardRefund {
   method: 'stripe' | 'test';
 }
 
-/** Checks the amounts, then refunds on Stripe (or pretends, for test payments). Returns what to record. */
-export async function refundToCard(plan: RefundPlan, amountCents: number, keepCents: number): Promise<CardRefund[]> {
+/**
+ * Checks the amounts, then refunds on Stripe (or pretends, for test payments).
+ * Returns what went through, to record, and the error that stopped the rest:
+ * a refund split over several payments can fail part way.
+ */
+export async function refundToCard(
+  plan: RefundPlan,
+  amountCents: number,
+  keepCents: number,
+): Promise<{ refunds: CardRefund[]; error: Error | null }> {
   if (!Number.isInteger(amountCents) || amountCents <= 0) throw new Error('Enter an amount more than $0');
   if (!Number.isInteger(keepCents) || keepCents < 0) throw new Error('The refund fee can’t be negative');
   if (amountCents + keepCents > plan.owed_cents) {
@@ -38,26 +46,30 @@ export async function refundToCard(plan: RefundPlan, amountCents: number, keepCe
 
   const refunds: CardRefund[] = [];
   let left = amountCents;
-  for (const p of plan.payments) {
-    if (left === 0) break;
-    const part = Math.min(left, Math.max(0, p.refundable_cents));
-    if (part === 0) continue;
-    if (p.provider === 'test') {
-      refunds.push({ registration_id: p.registration_id, amount_cents: part, refund_id: `test_re_${randomUUID()}`, method: 'test' });
-    } else {
-      if (paymentsMode() !== 'stripe' || !p.stripe_account_id) throw new Error('Stripe isn’t set up on this site, so card refunds can’t go through.');
-      const options = { stripeAccount: p.stripe_account_id };
-      const session = await stripe().checkout.sessions.retrieve(p.payment_ref, {}, options);
-      const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
-      if (!intent) throw new Error('Couldn’t find that card payment on Stripe.');
-      const refund = await stripe().refunds.create(
-        { payment_intent: intent, amount: part, metadata: { registration_id: p.registration_id } },
-        // The same click twice makes one refund.
-        { ...options, idempotencyKey: `refund-${p.registration_id}-${p.refundable_cents}-${part}` },
-      );
-      refunds.push({ registration_id: p.registration_id, amount_cents: part, refund_id: refund.id, method: 'stripe' });
+  try {
+    for (const p of plan.payments) {
+      if (left === 0) break;
+      const part = Math.min(left, Math.max(0, p.refundable_cents));
+      if (part === 0) continue;
+      if (p.provider === 'test') {
+        refunds.push({ registration_id: p.registration_id, amount_cents: part, refund_id: `test_re_${randomUUID()}`, method: 'test' });
+      } else {
+        if (paymentsMode() !== 'stripe' || !p.stripe_account_id) throw new Error('Stripe isn’t set up on this site, so card refunds can’t go through.');
+        const options = { stripeAccount: p.stripe_account_id };
+        const session = await stripe().checkout.sessions.retrieve(p.payment_ref, {}, options);
+        const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+        if (!intent) throw new Error('Couldn’t find that card payment on Stripe.');
+        const refund = await stripe().refunds.create(
+          { payment_intent: intent, amount: part, metadata: { registration_id: p.registration_id } },
+          // The same click twice makes one refund.
+          { ...options, idempotencyKey: `refund-${p.registration_id}-${p.refundable_cents}-${part}` },
+        );
+        refunds.push({ registration_id: p.registration_id, amount_cents: part, refund_id: refund.id, method: 'stripe' });
+      }
+      left -= part;
     }
-    left -= part;
+  } catch (err) {
+    return { refunds, error: err as Error };
   }
-  return refunds;
+  return { refunds, error: null };
 }

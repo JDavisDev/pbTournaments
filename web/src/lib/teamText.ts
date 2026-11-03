@@ -25,3 +25,6 @@ export function parseTeams(text: string): PlayerName[][] {
 }
 
 export const teamName = (players: PlayerName[]) => players.map((p) => p.last_name).join('/');
+
+/** Pasted teams as add_teams() takes them. */
+export const pastedTeams = (text: string) => parseTeams(text).map((players) => ({ name: teamName(players), players }));

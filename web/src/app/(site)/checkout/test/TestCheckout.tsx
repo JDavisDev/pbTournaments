@@ -6,6 +6,7 @@ import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
 import { getPlatformPricing, getRegistration, getTournament, getTournamentFinance } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
+import { goToCheckout } from '@/lib/http';
 
 export function TestCheckout() {
   const params = useSearchParams();
@@ -23,16 +24,7 @@ function PlayerFeesCheckout({ tournamentId }: { tournamentId: string }) {
   if (!data.data) return <Spinner />;
   const [t, f] = data.data;
   const finish = (outcome: 'pay' | 'cancel') =>
-    pay.run(async () => {
-      const res = await fetch('/api/checkout/test', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ feesTournamentId: tournamentId, outcome }),
-      });
-      const body = (await res.json()) as { url?: string; error?: string };
-      if (!body.url) throw new Error(body.error ?? 'Test checkout failed');
-      window.location.href = body.url;
-    });
+    pay.run(() => goToCheckout('/api/checkout/test', { feesTournamentId: tournamentId, outcome }));
   return (
     <Card className="mx-auto max-w-md p-6">
       <p className="inline-block rounded-full bg-called-soft px-2.5 py-0.5 text-xs font-semibold text-called">
@@ -67,16 +59,7 @@ function SetupFeeCheckout({ tournamentId }: { tournamentId: string }) {
   if (!data.data) return <Spinner />;
   const [t, pricing] = data.data;
   const finish = (outcome: 'pay' | 'cancel') =>
-    pay.run(async () => {
-      const res = await fetch('/api/checkout/test', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ setupTournamentId: tournamentId, outcome }),
-      });
-      const body = (await res.json()) as { url?: string; error?: string };
-      if (!body.url) throw new Error(body.error ?? 'Test checkout failed');
-      window.location.href = body.url;
-    });
+    pay.run(() => goToCheckout('/api/checkout/test', { setupTournamentId: tournamentId, outcome }));
   return (
     <Card className="mx-auto max-w-md p-6">
       <p className="inline-block rounded-full bg-called-soft px-2.5 py-0.5 text-xs font-semibold text-called">
@@ -111,17 +94,7 @@ function RegistrationCheckout() {
   if (!reg.data) return <Empty>Registration not found.</Empty>;
   const r = reg.data;
 
-  const finish = (outcome: 'pay' | 'cancel') =>
-    pay.run(async () => {
-      const res = await fetch('/api/checkout/test', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ registrationId: id, outcome }),
-      });
-      const body = (await res.json()) as { url?: string; error?: string };
-      if (!body.url) throw new Error(body.error ?? 'Test checkout failed');
-      window.location.href = body.url;
-    });
+  const finish = (outcome: 'pay' | 'cancel') => pay.run(() => goToCheckout('/api/checkout/test', { registrationId: id, outcome }));
 
   return (
     <Card className="mx-auto max-w-md p-6">

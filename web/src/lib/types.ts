@@ -107,6 +107,10 @@ export interface Tournament {
   texts_enabled: boolean;
   /** The one-time setup fee; needed before registration opens or play starts. */
   setup_paid_at: string | null;
+  /** Free, no registration, payments or texts: the director pastes in the teams ('registration' = published). */
+  simple: boolean;
+  /** Simple tournaments: anyone with the link may enter the score of a match on court. */
+  anyone_scores: boolean;
 }
 
 export interface PlatformPricing {

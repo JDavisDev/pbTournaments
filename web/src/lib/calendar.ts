@@ -33,7 +33,10 @@ export function googleCalendarUrl(e: CalendarEvent) {
   return `https://calendar.google.com/calendar/render?${params}`;
 }
 
-const escape = (s: string) => s.replace(/[\;,]/g, (c) => `\\${c}`).replace(/\r?\n/g, '\\n');
+// Backslashes, semicolons and commas are escaped, and newlines written as \n.
+const escape = (s: string) => s.replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\r?\n/g, '\\n');
+
+const encoder = new TextEncoder();
 
 /** Lines longer than 75 bytes continue on the next line, starting with a space. */
 function fold(line: string) {
@@ -41,7 +44,7 @@ function fold(line: string) {
   let current = '';
   let bytes = 0;
   for (const char of line) {
-    const size = new TextEncoder().encode(char).length;
+    const size = encoder.encode(char).length;
     if (bytes + size > 74) {
       out.push(current);
       current = ' ';

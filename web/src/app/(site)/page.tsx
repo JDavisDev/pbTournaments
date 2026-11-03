@@ -22,6 +22,16 @@ export default function Home() {
   const create = useAction();
   const router = useRouter();
 
+  // One organization or none (the account gets its own), or a demo site: straight to Setup.
+  const direct = isDemoMode || (session && orgs.data && orgs.data.length <= 1);
+  const start = (simple: boolean) =>
+    create.run(async () => {
+      if (!session) await auth.signInAsGuest();
+      setViewMode('admin');
+      const t = await newTournament(isDemoMode ? null : (orgs.data?.[0]?.id ?? null), simple);
+      router.push(`/t/${t.id}/setup`);
+    });
+
   if (!isBackendConfigured) return <ConnectNotice />;
   const liveNow = (live.data ?? []).filter((t) => t.status === 'live');
 
@@ -36,20 +46,8 @@ export default function Home() {
           out the moment a score comes in.
         </p>
         <div className="mt-7 flex flex-wrap gap-3">
-          {/* One organization or none (the account gets its own), or a demo site: straight to Setup. */}
-          {isDemoMode || (session && orgs.data && orgs.data.length <= 1) ? (
-            <Button
-              variant="primary"
-              disabled={create.busy || session === undefined}
-              onClick={() =>
-                create.run(async () => {
-                  if (!session) await auth.signInAsGuest();
-                  setViewMode('admin');
-                  const t = await newTournament(isDemoMode ? null : (orgs.data?.[0]?.id ?? null));
-                  router.push(`/t/${t.id}/setup`);
-                })
-              }
-            >
+          {direct ? (
+            <Button variant="primary" disabled={create.busy || session === undefined} onClick={() => start(false)}>
               {create.busy ? 'Creating…' : 'Create Tournament'}
             </Button>
           ) : (
@@ -63,6 +61,27 @@ export default function Home() {
           <LinkButton href="/tournaments">Find Tournaments</LinkButton>
         </div>
         <p className="mt-4 text-muted">
+          Just need pools and brackets?{' '}
+          {direct ? (
+            <button
+              type="button"
+              disabled={create.busy || session === undefined}
+              onClick={() => start(true)}
+              className="font-medium text-text underline underline-offset-4 hover:text-brand"
+            >
+              Start a simple tournament for free:
+            </button>
+          ) : (
+            <Link
+              href={!session ? '/profile?mode=login' : '#your-organizations'}
+              className="font-medium text-text underline underline-offset-4 hover:text-brand"
+            >
+              Start a simple tournament for free:
+            </Link>
+          )}{' '}
+          paste in the teams, and players follow their courts on the tournament page. No registration or texts.
+        </p>
+        <p className="mt-2 text-muted">
           Taking sign-ups somewhere else?{' '}
           <Link href="/tournaments/new" className="font-medium text-text underline underline-offset-4 hover:text-brand">
             Advertise your tournament with us for no cost.

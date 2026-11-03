@@ -18,6 +18,8 @@ self.addEventListener('push', (event) => {
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       tag: data.tag,
+      // A new match call replacing an old one in the tray still buzzes.
+      renotify: !!data.tag,
       data: { url: data.url || '/' },
     }),
   );
@@ -30,8 +32,13 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
       const open = windows.find((w) => new URL(w.url).origin === self.location.origin);
-      if (open) return open.navigate(url).then((w) => (w ?? open).focus());
-      return self.clients.openWindow(url);
+      if (!open) return self.clients.openWindow(url);
+      // Focus first, while the tap still counts; a window this worker doesn't
+      // control can't be navigated, so then a new one opens.
+      return open
+        .focus()
+        .then((w) => w.navigate(url))
+        .catch(() => self.clients.openWindow(url));
     }),
   );
 });

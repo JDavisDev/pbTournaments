@@ -2,8 +2,10 @@
 // Supabase. Each one throws an Error with the database's message, which is
 // written to be shown to the director as-is. Local mode has a matching
 // handler for every function here in src/server/localOps.ts.
+import { postJson } from './http';
+import { mapProfile } from './profileTypes';
 import { supabase } from './supabase';
-import { parseTeams, teamName } from './teamText';
+import { pastedTeams } from './teamText';
 import type {
   ChampionshipHold,
   CheckinPlayer,
@@ -159,25 +161,6 @@ export const getLiveTournaments = () =>
     supabase().from('tournaments').select('*').in('status', ['registration', 'live']).order('starts_on').limit(50),
   );
 
-/** A profile from the database: blank fields as '', the way forms hold them. */
-function mapProfile(row: Record<string, unknown> | null): PlayerProfile | null {
-  if (!row) return null;
-  const text = (key: string) => (row[key] == null ? '' : String(row[key]));
-  return {
-    first_name: text('first_name'),
-    last_name: text('last_name'),
-    email: text('email'),
-    phone: text('phone'),
-    sms_opt_in: row.sms_opt_in === true,
-    gender: text('gender') as PlayerProfile['gender'],
-    birth_date: text('birth_date'),
-    dupr_id: text('dupr_id'),
-    dupr_doubles: text('dupr_doubles'),
-    dupr_singles: text('dupr_singles'),
-    self_rating: text('self_rating'),
-  };
-}
-
 // Organizations and tournaments ------------------------------------------
 
 export const createOrganization = (name: string, slug: string) =>
@@ -194,9 +177,12 @@ export const createTournament = (organizationId: string, name: string, startsOn:
     p_court_count: courts,
   });
 
-/** A draft with everything filled in and one division, ready for Setup. On demo sites organizationId may be null. */
-export const newTournament = (organizationId: string | null) =>
-  rpc<Tournament>('new_tournament', { p_organization: organizationId });
+/**
+ * A draft with everything filled in and one division, ready for Setup. On demo
+ * sites organizationId may be null. Simple: free, no registration or texts.
+ */
+export const newTournament = (organizationId: string | null, simple = false) =>
+  rpc<Tournament>(simple ? 'new_simple_tournament' : 'new_tournament', { p_organization: organizationId });
 
 /** A new division with every setting of this one (not its teams). */
 export const copyEvent = (eventId: string) => rpc<TournamentEvent>('copy_event', { p_event: eventId });
@@ -235,29 +221,9 @@ export async function deleteEvent(id: string) {
   await select(supabase().from('events').delete().eq('id', id).select('id'));
 }
 
-/** Adds teams from lines like "Pat Davis / Sam Lee" or "Davis/Lee"; line order = seed order. */
-export async function addTeamsFromText(eventId: string, text: string, firstSeed: number) {
-  const teams = parseTeams(text);
-  let seed = firstSeed;
-  for (const people of teams) {
-    const players = await select<{ id: string }[]>(supabase().from('players').insert(people).select('id'));
-    const team = await select<{ id: string }>(
-      supabase()
-        .from('teams')
-        .insert({ event_id: eventId, name: teamName(people), seed })
-        .select('id')
-        .single(),
-    );
-    await select(
-      supabase()
-        .from('team_players')
-        .insert(players.map((p) => ({ team_id: team.id, player_id: p.id })))
-        .select('team_id'),
-    );
-    seed += 1;
-  }
-  return teams.length;
-}
+/** Adds teams from lines like "Pat Davis / Sam Lee" or "Davis/Lee"; line order = seed order. All or none. */
+export const addTeamsFromText = (eventId: string, text: string, firstSeed: number) =>
+  rpc<number>('add_teams', { p_event: eventId, p_teams: pastedTeams(text), p_first_seed: firstSeed });
 
 export async function deleteTeam(id: string) {
   await select(supabase().from('teams').delete().eq('id', id).select('id'));
@@ -488,33 +454,14 @@ export const getCardRefundPlan = (tournamentId: string, playerId: string) =>
   rpc<CardRefundPlan>('card_refund_plan', { p_tournament: tournamentId, p_player: playerId });
 /** Refunds to the player's card (newest payments first), keeping keepCents as the refund fee. */
 export async function refundPlayerToCard(tournamentId: string, playerId: string, amountCents: number, keepCents: number) {
-  const { data } = await supabase().auth.getSession();
-  const res = await fetch('/api/refunds', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(data.session ? { authorization: `Bearer ${data.session.access_token}` } : {}),
-    },
-    body: JSON.stringify({ tournamentId, playerId, amountCents, keepCents }),
-  });
-  const body = (await res.json()) as { error?: string };
-  if (!res.ok) throw new Error(body.error ?? 'Could not refund');
+  await postJson('/api/refunds', { tournamentId, playerId, amountCents, keepCents }, { signedIn: true });
 }
 export const getPaymentsStatus = (tournamentId: string) => rpc<PaymentsStatus>('payments_status', { p_tournament: tournamentId });
 /** The owner: where to go to connect (or finish connecting) their Stripe account. */
 export async function connectPayments(tournamentId: string) {
-  const { data } = await supabase().auth.getSession();
-  const res = await fetch('/api/connect/onboard', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(data.session ? { authorization: `Bearer ${data.session.access_token}` } : {}),
-    },
-    body: JSON.stringify({ tournamentId }),
-  });
-  const body = (await res.json()) as { url?: string; error?: string };
-  if (!body.url) throw new Error(body.error ?? 'Could not connect Stripe');
-  return body.url;
+  const { url } = await postJson<{ url?: string }>('/api/connect/onboard', { tournamentId }, { signedIn: true });
+  if (!url) throw new Error('Could not connect Stripe');
+  return url;
 }
 
 // Sharing with other admins and court monitors -------------------------------
@@ -706,26 +653,14 @@ export const savePushSubscription = (endpoint: string, p256dh: string, auth: str
 export const deletePushSubscription = (endpoint: string) => rpc<void>('delete_push_subscription', { p_endpoint: endpoint });
 /** A test alert to the signed-in account's phones; returns how many got it. */
 export async function sendTestPush() {
-  const { data } = await supabase().auth.getSession();
-  const res = await fetch('/api/push/test', {
-    method: 'POST',
-    headers: data.session ? { authorization: `Bearer ${data.session.access_token}` } : {},
-  });
-  const body = (await res.json()) as { sent?: number; error?: string };
-  if (!res.ok) throw new Error(body.error ?? 'Could not send a test alert');
-  return body.sent ?? 0;
+  const { sent } = await postJson<{ sent?: number }>('/api/push/test', undefined, { signedIn: true });
+  return sent ?? 0;
 }
 
 // Account ---------------------------------------------------------------------
 
 /** Deletes the signed-in account (see public.delete_my_account), then signs out. */
 export async function deleteMyAccount() {
-  const { data } = await supabase().auth.getSession();
-  const res = await fetch('/api/account/delete', {
-    method: 'POST',
-    headers: data.session ? { authorization: `Bearer ${data.session.access_token}` } : {},
-  });
-  const body = (await res.json()) as { error?: string };
-  if (!res.ok) throw new Error(body.error ?? 'Could not delete your account');
+  await postJson('/api/account/delete', undefined, { signedIn: true });
   await supabase().auth.signOut();
 }

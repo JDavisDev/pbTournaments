@@ -33,6 +33,9 @@ interface RegistrationView {
   payments_ready: boolean;
   /** Courtside's fee from this payment. */
   platform_fee_cents: number;
+  /** The Stripe checkout already started for it, and the account it runs on. */
+  checkout_session_id: string | null;
+  checkout_account: string | null;
 }
 
 export const getRegistration = (id: string) =>
@@ -51,11 +54,24 @@ export async function startCheckout(registrationId: string): Promise<string> {
     throw new Error('This tournament can’t take card payments yet. Contact the director.');
   }
 
+  // One open checkout per registration, so the player can't pay twice (going
+  // back from Stripe and pressing Pay again starts a new one).
+  if (r.checkout_session_id && r.checkout_account) {
+    const options = { stripeAccount: r.checkout_account };
+    const previous = await stripe().checkout.sessions.retrieve(r.checkout_session_id, {}, options).catch(() => null);
+    // Paid, and the webhook hasn't caught up yet.
+    if (previous?.status === 'complete') return done;
+    if (previous?.status === 'open') await stripe().checkout.sessions.expire(previous.id, {}, options).catch(() => null);
+  }
+
   // A direct charge on the organization's account: the payment, its card fee,
   // refunds and disputes are theirs; Courtside's fee comes out of it.
   const session = await stripe().checkout.sessions.create(
     {
     mode: 'payment',
+    // A pending registration holds its spots for 30 minutes, so the checkout
+    // closes then too (30 minutes is Stripe's shortest): a late payment can't overfill a division.
+    expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
     customer_email: r.email,
     line_items: [
       {

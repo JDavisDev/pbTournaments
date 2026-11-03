@@ -2,7 +2,7 @@
 // with made-up ratings on a demo site so the warnings can be tried.
 import { getDuprRefreshList, importDuprRatings } from './api';
 import { isDemoMode, isLocalMode } from './config';
-import { supabase } from './supabase';
+import { postJson } from './http';
 import type { RatingsImport } from './types';
 
 export interface RatingRefresh {
@@ -34,17 +34,7 @@ async function simulate(tournamentId: string): Promise<RatingRefresh> {
 
 export async function refreshDuprRatings(tournamentId: string): Promise<RatingRefresh> {
   if (isLocalMode) return simulate(tournamentId);
-  const { data } = await supabase().auth.getSession();
-  const res = await fetch('/api/dupr/refresh', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(data.session ? { authorization: `Bearer ${data.session.access_token}` } : {}),
-    },
-    body: JSON.stringify({ tournamentId }),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error ?? 'Could not refresh ratings');
+  const body = await postJson<Omit<RatingRefresh, 'simulated'>>('/api/dupr/refresh', { tournamentId }, { signedIn: true });
   if (!body.connected) return isDemoMode ? simulate(tournamentId) : { ...empty, connected: false, simulated: false };
   return { simulated: false, ...body };
 }

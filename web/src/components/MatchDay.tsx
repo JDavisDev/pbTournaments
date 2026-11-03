@@ -12,11 +12,26 @@ export const STEPS = [
   { title: 'Enter the score', hint: 'One player enters it when you finish. That frees the court.' },
 ] as const;
 
-/** Steps 0–3; `current` past the last means the day is done. */
-export function MatchSteps({ current, hints = {} }: { current: number; hints?: Partial<Record<number, string>> }) {
+/**
+ * Steps 0–3; `current` past the last means the day is done. Simple
+ * tournaments have no check-in and send no texts: players watch for their court.
+ */
+export function MatchSteps({
+  current,
+  hints = {},
+  simple = false,
+}: {
+  current: number;
+  hints?: Partial<Record<number, string>>;
+  simple?: boolean;
+}) {
+  const steps = simple
+    ? STEPS.map((s, i) => (i === 1 ? { ...s, hint: 'Stay nearby. Your court shows here and on the court board when you’re up.' } : s))
+    : STEPS;
   return (
-    <ol className="grid gap-2 md:grid-cols-4" aria-label="Your match day">
-      {STEPS.map((s, i) => {
+    <ol className={`grid gap-2 ${simple ? 'md:grid-cols-3' : 'md:grid-cols-4'}`} aria-label="Your match day">
+      {steps.map((s, i) => {
+        if (simple && i === 0) return null;
         const state = i < current ? 'done' : i === current ? 'now' : 'later';
         return (
           <li
@@ -31,7 +46,7 @@ export function MatchSteps({ current, hints = {} }: { current: number; hints?: P
                 state === 'now' ? 'bg-accent-text text-accent' : state === 'done' ? 'bg-live text-white' : 'bg-surface text-muted'
               }`}
             >
-              {state === 'done' ? <Icon name="check" className="h-5 w-5" /> : i + 1}
+              {state === 'done' ? <Icon name="check" className="h-5 w-5" /> : simple ? i : i + 1}
             </span>
             <span>
               <span className="block font-semibold">

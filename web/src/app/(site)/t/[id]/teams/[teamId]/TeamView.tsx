@@ -135,6 +135,8 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
       <MatchDayPanel
         tournamentId={id}
         team={team}
+        simple={data.tournament.simple}
+        anyoneScores={data.tournament.simple && data.tournament.anyone_scores}
         checkInBy={
           event.started_at && data.tournament.checkin_grace_minutes !== null
             ? formatTime(new Date(new Date(event.started_at).getTime() + data.tournament.checkin_grace_minutes * 60_000).toISOString(), tz)
@@ -239,9 +241,15 @@ function MatchDayPanel({
   now,
   started,
   checkInBy,
+  simple,
+  anyoneScores,
 }: {
   tournamentId: string;
   team: Team;
+  /** A simple tournament: no check-in, no texts. */
+  simple: boolean;
+  /** Anyone may enter the score of a match on court. */
+  anyoneScores: boolean;
   /** The division has started (start_event). */
   started: boolean;
   /** When the team forfeits if it hasn't checked in, as a time; null = no deadline. */
@@ -258,11 +266,12 @@ function MatchDayPanel({
   const scoreCode = useScoreCode(onCourt?.id);
   const staff = useStaffAccess(tournamentId);
   // Scores go in right here: with the code from the player's text link (it
-  // proves they're in the match), or as tournament staff.
+  // proves they're in the match), as tournament staff, or by anyone when a
+  // simple tournament allows it.
   const enterScore =
     onCourt && scoreCode
       ? (games: [number, number][]) => reportScoreByCode(scoreCode, games)
-      : onCourt && staff.role
+      : onCourt && (staff.role || anyoneScores)
         ? (games: [number, number][]) => reportScore(onCourt.id, games)
         : null;
   const allDone = mine.length > 0 && mine.every((m) => m.status === 'completed');
@@ -287,6 +296,7 @@ function MatchDayPanel({
       {mine.length > 0 && (
         <MatchSteps
           current={step}
+          simple={simple}
           hints={{
             0: team.checked_in_at
               ? undefined
@@ -295,7 +305,9 @@ function MatchDayPanel({
                 : started
                   ? 'Your division has started. Both players check in at the front desk now.'
                   : 'At the front desk. Both players check in.',
-            1: nextQueue ? `You’re number ${nextQueue.queue_rank} in line. We’ll text you the court.` : undefined,
+            1: nextQueue
+              ? `You’re number ${nextQueue.queue_rank} in line. ${simple ? 'Your court shows here when you’re up.' : 'We’ll text you the court.'}`
+              : undefined,
             2: onCourt ? `Go to ${onCourt.court_name} now and play. ${capitalized(onCourt.format_text)}.` : undefined,
           }}
         />
@@ -335,7 +347,7 @@ function MatchDayPanel({
             </div>
           ) : (
             <p className="rounded-xl bg-surface-2 px-4 py-3 text-left">
-              <b>To enter the score:</b> tap the link in the text we sent you, or tell the front desk.
+              <b>To enter the score:</b> {simple ? 'tell the tournament director.' : 'tap the link in the text we sent you, or tell the front desk.'}
             </p>
           )}
           {onCourt.court_stream_url && <StreamEmbed url={onCourt.court_stream_url} title={`${onCourt.court_name} live`} />}
@@ -357,7 +369,11 @@ function MatchDayPanel({
             <FormatLine text={next.format_text} />
             {nextQueue && <QueueStatus row={nextQueue} />}
           </div>
-          <p className="text-muted">Stay nearby. We’ll text you the court number when it’s your turn.</p>
+          <p className="text-muted">
+            {simple
+              ? 'Stay nearby. Your court shows here and on the court board when it’s your turn.'
+              : 'Stay nearby. We’ll text you the court number when it’s your turn.'}
+          </p>
         </Card>
       ) : (
         <Card className="p-5">

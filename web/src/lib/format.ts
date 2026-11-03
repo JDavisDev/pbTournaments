@@ -37,12 +37,6 @@ export function minutesSince(iso: string | null | undefined, now: number) {
   return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60_000));
 }
 
-export const formatLabel: Record<EventFormat, string> = {
-  round_robin: 'Round robin',
-  pools_to_bracket: 'Pools → bracket',
-  single_elim: 'Bracket',
-};
-
 export function formatSummary(e: {
   format: EventFormat;
   pool_count: number;
@@ -267,10 +261,11 @@ export function oneEventPrice(t: Priced, now: number = Date.now()) {
  * In registration, or live once a director reopens it, until any closing date.
  */
 export function registrationOpen(
-  t: Pick<Tournament, 'status' | 'registration_reopened' | 'registration_closes_at'>,
+  t: Pick<Tournament, 'status' | 'registration_reopened' | 'registration_closes_at' | 'simple'>,
   now: number = Date.now(),
 ) {
   return (
+    !t.simple &&
     (t.status === 'registration' || (t.status === 'live' && t.registration_reopened)) &&
     (!t.registration_closes_at || new Date(t.registration_closes_at).getTime() >= now)
   );

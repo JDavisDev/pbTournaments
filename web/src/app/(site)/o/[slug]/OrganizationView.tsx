@@ -79,6 +79,18 @@ export function OrganizationView({ params }: { params: Promise<{ slug: string }>
               >
                 {create.busy ? 'Creating…' : 'New tournament'}
               </Button>
+              <Button
+                disabled={create.busy}
+                onClick={() =>
+                  create.run(async () => {
+                    const t = await newTournament(organization.id, true);
+                    router.push(`/t/${t.id}/setup`);
+                  })
+                }
+              >
+                Simple tournament (free)
+              </Button>
+              <p className="text-sm text-muted">Simple: paste in the teams and run pools and brackets. No registration, payments or texts.</p>
             </Card>
 
             <Card className="p-5">

@@ -19,7 +19,8 @@ export function PricingBlock() {
     <section className="mb-12">
       <h2 className="text-4xl">Simple pricing</h2>
       <p className="mt-1 max-w-prose text-muted">
-        No percentage of your entries, no ads, no surprises. Card processing is at cost.
+        No percentage of your entries, no ads, no surprises. Card processing is at cost. Simple tournaments (you paste in the
+        teams; no registration or texts) are free.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {items.map(([price, per, what]) => (

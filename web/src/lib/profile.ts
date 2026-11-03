@@ -4,7 +4,7 @@
 // to their account, the same one that runs any tournaments they manage.
 import { useEffect, useSyncExternalStore } from 'react';
 import { getMyProfile, saveMyProfile } from './api';
-import { auth, isGuest } from './auth';
+import { auth } from './auth';
 import { isDemoMode } from './config';
 import { useSession } from './hooks';
 import type { PlayerProfile } from './profileTypes';
@@ -22,6 +22,7 @@ interface State {
 }
 const unknown: State = { userId: undefined, profile: null };
 let state = unknown;
+/** The account whose profile is on its way; a switch of account drops it. */
 let loading: string | null = null;
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => (listeners.add(l), () => listeners.delete(l));
@@ -31,17 +32,24 @@ function publish(next: State) {
 }
 
 async function load(userId: string | null) {
-  if (state.userId === userId) return;
-  if (!userId) return publish({ userId: null, profile: null });
+  if (state.userId === userId) {
+    loading = null;
+    return;
+  }
+  if (!userId) {
+    loading = null;
+    return publish({ userId: null, profile: null });
+  }
   if (loading === userId) return;
   loading = userId;
+  let profile: PlayerProfile | null = null;
   try {
-    publish({ userId, profile: (await getMyProfile()) ?? (await savePending()) });
-  } catch {
-    publish({ userId, profile: null });
-  } finally {
-    loading = null;
-  }
+    profile = (await getMyProfile()) ?? (await savePending());
+  } catch {}
+  // Signed out or switched accounts while it loaded: that one counts instead.
+  if (loading !== userId) return;
+  loading = null;
+  publish({ userId, profile });
 }
 
 /**
@@ -96,9 +104,6 @@ export async function logInPlayer(email: string, password: string) {
 }
 
 export const logOut = () => auth.signOut();
-
-/** Whether this account's details should be kept: not the demo's shared guest. */
-export const keepsProfile = (user: Parameters<typeof isGuest>[0] | null | undefined) => !!user && !isGuest(user);
 
 // Test menu ------------------------------------------------------------------
 

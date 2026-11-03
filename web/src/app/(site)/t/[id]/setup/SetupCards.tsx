@@ -23,6 +23,7 @@ import {
 } from '@/lib/api';
 import { formatMoney, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
+import { goToCheckout } from '@/lib/http';
 import { shrinkImage } from '@/lib/image';
 import { ANNOUNCEMENT_MAX } from '@/components/Announcement';
 import { useUnsaved } from './SaveAll';
@@ -398,17 +399,7 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
   const f = fees.data;
   if (!f) return null;
 
-  const paySetup = () =>
-    run(async () => {
-      const res = await fetch('/api/checkout/setup', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ tournamentId: tournament.id }),
-      });
-      const body = (await res.json()) as { url?: string; error?: string };
-      if (!body.url) throw new Error(body.error ?? 'Could not start checkout');
-      window.location.href = body.url;
-    });
+  const paySetup = () => run(() => goToCheckout('/api/checkout/setup', { tournamentId: tournament.id }));
 
   return (
     <SettingsGroup

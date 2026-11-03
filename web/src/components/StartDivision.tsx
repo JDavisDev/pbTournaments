@@ -19,6 +19,7 @@ export function StartDivision({
   graceMinutes,
   scheduledFor = null,
   timeZone,
+  simple = false,
   onStarted,
 }: {
   eventId: string;
@@ -30,6 +31,8 @@ export function StartDivision({
   /** events.not_before: starting before it is fine, and play begins right away. */
   scheduledFor?: string | null;
   timeZone: string;
+  /** A simple tournament: no check-in, everyone entered is there. */
+  simple?: boolean;
   onStarted: () => void;
 }) {
   const { busy, error, run } = useAction();
@@ -38,7 +41,7 @@ export function StartDivision({
     scheduledFor && new Date(scheduledFor).getTime() > now
       ? `It’s scheduled for ${dayHeading(toZonedInput(scheduledFor, timeZone).slice(0, 10))}, ${formatTime(scheduledFor, timeZone)}; starting now puts its matches on court right away.`
       : '';
-  const missing = teams - teamsReady;
+  const missing = simple ? 0 : teams - teamsReady;
   const late =
     missing === 0
       ? ''
@@ -51,7 +54,7 @@ export function StartDivision({
       <div>
         <p className="font-semibold">{eventName} hasn’t started</p>
         <p className="text-muted">
-          No matches go on court until you start it. {teamsReady} of {teams} teams are checked in. {late}
+          No matches go on court until you start it.{simple ? ` ${teams} teams.` : ` ${teamsReady} of ${teams} teams are checked in. ${late}`}
         </p>
         {early && <p className="mt-1 text-sm text-called">{early}</p>}
       </div>
