@@ -134,6 +134,24 @@ export function ageText(e: Division) {
 
 const genderText = { open: '', mens: "Men's", womens: "Women's", mixed: 'Mixed' } as const;
 
+type Typed = Pick<TournamentEvent, 'kind' | 'gender'>;
+const typeOrder = (e: Typed) => (e.kind === 'singles' ? 4 : 0) + ['mens', 'womens', 'mixed', 'open'].indexOf(e.gender);
+
+/** "Men's doubles", "Open singles": the heading a division is listed under. */
+export function divisionType(e: Typed) {
+  return `${genderText[e.gender] || 'Open'} ${e.kind === 'singles' ? 'singles' : 'doubles'}`;
+}
+
+/**
+ * Divisions under their type, doubles first (men's, women's, mixed, open),
+ * each keeping its order. One group when they're all the same type.
+ */
+export function groupByType<T extends Typed>(events: T[]): { type: string; events: T[] }[] {
+  const groups = new Map<number, T[]>();
+  for (const e of events) groups.set(typeOrder(e), [...(groups.get(typeOrder(e)) ?? []), e]);
+  return [...groups.entries()].sort(([a], [b]) => a - b).map(([, list]) => ({ type: divisionType(list[0]), events: list }));
+}
+
 /** "Men's Doubles 3.5 50+": a name to start from when creating an event. */
 export function suggestEventName(e: Division) {
   return [genderText[e.gender] || 'Open', e.kind === 'singles' ? 'Singles' : 'Doubles', skillText(e), ageText(e)]
@@ -141,11 +159,11 @@ export function suggestEventName(e: Division) {
     .join(' ');
 }
 
-/** "Men's doubles · 3.5 (DUPR) · ages 50+ · up to 16 teams" */
-export function describeDivision(e: Division & { dupr_rated?: boolean }) {
+/** "Men's doubles · 3.5 (DUPR) · ages 50+ · up to 16 teams"; without the type when a heading shows it. */
+export function describeDivision(e: Division & { dupr_rated?: boolean }, { withType = true } = {}) {
   const skill = skillText(e);
   return [
-    `${genderText[e.gender] ? `${genderText[e.gender]} ` : ''}${e.kind === 'singles' ? 'singles' : 'doubles'}`,
+    withType ? `${genderText[e.gender] ? `${genderText[e.gender]} ` : ''}${e.kind === 'singles' ? 'singles' : 'doubles'}` : '',
     skill ? `${skill}${e.rating_source === 'dupr' ? ' (DUPR)' : ''}${e.allow_play_up ? ', play-up OK' : ''}` : 'all levels',
     ageText(e) ? `ages ${ageText(e)}${e.age_basis === 'year_end' ? ' by Dec 31' : ''}` : '',
     e.team_rating_max ? `team rating under ${Number(e.team_rating_max).toFixed(1)}` : '',

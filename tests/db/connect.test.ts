@@ -29,7 +29,7 @@ describe('Stripe Connect', () => {
   it('takes Courtside’s fee from each payment and pays into the organization’s account', async () => {
     const { tournamentId, org, owner, reg } = await setup();
     let checkout = (await one(db, 'select public.registration_for_checkout($1) as r', [reg])).r;
-    expect(checkout).toMatchObject({ stripe_account_id: null, payments_ready: false, platform_fee_cents: 225 });
+    expect(checkout).toMatchObject({ stripe_account_id: null, payments_ready: false, platform_fee_cents: 275 });
 
     await db.query(`select public.save_payment_account($1, 'acct_123', true, true)`, [org]);
     checkout = (await one(db, 'select public.registration_for_checkout($1) as r', [reg])).r;
@@ -43,15 +43,15 @@ describe('Stripe Connect', () => {
       can_manage: true,
     });
 
-    await db.query(`select public.attach_checkout_session($1, 'cs_1', 'acct_123', 225)`, [reg]);
+    await db.query(`select public.attach_checkout_session($1, 'cs_1', 'acct_123', 275)`, [reg]);
     await db.query(`select public.confirm_registration_payment($1, 'stripe', 'cs_1', 4000)`, [reg]);
     expect(await one(db, 'select status, platform_fee_cents, stripe_account_id from public.registrations where id = $1', [reg])).toEqual({
       status: 'paid',
-      platform_fee_cents: 225,
+      platform_fee_cents: 275,
       stripe_account_id: 'acct_123',
     });
     const fees = (await asRole(db, 'authenticated', () => one(db, 'select public.tournament_fees($1) as r', [tournamentId]))).r;
-    expect(fees).toMatchObject({ fees_collected_cents: 225 });
+    expect(fees).toMatchObject({ fees_collected_cents: 275 });
   });
 
   it('lets only the organization’s owners and admins set up payouts', async () => {

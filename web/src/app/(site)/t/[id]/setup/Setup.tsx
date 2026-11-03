@@ -4,6 +4,7 @@
 // SetupCards and CourtCards), then its divisions (EventCard, EventForm).
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { DivisionGroups } from '@/components/DivisionGroups';
 import { Icon } from '@/components/Icon';
 import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
 import { getCourtBoard, getEventMerges, getEvents, getMatches, getTeams, getTournament } from '@/lib/api';
@@ -125,22 +126,27 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
           </Card>
         )}
         {data.events.length === 0 && !adding && <Empty>Add your first division, e.g. “Men’s Doubles 3.5”.</Empty>}
-        {data.events.map((e) => (
-          <EventCard
-            key={e.id}
-            event={e}
-            timeZone={data.tournament.time_zone}
-            firstEventIncluded={!simple && data.tournament.first_event_included}
-            simple={simple}
-            courts={data.courts}
-            teams={data.teams.filter((t) => t.event_id === e.id)}
-            matches={data.matches.filter((m) => m.event_id === e.id)}
-            isDemo={data.tournament.is_demo}
-            others={data.events.filter((o) => o.id !== e.id && o.kind === e.kind && !o.started_at)}
-            merges={data.merges.filter((m) => m.into_event_id === e.id)}
-            onChanged={reload}
-          />
-        ))}
+        <DivisionGroups events={data.events}>
+          {(group, headed) =>
+            group.map((e) => (
+              <EventCard
+                key={e.id}
+                event={e}
+                headed={headed}
+                timeZone={data.tournament.time_zone}
+                firstEventIncluded={!simple && data.tournament.first_event_included}
+                simple={simple}
+                courts={data.courts}
+                teams={data.teams.filter((t) => t.event_id === e.id)}
+                matches={data.matches.filter((m) => m.event_id === e.id)}
+                isDemo={data.tournament.is_demo}
+                others={data.events.filter((o) => o.id !== e.id && o.kind === e.kind && !o.started_at)}
+                merges={data.merges.filter((m) => m.into_event_id === e.id)}
+                onChanged={reload}
+              />
+            ))
+          }
+        </DivisionGroups>
         <Button variant="ghost" className="self-start" onClick={() => go('settings')}>
           ← Back to tournament settings
         </Button>

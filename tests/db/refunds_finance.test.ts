@@ -22,7 +22,7 @@ async function setup() {
     ])
   ).id;
   await db.query('insert into public.registration_entries (registration_id, event_id, team_id) values ($1, $2, $3)', [reg, eventId, team]);
-  await db.query(`select public.attach_checkout_session($1, 'cs_1', 'acct_1', 225)`, [reg]);
+  await db.query(`select public.attach_checkout_session($1, 'cs_1', 'acct_1', 275)`, [reg]);
   await db.query(`select public.confirm_registration_payment($1, 'stripe', 'cs_1', 4000)`, [reg]);
   return { tournamentId, jo, reg };
 }
@@ -54,11 +54,11 @@ describe('Courtside’s fee for every player', () => {
   it('bills the director for players no card payment covered', async () => {
     const { tournamentId } = await setup();
     const f = await finance(tournamentId);
-    expect(f.courtside).toMatchObject({ from_cards_cents: 225, uncovered_players: 1, owed_cents: 225, rate_cents: 225 });
+    expect(f.courtside).toMatchObject({ from_cards_cents: 275, uncovered_players: 1, owed_cents: 275, rate_cents: 275 });
     expect(f.divisions[0]).toMatchObject({ name: 'Open', teams: 1, players: 2 });
 
-    await db.query(`select public.confirm_player_fees_payment($1, 'stripe', 'cs_fees', 225)`, [tournamentId]);
-    await db.query(`select public.confirm_player_fees_payment($1, 'stripe', 'cs_fees', 225)`, [tournamentId]);
-    expect((await finance(tournamentId)).courtside).toMatchObject({ owed_cents: 0, paid_separately_cents: 225 });
+    await db.query(`select public.confirm_player_fees_payment($1, 'stripe', 'cs_fees', 275)`, [tournamentId]);
+    await db.query(`select public.confirm_player_fees_payment($1, 'stripe', 'cs_fees', 275)`, [tournamentId]);
+    expect((await finance(tournamentId)).courtside).toMatchObject({ owed_cents: 0, paid_separately_cents: 275 });
   });
 });

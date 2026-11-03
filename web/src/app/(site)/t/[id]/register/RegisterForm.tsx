@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { DivisionGroups } from '@/components/DivisionGroups';
 import { Badge, Button, Card, Empty, ErrorText, Field, Input, Select, Spinner } from '@/components/ui';
 import {
   checkDiscountCode,
@@ -392,99 +393,103 @@ function Form({ id, saved, isStaff }: { id: string; saved: PlayerProfile | null;
       </Card>
       )}
 
-      <Card className="flex flex-col gap-3 p-5">
-        <h3 className="text-xl">Events</h3>
+      <Card className="flex flex-col gap-4 p-5">
+        <h3 className="text-2xl">Events</h3>
         {events.length === 0 && <p className="text-sm text-muted">No events yet.</p>}
-        {events.map((e) => {
-          const picked = chosen[e.id];
-          const problem = problems[e.id];
-          // "Needs your ..." isn't a no: it just means fill in that field first.
-          const blocked = problem !== null && !problem.startsWith('needs');
-          return (
-            <div
-              key={e.id}
-              className={`rounded-xl border p-3 ${picked ? 'border-text bg-surface' : 'border-border'} ${blocked && !picked ? 'opacity-50' : ''}`}
-            >
-              <label className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-5 w-5 accent-[var(--accent)]"
-                  checked={!!picked}
-                  disabled={blocked && !picked}
-                  onChange={() => toggle(e.id)}
-                />
-                <span>
-                  <span className="font-medium">{e.name}</span>
-                  <span className="block text-sm text-muted">
-                    {describeDivision(e)}
-                    {e.not_before && t.times_published_at ? ` · starts ${formatTime(e.not_before, t.time_zone)}` : ''}
-                    {e.started_at && director ? ' · already started: joins as an alternate' : ''}
-                    {t.first_event_included && !e.included_in_registration
-                      ? ` · always ${formatMoney(fees.event)}, not covered by registration`
-                      : ''}
-                  </span>
-                  <span className="mt-1 flex flex-wrap gap-1.5">
-                    {paidByPartner.has(e.id) ? (
-                      <Badge tone="live">Your partner paid your entry</Badge>
-                    ) : full.has(e.id) ? (
-                      <Badge tone="called">Full: you’ll join the waitlist</Badge>
-                    ) : spotsLeft.get(e.id) != null && spotsLeft.get(e.id)! <= 6 ? (
-                      <Badge tone="info">{Math.ceil(spotsLeft.get(e.id)! / (e.kind === 'doubles' ? 2 : 1))} spots left</Badge>
-                    ) : null}
-                  </span>
-                  {problem && (
-                    <span className={`block text-sm ${blocked ? 'text-late' : 'text-called'}`}>This event {problem}.</span>
-                  )}
-                </span>
-              </label>
-              {picked && e.kind === 'doubles' && (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <Field label={e.partner_required ? 'Partner’s name' : 'Partner’s name (optional)'}>
-                    <Input
-                      required={e.partner_required}
-                      value={picked.partner_name}
-                      onChange={(ev) => setPartner(e.id, 'partner_name', ev.target.value)}
+        <DivisionGroups events={events} heading="h4">
+          {(group, headed) =>
+            group.map((e) => {
+              const picked = chosen[e.id];
+              const problem = problems[e.id];
+              // "Needs your ..." isn't a no: it just means fill in that field first.
+              const blocked = problem !== null && !problem.startsWith('needs');
+              return (
+                <div
+                  key={e.id}
+                  className={`rounded-xl border p-3 ${picked ? 'border-text bg-surface' : 'border-border'} ${blocked && !picked ? 'opacity-50' : ''}`}
+                >
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-5 w-5 accent-[var(--accent)]"
+                      checked={!!picked}
+                      disabled={blocked && !picked}
+                      onChange={() => toggle(e.id)}
                     />
-                  </Field>
-                  <Field
-                    label={e.partner_required ? 'Partner’s email' : 'Partner’s email (optional)'}
-                    hint={
-                      picked.pay_for_partner
-                        ? 'We email you their sign-up link'
-                        : e.partner_required
-                          ? 'They register separately'
-                          : 'No partner yet? Leave blank and the desk will pair you.'
-                    }
-                  >
-                    <Input
-                      type="email"
-                      required={e.partner_required || picked.pay_for_partner}
-                      value={picked.partner_email}
-                      onChange={(ev) => setPartner(e.id, 'partner_email', ev.target.value)}
-                    />
-                  </Field>
-                  {!full.has(e.id) && !paidByPartner.has(e.id) && (
-                    <label className="flex items-start gap-3 rounded-xl bg-surface-2 p-3 sm:col-span-2">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 h-5 w-5 accent-[var(--accent)]"
-                        checked={picked.pay_for_partner}
-                        onChange={(ev) => setPartner(e.id, 'pay_for_partner', ev.target.checked)}
-                      />
-                      <span>
-                        <span className="font-medium">Pay for my partner too (+{formatMoney(partnerCost(e.id))})</span>
-                        <span className="block text-sm text-muted">
-                          Their spot is held. They still register to add their own details and agree to the waiver, and
-                          this event costs them nothing.
-                        </span>
+                    <span>
+                      <span className="font-medium">{e.name}</span>
+                      <span className="block text-sm text-muted">
+                        {describeDivision(e, { withType: !headed })}
+                        {e.not_before && t.times_published_at ? ` · starts ${formatTime(e.not_before, t.time_zone)}` : ''}
+                        {e.started_at && director ? ' · already started: joins as an alternate' : ''}
+                        {t.first_event_included && !e.included_in_registration
+                          ? ` · always ${formatMoney(fees.event)}, not covered by registration`
+                          : ''}
                       </span>
-                    </label>
+                      <span className="mt-1 flex flex-wrap gap-1.5">
+                        {paidByPartner.has(e.id) ? (
+                          <Badge tone="live">Your partner paid your entry</Badge>
+                        ) : full.has(e.id) ? (
+                          <Badge tone="called">Full: you’ll join the waitlist</Badge>
+                        ) : spotsLeft.get(e.id) != null && spotsLeft.get(e.id)! <= 6 ? (
+                          <Badge tone="info">{Math.ceil(spotsLeft.get(e.id)! / (e.kind === 'doubles' ? 2 : 1))} spots left</Badge>
+                        ) : null}
+                      </span>
+                      {problem && (
+                        <span className={`block text-sm ${blocked ? 'text-late' : 'text-called'}`}>This event {problem}.</span>
+                      )}
+                    </span>
+                  </label>
+                  {picked && e.kind === 'doubles' && (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Field label={e.partner_required ? 'Partner’s name' : 'Partner’s name (optional)'}>
+                        <Input
+                          required={e.partner_required}
+                          value={picked.partner_name}
+                          onChange={(ev) => setPartner(e.id, 'partner_name', ev.target.value)}
+                        />
+                      </Field>
+                      <Field
+                        label={e.partner_required ? 'Partner’s email' : 'Partner’s email (optional)'}
+                        hint={
+                          picked.pay_for_partner
+                            ? 'We email you their sign-up link'
+                            : e.partner_required
+                              ? 'They register separately'
+                              : 'No partner yet? Leave blank and the desk will pair you.'
+                        }
+                      >
+                        <Input
+                          type="email"
+                          required={e.partner_required || picked.pay_for_partner}
+                          value={picked.partner_email}
+                          onChange={(ev) => setPartner(e.id, 'partner_email', ev.target.value)}
+                        />
+                      </Field>
+                      {!full.has(e.id) && !paidByPartner.has(e.id) && (
+                        <label className="flex items-start gap-3 rounded-xl bg-surface-2 p-3 sm:col-span-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-5 w-5 accent-[var(--accent)]"
+                            checked={picked.pay_for_partner}
+                            onChange={(ev) => setPartner(e.id, 'pay_for_partner', ev.target.checked)}
+                          />
+                          <span>
+                            <span className="font-medium">Pay for my partner too (+{formatMoney(partnerCost(e.id))})</span>
+                            <span className="block text-sm text-muted">
+                              Their spot is held. They still register to add their own details and agree to the waiver, and
+                              this event costs them nothing.
+                            </span>
+                          </span>
+                        </label>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })
+          }
+        </DivisionGroups>
       </Card>
 
       {(payingFor.length > 0 || coveredPicks.length > 0) && (

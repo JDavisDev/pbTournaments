@@ -182,7 +182,7 @@ Every court call queues one text per player in `notifications`, with the round's
 
 ## Platform fees
 
-Prices are one row in `private.platform_pricing` (default: $15 setup per tournament, $2 per player, $0.25 texting per player); change them with SQL, no code. `tournaments.texts_enabled` off means no texts are created at all (and no texting fee); emails still go. `set_tournament_status` refuses `registration` or `live` until the setup fee is paid (`setup_paid_at`), except for practice tournaments.
+Prices are one row in `private.platform_pricing` (default: $15 setup per tournament, $2.50 per player, $0.25 texting per player); change them with SQL, no code. `tournaments.texts_enabled` off means no texts are created at all (and no texting fee); emails still go. `set_tournament_status` refuses `registration` or `live` until the setup fee is paid (`setup_paid_at`), except for practice tournaments.
 
 | Function | Who | What it does |
 |---|---|---|

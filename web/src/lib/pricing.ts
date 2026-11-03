@@ -38,8 +38,10 @@ export interface PricingResult {
     platform: number;
     director: number;
   };
-  /** PT's fees on the same registrations (card processing may be extra there). */
+  /** PT's fees on the same registrations (they cover card processing). */
   ptFees: number;
+  /** Each player's checkout with the fees added to the entry, here and on PT. */
+  withFees: { ours: number; pt: number };
 }
 
 const cents = (dollars: number) => Math.round(dollars * 100);
@@ -52,9 +54,13 @@ export function calculate(inputs: PricingInputs, pricing: PlatformPricing): Pric
 
   // Passing fees on: the price that leaves the director the full entry after
   // card processing, the platform fee and a share of the setup fee.
-  const playerPays = inputs.passToPlayers
-    ? Math.ceil((baseEntry + platformPerPlayer + CARD_FIXED_CENTS + pricing.setup_fee_cents / n) / (1 - CARD_PERCENT))
-    : baseEntry;
+  const withFees = {
+    ours: Math.ceil((baseEntry + platformPerPlayer + CARD_FIXED_CENTS + pricing.setup_fee_cents / n) / (1 - CARD_PERCENT)),
+    pt: Math.ceil(
+      (baseEntry + PT.perRegistrationCents + PT.setupCents / n + (inputs.texting ? PT.textingPerPlayerCents : 0)) / (1 - PT.percent),
+    ),
+  };
+  const playerPays = inputs.passToPlayers ? withFees.ours : baseEntry;
 
   const cardPerPlayer = card(playerPays);
   const collected = n * playerPays;
@@ -79,6 +85,7 @@ export function calculate(inputs: PricingInputs, pricing: PlatformPricing): Pric
       director: playerPays - cardPerPlayer - platformPerPlayer - Math.round(pricing.setup_fee_cents / n),
     },
     totals,
+    withFees,
     ptFees:
       n * PT.perRegistrationCents +
       Math.round(collected * PT.percent) +

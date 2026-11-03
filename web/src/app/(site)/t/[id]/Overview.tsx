@@ -7,6 +7,7 @@ import { Linked } from '@/components/Announcement';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { EligibilityAlert } from '@/components/EligibilityAlert';
 import { CourtStatus } from '@/components/desk/CourtCard';
+import { DivisionGroups } from '@/components/DivisionGroups';
 import { DivisionStatus, dayHeading, divisionDay, divisionState } from '@/components/DivisionStatus';
 import { Expandable } from '@/components/Expandable';
 import { Icon } from '@/components/Icon';
@@ -87,9 +88,9 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
           </div>
         )}
         {(venueLine(tournament) || tournament.ball) && (
-          <dl className="flex flex-wrap gap-x-10 gap-y-3">
+          <dl className="flex flex-wrap self-start divide-border rounded-2xl border border-border sm:divide-x [&>div]:px-5 [&>div]:py-3">
             {venueLine(tournament) && (
-              <div>
+              <div className="min-w-0">
                 <dt className="text-sm text-muted">Venue</dt>
                 <dd>
                   <a
@@ -168,7 +169,7 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
           </div>
         )}
 
-        <section className="flex flex-col gap-3">
+        <section className="flex flex-col gap-3 rounded-2xl bg-surface-2 p-5">
           <label htmlFor="find-team" className="font-display text-3xl leading-tight font-bold uppercase">
             Find your matches
           </label>
@@ -196,45 +197,50 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
         </section>
 
         <section className="flex flex-col gap-4">
-          <h2 className="text-3xl">Divisions</h2>
+          <h2 className="flex items-baseline gap-2 text-3xl">
+            Divisions
+            {events.length > 1 && <span className="font-body text-lg font-normal text-muted normal-case">{events.length}</span>}
+          </h2>
           {events.length === 0 ? (
             <Empty>No divisions yet.</Empty>
           ) : (
             days.map((day) => (
-              <div key={day} className="flex flex-col gap-3">
-                {days.length > 1 && <h3 className="text-xl">{dayHeading(day)}</h3>}
-                <div className={`grid gap-3 sm:grid-cols-2 ${aside ? '' : 'xl:grid-cols-3'}`}>
-                  {events
-                    .filter((e) => divisionDay(e, tournament) === day)
-                    .map((e) => {
-                      const all = matches.filter((m) => m.event_id === e.id);
-                      const ms = all.filter(isPlayable);
-                      const done = ms.filter((m) => m.status === 'completed').length;
-                      const pct = ms.length ? Math.round((done / ms.length) * 100) : 0;
-                      return (
-                        <Link
-                          key={e.id}
-                          href={`/t/${id}/events/${e.id}`}
-                          className="flex flex-col gap-1 rounded-2xl border border-border p-4 transition hover:border-text"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <span className="text-lg font-semibold">{e.name}</span>
-                            <DivisionStatus state={divisionState(e, all)} startedAt={e.started_at} timeZone={tournament.time_zone} />
-                          </div>
-                          <p className="text-sm text-muted">
-                            {describeDivision(e)} · {teams.filter((t) => t.event_id === e.id).length} teams
-                            {e.not_before && tournament.times_published_at && !e.started_at
-                              ? ` · starts ${formatTime(e.not_before, tournament.time_zone)}`
-                              : ''}
-                          </p>
-                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
-                            <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
-                          </div>
-                          <p className="text-sm text-muted">{ms.length ? `${done} of ${ms.length} matches played` : 'Schedule builds when it starts'}</p>
-                        </Link>
-                      );
-                    })}
-                </div>
+              <div key={day} className="flex flex-col gap-5">
+                {days.length > 1 && <h3 className="text-2xl">{dayHeading(day)}</h3>}
+                <DivisionGroups events={events.filter((e) => divisionDay(e, tournament) === day)} heading={days.length > 1 ? 'h4' : 'h3'}>
+                  {(group, headed) => (
+                    <div className={`grid gap-3 sm:grid-cols-2 ${aside ? '' : 'xl:grid-cols-3'}`}>
+                      {group.map((e) => {
+                        const all = matches.filter((m) => m.event_id === e.id);
+                        const ms = all.filter(isPlayable);
+                        const done = ms.filter((m) => m.status === 'completed').length;
+                        const pct = ms.length ? Math.round((done / ms.length) * 100) : 0;
+                        return (
+                          <Link
+                            key={e.id}
+                            href={`/t/${id}/events/${e.id}`}
+                            className="flex flex-col gap-1 rounded-2xl border border-border p-4 transition hover:border-text"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <span className="text-lg font-semibold">{e.name}</span>
+                              <DivisionStatus state={divisionState(e, all)} startedAt={e.started_at} timeZone={tournament.time_zone} />
+                            </div>
+                            <p className="text-sm text-muted">
+                              {describeDivision(e, { withType: !headed })} · {teams.filter((t) => t.event_id === e.id).length} teams
+                              {e.not_before && tournament.times_published_at && !e.started_at
+                                ? ` · starts ${formatTime(e.not_before, tournament.time_zone)}`
+                                : ''}
+                            </p>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+                              <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
+                            </div>
+                            <p className="text-sm text-muted">{ms.length ? `${done} of ${ms.length} matches played` : 'Schedule builds when it starts'}</p>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </DivisionGroups>
               </div>
             ))
           )}

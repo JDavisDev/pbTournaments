@@ -25,6 +25,7 @@ import { EventForm } from './EventForm';
 /** A division in Setup: its summary and teams (seed order, paste more), or its form while editing. */
 export function EventCard({
   event,
+  headed = false,
   timeZone,
   firstEventIncluded,
   simple,
@@ -37,6 +38,8 @@ export function EventCard({
   onChanged,
 }: {
   event: TournamentEvent;
+  /** Under a heading with its type ("Men's doubles"), so the summary leaves it out. */
+  headed?: boolean;
   /** Divisions this one could merge into. */
   others: TournamentEvent[];
   /** Divisions merged into this one. */
@@ -54,11 +57,14 @@ export function EventCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
+  const [pasting, setPasting] = useState(false);
   const [mergeInto, setMergeInto] = useState('');
   const { busy, error, run } = useAction();
   const scheduled = matches.length > 0;
   const played = matches.some((m) => m.status === 'completed' && wasPlayed(m));
   const nextSeed = Math.max(0, ...teams.map((t) => t.seed ?? 0)) + 1;
+  // Divisions with teams keep the paste box folded until it's wanted.
+  const showPaste = teams.length === 0 || pasting;
   const section = courts.filter((c) => event.court_ids.includes(c.court_id)).map((c) => c.court_name);
 
   if (editing) {
@@ -81,10 +87,10 @@ export function EventCard({
 
   return (
     <Card className="p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border pb-3">
         <div>
           <h3 className="text-xl">{event.name}</h3>
-          <p className="text-sm">{describeDivision(event)}</p>
+          <p className="text-sm">{describeDivision(event, { withType: !headed })}</p>
           <p className="text-sm text-muted">
             {formatSummary(event)} · {shortFormat(event)}
             {event.third_place_match ? ' · bronze match' : ''}
@@ -110,9 +116,16 @@ export function EventCard({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <div>
-          <h4 className="mb-2 text-sm font-medium">Teams (in seed order)</h4>
+      <div className={`mt-4 grid gap-4 ${showPaste ? 'md:grid-cols-2' : ''}`}>
+        <div className={showPaste ? '' : 'max-w-xl'}>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h4 className="text-sm font-medium">Teams (in seed order)</h4>
+            {!showPaste && (
+              <Button size="sm" onClick={() => setPasting(true)}>
+                {scheduled ? '+ Add alternates' : '+ Add teams'}
+              </Button>
+            )}
+          </div>
           {teams.length === 0 ? (
             <p className="text-sm text-muted">No teams yet.</p>
           ) : (
@@ -161,33 +174,49 @@ export function EventCard({
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
-          <h4 className="text-sm font-medium">{scheduled ? 'Add alternates' : 'Add teams'}</h4>
-          {scheduled && (
-            <p className="text-xs text-muted">
-              The schedule is built, so new teams aren’t in it. Put one in a pool from the division’s Teams tab
-              {simple ? '.' : ', or swap one in for a dropped team on the Players page.'}
-            </p>
-          )}
-          <Textarea
-            rows={scheduled ? 3 : 6}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={
-              event.kind === 'singles'
-                ? 'One player per line, best seed first:\nPat Davis\nJo Park'
-                : 'One team per line, best seed first:\nPat Davis / Sam Lee\nJo Park / Ana Cho'
-            }
-          />
-          <Button disabled={busy || !text.trim()} onClick={() => run(() => addTeamsFromText(event.id, text, nextSeed), () => (setText(''), onChanged()))}>
-            {scheduled ? 'Add alternates' : 'Add teams'}
-          </Button>
-          {isDemo && !scheduled && (
-            <Button variant="primary" disabled={busy} onClick={() => run(() => addMockTeams(event.id, 4), onChanged)}>
-              Fill division with mock players
-            </Button>
-          )}
-        </div>
+        {(showPaste || (isDemo && !scheduled)) && (
+          <div className="flex flex-col gap-2">
+            {showPaste && (
+              <>
+                <h4 className="text-sm font-medium">{scheduled ? 'Add alternates' : 'Add teams'}</h4>
+                {scheduled && (
+                  <p className="text-xs text-muted">
+                    The schedule is built, so new teams aren’t in it. Put one in a pool from the division’s Teams tab
+                    {simple ? '.' : ', or swap one in for a dropped team on the Players page.'}
+                  </p>
+                )}
+                <Textarea
+                  rows={scheduled ? 3 : 6}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={
+                    event.kind === 'singles'
+                      ? 'One player per line, best seed first:\nPat Davis\nJo Park'
+                      : 'One team per line, best seed first:\nPat Davis / Sam Lee\nJo Park / Ana Cho'
+                  }
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    disabled={busy || !text.trim()}
+                    onClick={() => run(() => addTeamsFromText(event.id, text, nextSeed), () => (setText(''), setPasting(false), onChanged()))}
+                  >
+                    {scheduled ? 'Add alternates' : 'Add teams'}
+                  </Button>
+                  {pasting && (
+                    <Button variant="ghost" onClick={() => (setText(''), setPasting(false))}>
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+            {isDemo && !scheduled && (
+              <Button variant="primary" disabled={busy} onClick={() => run(() => addMockTeams(event.id, 4), onChanged)}>
+                Fill division with mock players
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <ErrorText>{error}</ErrorText>

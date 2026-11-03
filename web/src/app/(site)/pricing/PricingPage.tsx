@@ -28,7 +28,11 @@ export function PricingPage() {
   if (!pricing.data) return <Spinner />;
   const p = pricing.data;
   const r = calculate(inputs, p);
-  const saving = r.ptFees - r.totals.platform;
+  // PT's fees include card processing, so ours are compared with it added.
+  const ours = r.totals.platform + r.totals.card;
+  const saving = r.ptFees - ours;
+  // Fees added to the price, the director keeping the same entry either way.
+  const playerSaving = r.withFees.pt - r.withFees.ours;
 
   return (
     <div className="flex flex-col gap-12">
@@ -137,16 +141,25 @@ export function PricingPage() {
             </dl>
           </Card>
 
-          <Card className="flex flex-col gap-1 p-5">
+          <Card className="flex flex-col gap-3 p-5">
             <h3 className="text-2xl [overflow-wrap:anywhere]">Compared with PickleballTournaments.com</h3>
             <p className="text-muted">
               Their published fees for the same registrations ($5 per registration + 7.99% of checkout, $25 setup
               {inputs.texting ? ', $0.25 texting per player' : ''}):{' '}
-              <b className="text-text">{money(r.ptFees)}</b>, plus card processing if it’s charged separately. Ours:{' '}
-              <b className="text-text">{money(r.totals.platform)}</b>.
+              <b className="text-text">{money(r.ptFees)}</b>. Ours, card processing included:{' '}
+              <b className="text-text">{money(ours)}</b>.
             </p>
-            {saving > 0 && (
-              <p className="mt-1 font-display text-3xl font-bold text-live">You’d save {money(saving)}</p>
+            {(saving > 0 || playerSaving > 0) && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {saving > 0 && <Saving label="Directors save" value={money(saving)} note={`on ${inputs.players} players`} />}
+                {playerSaving > 0 && (
+                  <Saving
+                    label="Players save"
+                    value={money(playerSaving)}
+                    note={`each, with fees added to the price: ${money(r.withFees.ours)} here, ${money(r.withFees.pt)} there`}
+                  />
+                )}
+              </div>
             )}
             <p className="text-xs text-muted">PT fees as published for tournaments opened from August 3, 2026. Check their site for current terms.</p>
           </Card>
@@ -183,6 +196,16 @@ function PriceCard({ price, per, what }: { price: string; per: string; what: str
       <p className="font-display text-6xl leading-none font-extrabold">{price}</p>
       <p className="text-sm font-semibold text-muted uppercase">{per}</p>
       <p className="mt-2">{what}</p>
+    </div>
+  );
+}
+
+function Saving({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div className="rounded-xl bg-surface p-4">
+      <p className="text-sm font-semibold tracking-widest text-muted uppercase">{label}</p>
+      <p className="tnum font-display text-4xl leading-none font-extrabold text-live">{value}</p>
+      <p className="mt-1 text-sm text-muted">{note}</p>
     </div>
   );
 }
