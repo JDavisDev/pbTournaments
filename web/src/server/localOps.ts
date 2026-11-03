@@ -357,6 +357,8 @@ const ops: Record<string, Op> = {
     (await one<{ c: string | null }>(tx, 'select public.set_self_checkin($1, $2) as c', [id, on])).c,
   getSelfCheckinInfo: async (tx, code: string) => (await one<{ i: unknown }>(tx, 'select public.self_checkin_info($1) as i', [code])).i,
   searchSelfCheckin: (tx, code: string, query: string) => all(tx, 'select * from public.self_checkin_search($1, $2)', [code, query]),
+  getMyTeams: async (tx, id: string) =>
+    (await all<{ id: string }>(tx, 'select public.my_teams($1) as id', [id])).map((r) => r.id),
   getMySelfCheckin: (tx, code: string) => all(tx, 'select * from public.my_self_checkin($1)', [code]),
   selfCheckIn: (tx, code: string, player: string, checkedIn = true) =>
     tx.query('select public.self_check_in($1, $2, $3)', [code, player, checkedIn]).then(() => null),

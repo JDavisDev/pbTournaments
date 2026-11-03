@@ -134,6 +134,7 @@ export const {
   getSelfCheckinInfo,
   searchSelfCheckin,
   getMySelfCheckin,
+  getMyTeams,
   selfCheckIn,
   mergeEvents,
   unmergeEvent,

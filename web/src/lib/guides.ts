@@ -39,7 +39,7 @@ export const guides: Guide[] = [
     title: 'Tournament day',
     summary: 'Check in, find your court and report your scores.',
     sections: [
-      { heading: 'Check in', todo: 'The desk QR code, “Jamie Checking In” and Confirm, finding your name, partners checking in separately, the deadline.', screenshot: 'Self check-in on a phone' },
+      { heading: 'Check in', todo: 'The desk QR code, logging in, “Jamie Checking In” and Confirm, partners checking in separately, the deadline, the desk if you have no account.', screenshot: 'Self check-in on a phone' },
       { heading: 'Your court', todo: 'Court call texts and alerts, the team page, court changes.', screenshot: 'Team page with a match on court' },
       { heading: 'Report your score', todo: 'The score link, entering games, what happens when scores disagree, asking the desk to fix one.', screenshot: 'Score entry' },
       { heading: 'Brackets and results', todo: 'Pool standings, tiebreaks, the bracket, watching on the TV board.' },

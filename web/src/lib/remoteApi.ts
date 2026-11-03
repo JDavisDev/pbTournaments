@@ -472,9 +472,14 @@ export const getMyRole = (tournamentId: string) =>
 export const getSelfCheckin = (tournamentId: string) => rpc<string | null>('get_self_checkin', { p_tournament: tournamentId });
 export const setSelfCheckin = (tournamentId: string, on: boolean) =>
   rpc<string | null>('set_self_checkin', { p_tournament: tournamentId, p_on: on });
-export const getSelfCheckinInfo = (code: string) => rpc<{ tournament_name: string } | null>('self_checkin_info', { p_code: code });
+/** The link's tournament (null when it's off); `staff`: the caller can find and check in anyone. */
+export const getSelfCheckinInfo = (code: string) =>
+  rpc<{ tournament_name: string; staff: boolean } | null>('self_checkin_info', { p_code: code });
 export const searchSelfCheckin = (code: string, query: string) =>
   rpc<SelfCheckinPlayer[]>('self_checkin_search', { p_code: code, p_query: query });
+/** Signed in: the caller's teams in this tournament (their players, or under their email). */
+export const getMyTeams = async (tournamentId: string) =>
+  (await rpc<string[] | null>('my_teams', { p_tournament: tournamentId })) ?? [];
 export const getMySelfCheckin = (code: string) => rpc<SelfCheckinPlayer[]>('my_self_checkin', { p_code: code });
 export const selfCheckIn = (code: string, playerId: string, checkedIn = true) =>
   rpc<void>('self_check_in', { p_code: code, p_player: playerId, p_checked_in: checkedIn });

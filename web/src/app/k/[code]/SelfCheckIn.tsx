@@ -1,8 +1,8 @@
 'use client';
 
-// At the desk: a player scans the QR code and, logged in, just confirms. Anyone
-// else finds their name, on their phone or a tablet at the door; no account is
-// needed. The link is the permission, and it only checks people in.
+// At the desk: a player scans the QR code, logs in and confirms; they can
+// only check themselves in. Directors and court monitors can find and check in
+// anyone from the same link (a tablet at the door).
 import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
 import { Button, Empty, ErrorText, Input, Spinner } from '@/components/ui';
@@ -27,7 +27,11 @@ export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
   const [typed, setTyped] = useState('');
   const [done, setDone] = useState<SelfCheckinPlayer | null>(null);
   const action = useAction();
-  const results = useLoad(() => (typed.length >= 2 ? searchSelfCheckin(code, typed) : Promise.resolve([])), [code, typed]);
+  const staff = !!info.data?.staff;
+  const results = useLoad(
+    () => (staff && typed.length >= 2 ? searchSelfCheckin(code, typed) : Promise.resolve([])),
+    [code, typed, staff],
+  );
 
   useEffect(() => {
     const wait = setTimeout(() => setTyped(query.trim()), 250);
@@ -48,6 +52,39 @@ export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
   if (info.error) return <Empty>{info.error}</Empty>;
   if (info.data === undefined || session === undefined || me.data === undefined) return <Spinner />;
   if (!info.data) return <Empty>Self check-in isn’t on right now. Please see the desk.</Empty>;
+
+  // Players: logged in, and only themselves.
+  if (!staff) {
+    if (!signedIn) {
+      return (
+        <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-5 p-6 text-center">
+          <p className="text-lg text-muted">{info.data.tournament_name}</p>
+          <h1 className="text-5xl">Check in</h1>
+          <p className="text-lg">Log in with the account you registered with, then tap Confirm.</p>
+          <Link
+            href={`/profile?mode=login&next=${encodeURIComponent(`/k/${code}`)}`}
+            className="inline-flex h-14 items-center justify-center rounded-full bg-accent px-6 text-base font-medium text-accent-text"
+          >
+            Log in
+          </Link>
+          <p className="text-muted">No account? Please check in at the desk.</p>
+        </main>
+      );
+    }
+    if (me.data.length > 0) {
+      return <Mine code={code} tournament={info.data.tournament_name} players={me.data} onChanged={me.reload} />;
+    }
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-5 p-6 text-center">
+        <p className="text-lg text-muted">{info.data.tournament_name}</p>
+        <h1 className="text-5xl">Check in</h1>
+        <p className="text-lg">We can’t find an entry under {session?.email}. Please check in at the desk.</p>
+        <button type="button" className="text-muted underline" onClick={() => logOut()}>
+          Registered with another account? Log out
+        </button>
+      </main>
+    );
+  }
 
   if (me.data.length > 0 && !searching) {
     return (
@@ -92,17 +129,7 @@ export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
       <div>
         <p className="text-muted">{info.data.tournament_name}</p>
         <h1 className="text-5xl">Check in</h1>
-        {!signedIn ? (
-          <p className="mt-2 text-lg text-muted">
-            Have an account?{' '}
-            <Link href={`/profile?mode=login&next=${encodeURIComponent(`/k/${code}`)}`} className="font-medium text-text underline">
-              Log in
-            </Link>{' '}
-            and just tap Confirm. Or find your name:
-          </p>
-        ) : (
-          me.data.length === 0 && <p className="mt-2 text-lg text-muted">We can’t find an entry under {session?.email}. Try finding your name:</p>
-        )}
+        <p className="mt-2 text-lg text-muted">Staff: find anyone by name and check them in.</p>
       </div>
       <Input
         aria-label="Your name"
@@ -161,7 +188,8 @@ function Mine({
   code: string;
   tournament: string;
   players: SelfCheckinPlayer[];
-  onCancel: () => void;
+  /** Staff only: back to finding someone by name. */
+  onCancel?: () => void;
   onChanged: () => void;
 }) {
   const { busy, error, run } = useAction();
@@ -199,10 +227,12 @@ function Mine({
           {justIn ? 'Undo' : 'Undo my check-in'}
         </Button>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
-          <Button className="h-16 text-lg" disabled={busy} onClick={onCancel}>
-            Cancel
-          </Button>
+        <div className={`grid gap-3 ${onCancel ? 'grid-cols-2' : ''}`}>
+          {onCancel && (
+            <Button className="h-16 text-lg" disabled={busy} onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
           <Button
             variant="primary"
             className="h-16 text-lg"

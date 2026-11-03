@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { type Db, actAs, addEvent, addPair, buildSchedule, checkIn, createDb, createLiveTournament, createUser, one, rows } from './harness';
+import { type Db, actAs, addEvent, addPair, buildSchedule, checkIn, createDb, createLiveTournament, createUser, generate, one, reportScore, rows } from './harness';
 
 const START = new Date('2026-11-07T13:00:00Z');
 
@@ -109,7 +109,7 @@ describe('self check-in', () => {
     expect((await rows(db, 'select * from public.my_self_checkin($1)', [code]))[0].checked_in).toBe(true);
   });
 
-  it('works only with the link, while it’s on, and shows no contact details', async () => {
+  it('needs an account: players check only themselves in; staff find and check in anyone', async () => {
     const { director, tournamentId } = await setup();
     const eventId = await addEvent(db, tournamentId, 'Open');
     const t = await addPair(db, eventId, ['Davis', 'Lee']);
@@ -118,26 +118,66 @@ describe('self check-in', () => {
     await actAs(db, director);
     expect((await one(db, 'select public.get_self_checkin($1) as c', [tournamentId])).c).toBeNull();
     const code = (await one(db, 'select public.set_self_checkin($1, true) as c', [tournamentId])).c;
+    const davis = (await one(db, `select tp.player_id from public.team_players tp join public.players p on p.id = tp.player_id
+                                  where tp.team_id = $1 and p.last_name = 'Davis'`, [t])).player_id;
 
+    // Signed out: the tournament's name only.
     await actAs(db, null);
-    expect((await one(db, 'select public.self_checkin_info($1) as i', [code])).i).toEqual({ tournament_name: 'Test Open' });
+    expect((await one(db, 'select public.self_checkin_info($1) as i', [code])).i).toEqual({ tournament_name: 'Test Open', staff: false });
     expect((await one(db, `select public.self_checkin_info('wrong') as i`)).i).toBeNull();
+    expect(await rows(db, `select * from public.self_checkin_search($1, 'davis')`, [code])).toEqual([]);
+    await expect(db.query('select public.self_check_in($1, $2)', [code, davis])).rejects.toThrow(/Log in/);
+
+    // Someone else's account: not their player.
+    await actAs(db, await createUser(db));
+    expect(await rows(db, `select * from public.self_checkin_search($1, 'davis')`, [code])).toEqual([]);
+    await expect(db.query('select public.self_check_in($1, $2)', [code, davis])).rejects.toThrow(/only check yourself/);
+
+    // Their own account: yes.
+    const josh = (await one(db, `insert into auth.users (email) values ('davis@example.test') returning id`)).id;
+    await db.query(`update public.players set email = 'Davis@Example.test' where id = $1`, [davis]);
+    await actAs(db, josh);
+    await db.query('select public.self_check_in($1, $2)', [code, davis]);
+    expect((await rows(db, 'select * from public.my_self_checkin($1)', [code]))[0].checked_in).toBe(true);
+
+    // Staff: search by name, no contact details, check anyone in or out.
+    await actAs(db, director);
+    expect((await one(db, 'select public.self_checkin_info($1) as i', [code])).i.staff).toBe(true);
     expect(await rows(db, `select * from public.self_checkin_search($1, 'd')`, [code])).toEqual([]);
     expect(await rows(db, `select * from public.self_checkin_search('wrong', 'davis')`)).toEqual([]);
     const [found] = await rows(db, `select * from public.self_checkin_search($1, 'DAVIS')`, [code]);
     expect(Object.keys(found).sort()).toEqual(['checked_in', 'first_name', 'last_name', 'player_id', 'teams']);
-    expect(found.checked_in).toBe(false);
-
-    await db.query('select public.self_check_in($1, $2)', [code, found.player_id]);
-    expect((await rows(db, `select * from public.self_checkin_search($1, 'davis')`, [code]))[0].checked_in).toBe(true);
+    expect(found.checked_in).toBe(true);
     await db.query('select public.self_check_in($1, $2, false)', [code, found.player_id]);
     expect((await rows(db, `select * from public.self_checkin_search($1, 'davis')`, [code]))[0].checked_in).toBe(false);
     await expect(db.query(`select public.self_check_in('wrong', $1)`, [found.player_id])).rejects.toThrow(/isn’t on/);
-    expect(t).toBeTruthy();
 
-    await actAs(db, director);
     await db.query('select public.set_self_checkin($1, false)', [tournamentId]);
     await actAs(db, null);
     expect((await one(db, 'select public.self_checkin_info($1) as i', [code])).i).toBeNull();
+  });
+});
+
+describe('player score entry', () => {
+  it('a logged-in player in the match scores it, found by account or email; nobody else', async () => {
+    const { director, tournamentId } = await setup();
+    const eventId = await addEvent(db, tournamentId, 'Open');
+    const mine = await team(eventId, 'A');
+    await checkIn(db, mine);
+    await checkIn(db, await team(eventId, 'B'));
+    await generate(db, eventId);
+    const match = (await one(db, 'select id from public.matches where event_id = $1 limit 1', [eventId])).id;
+    const court = (await one(db, 'select id from public.courts where tournament_id = $1 order by sort_order limit 1', [tournamentId])).id;
+    await actAs(db, director);
+    await db.query('select public.assign_match_to_court($1, $2)', [match, court]);
+    await db.query(`update public.players set email = 'pat@example.test' where id = (select player_id from public.team_players where team_id = $1 limit 1)`, [mine]);
+
+    await actAs(db, await createUser(db));
+    expect(await rows(db, 'select * from public.my_teams($1)', [tournamentId])).toEqual([]);
+    await expect(reportScore(db, match, [[11, 4]])).rejects.toThrow(/Only players in this match/);
+
+    await actAs(db, (await one(db, `insert into auth.users (email) values ('PAT@example.test') returning id`)).id);
+    expect((await rows(db, 'select public.my_teams($1) as id', [tournamentId])).map((r) => r.id)).toEqual([mine]);
+    expect((await reportScore(db, match, [[11, 4]])).status).toBe('completed');
   });
 });

@@ -36,8 +36,8 @@ export function SelfCheckInCard({ tournamentId }: { tournamentId: string }) {
           <h2 className="text-xl">Self check-in</h2>
           <p className="text-sm text-muted">
             {code.data
-              ? 'On. Put this QR code at the desk: logged-in players scan it and tap Confirm. Anyone with the link can check players in, so turn it off when check-in is over.'
-              : 'Players scan a QR code at the desk and confirm. Works on a tablet at the door too.'}
+              ? 'On. Put this QR code at the desk: players scan it, log in and tap Confirm. They can only check themselves in; on this link, you and your court monitors can find and check in anyone.'
+              : 'Players scan a QR code at the desk, log in and confirm. You can use the same link on a tablet at the door to check in anyone.'}
           </p>
         </div>
         <Button

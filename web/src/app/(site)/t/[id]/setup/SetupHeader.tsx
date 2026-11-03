@@ -38,14 +38,16 @@ export function SetupHeader({ tournament, events, onChanged }: { tournament: Tou
 
   let action: React.ReactNode = null;
   let note = steps[at].hint;
-  if (tournament.status === 'draft' && simple) {
-    note = ready
-      ? 'Only directors can see it. Publish it when the teams are in, so players can find their names. Start each division from its page.'
-      : 'Only directors can see it. Set up the tournament and add a division with its teams, then publish it.';
-  } else if (tournament.status === 'draft') {
-    note = ready
-      ? 'Only directors can see it. Open registration when you’re ready; Check-in and Players show up then, and this page moves to More → Settings.'
-      : 'Only directors can see it. Set up the tournament and add a division, then open registration.';
+  if (tournament.status === 'draft') {
+    if (simple) {
+      note = ready
+        ? 'Only directors can see it. Publish it when the teams are in, so players can find their names. Start each division from its page.'
+        : 'Only directors can see it. Set up the tournament and add a division with its teams, then publish it.';
+    } else {
+      note = ready
+        ? 'Only directors can see it. Open registration when you’re ready; Check-in and Players show up then, and this page moves to More → Settings.'
+        : 'Only directors can see it. Set up the tournament and add a division, then open registration.';
+    }
     action = (
       <Button
         variant="primary"

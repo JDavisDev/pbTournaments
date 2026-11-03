@@ -18,6 +18,7 @@ import {
   getCourtBoard,
   getEvents,
   getMatches,
+  getMyTeams,
   getQueue,
   getStandings,
   getTeams,
@@ -26,7 +27,7 @@ import {
   reportScoreByCode,
 } from '@/lib/api';
 import { bracketSeeds, formatTime, isPlayable, minutesSince, ordinal, poolName } from '@/lib/format';
-import { useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
+import { useLiveTournament, useLoad, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { rulesOf } from '@/lib/scoring';
 import { estimateWait, formatWaitRange } from '@/lib/waitTime';
 import type { MatchDetails, QueueRow, Team } from '@/lib/types';
@@ -265,13 +266,18 @@ function MatchDayPanel({
   const [myTeam, setMyTeam] = useMyTeam(tournamentId);
   const scoreCode = useScoreCode(onCourt?.id);
   const staff = useStaffAccess(tournamentId);
+  const session = useSession();
+  // Logged in as one of this team's players: they score from here, unless a
+  // simple tournament keeps scores to its directors.
+  const mineTeams = useLoad(() => (session ? getMyTeams(tournamentId) : Promise.resolve([])), [tournamentId, session?.id]);
+  const myPlayer = !!mineTeams.data?.includes(team.id) && (!simple || anyoneScores);
   // Scores go in right here: with the code from the player's text link (it
-  // proves they're in the match), as tournament staff, or by anyone when a
-  // simple tournament allows it.
+  // proves they're in the match), logged in as one of its players, as
+  // tournament staff, or by anyone when a simple tournament allows it.
   const enterScore =
     onCourt && scoreCode
       ? (games: [number, number][]) => reportScoreByCode(scoreCode, games)
-      : onCourt && (staff.role || anyoneScores)
+      : onCourt && (staff.role || anyoneScores || myPlayer)
         ? (games: [number, number][]) => reportScore(onCourt.id, games)
         : null;
   const allDone = mine.length > 0 && mine.every((m) => m.status === 'completed');
@@ -347,7 +353,19 @@ function MatchDayPanel({
             </div>
           ) : (
             <p className="rounded-xl bg-surface-2 px-4 py-3 text-left">
-              <b>To enter the score:</b> {simple ? 'tell the tournament director.' : 'tap the link in the text we sent you, or tell the front desk.'}
+              <b>To enter the score:</b>{' '}
+              {simple ? (
+                'tell the tournament director.'
+              ) : session ? (
+                'tap the link in the text we sent you, or tell the front desk.'
+              ) : (
+                <>
+                  <Link href={`/profile?mode=login&next=${encodeURIComponent(`/t/${tournamentId}/teams/${team.id}`)}`} className="underline">
+                    log in
+                  </Link>{' '}
+                  to enter it here, tap the link in the text we sent you, or tell the front desk.
+                </>
+              )}
             </p>
           )}
           {onCourt.court_stream_url && <StreamEmbed url={onCourt.court_stream_url} title={`${onCourt.court_name} live`} />}
