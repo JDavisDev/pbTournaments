@@ -47,7 +47,7 @@ Local mode is always a demo: **Sign in** signs you in as the shared guest in one
 | `SUPABASE_SECRET_KEY` | Supabase mode only: lets the server confirm payments and send texts |
 | `DUPR_CLIENT_KEY`, `DUPR_CLIENT_SECRET` | Partner keys from DUPR: "Refresh DUPR ratings" reads real ratings (see [docs/dupr.md](docs/dupr.md)) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Free match alerts to phones in place of texts ([docs/alerts.md](docs/alerts.md)) |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Supabase mode: a Cloudflare Turnstile check on sign-up, log-in and sign-in links, against bot sign-ups. Put the widget's secret key in Supabase (Authentication → Bot and Abuse Protection → Turnstile) after this is deployed; not on the demo site, whose guest sign-in has no check |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Supabase mode: a Cloudflare Turnstile check on sign-up, log-in and sign-in links, against bot sign-ups. Put the widget's secret key in Supabase (Authentication → Bot and Abuse Protection → Turnstile) after this is deployed. On a demo site the guest sign-in is checked too (a hidden widget that asks for a click only if Cloudflare wants one) |
 | `CRON_SECRET` | Supabase mode only: protects `/api/texts/send`, which a scheduler calls every minute |
 
 Local mode sends queued texts automatically every few seconds.

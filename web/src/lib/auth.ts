@@ -1,5 +1,5 @@
 // Director sign-in: Supabase Auth in production, a local account in local mode.
-import { takeCaptchaToken } from './captcha';
+import { fetchCaptchaToken, takeCaptchaToken } from './captcha';
 import { demoGuest, isLocalMode } from './config';
 import { getLocalUser, localCall, setLocalUser, type LocalUser } from './localClient';
 import type { PlayerProfile } from './profileTypes';
@@ -40,7 +40,7 @@ const remoteAuth: Auth = {
     );
     return () => data.subscription.unsubscribe();
   },
-  // Sign-up, log-in and sign-in links carry a captcha token when it's on (lib/captcha).
+  // Sign-up, log-in, sign-in links and the demo guest carry a captcha token when it's on (lib/captcha).
   async signIn(email, password) {
     const { error } = await supabase().auth.signInWithPassword({ email, password, options: { captchaToken: takeCaptchaToken() } });
     if (error) throw new Error(error.message);
@@ -72,7 +72,7 @@ const remoteAuth: Auth = {
     if (!email || !password) {
       throw new Error('Guest access isn’t set up: set NEXT_PUBLIC_DEMO_GUEST_EMAIL and NEXT_PUBLIC_DEMO_GUEST_PASSWORD.');
     }
-    const { error } = await supabase().auth.signInWithPassword({ email, password });
+    const { error } = await supabase().auth.signInWithPassword({ email, password, options: { captchaToken: await fetchCaptchaToken() } });
     if (error) throw new Error(`Guest sign-in failed: ${error.message}`);
   },
   async emailLink(email) {

@@ -52,6 +52,35 @@ export function takeCaptchaToken(): string | undefined {
   return t;
 }
 
+/**
+ * A token without a form on screen (the demo's one-click guest sign-in): a
+ * one-off widget that shows itself only if Cloudflare wants a click.
+ */
+export async function fetchCaptchaToken(): Promise<string | undefined> {
+  if (!siteKey) return undefined;
+  const t = await loadTurnstile();
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:1000';
+  document.body.appendChild(el);
+  let id: string | undefined;
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      const failed = () => reject(new Error('We couldn’t check this isn’t a bot. Reload the page and try again.'));
+      id = t.render(el, {
+        sitekey: siteKey,
+        theme: 'auto',
+        appearance: 'interaction-only',
+        callback: resolve,
+        'error-callback': failed,
+        'expired-callback': failed,
+      });
+    });
+  } finally {
+    if (id) t.remove(id);
+    el.remove();
+  }
+}
+
 /** The Turnstile widget, for a form that signs up or logs in. Nothing when the captcha is off. */
 export function Captcha() {
   const box = useRef<HTMLDivElement>(null);
