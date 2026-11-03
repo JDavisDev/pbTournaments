@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { use, useState } from 'react';
-import { getEvents, getTournament } from '@/lib/api';
+import { getEvents, getMyTeams, getTournament } from '@/lib/api';
 import { formatDate, registrationOpen, venueLine } from '@/lib/format';
 import { auth } from '@/lib/auth';
-import { useAction, useLiveTournament, useNow, useSession, useStaffAccess } from '@/lib/hooks';
+import { useAction, useLiveTournament, useLoad, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { isBackendConfigured, isDemoMode } from '@/lib/config';
 import { setViewMode, type ViewMode } from '@/lib/viewMode';
 import { AnnounceButton, Announcement } from './Announcement';
@@ -32,10 +32,16 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   const [sharing, setSharing] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const staff = useStaffAccess(id);
-  const [myTeam] = useMyTeam(id);
+  const [savedTeam] = useMyTeam(id);
   const router = useRouter();
   const now = useNow(15_000);
   const session = useSession();
+  // The team saved on this phone, else the logged-in player's own team.
+  const accountTeams = useLoad(
+    () => (session && !savedTeam ? getMyTeams(id) : Promise.resolve([])),
+    [id, session?.id, savedTeam],
+  );
+  const myTeam = savedTeam ?? accountTeams.data?.[0] ?? null;
   const switching = useAction();
 
   if (!isBackendConfigured || !tournament.data) return null;

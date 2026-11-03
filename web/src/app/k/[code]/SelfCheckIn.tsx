@@ -110,7 +110,7 @@ export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
             <li key={t}>{t}</li>
           ))}
         </ul>
-        <p className="text-lg">We’ll text you when it’s time to play. Your partner checks in too.</p>
+        <p className="text-lg">When it’s your turn, your court shows under My matches on the tournament page. Your partner needs to check in separately.</p>
         <ErrorText>{action.error}</ErrorText>
         <div className="flex flex-col gap-2">
           <Button variant="primary" className="h-14 text-base" onClick={reset}>
@@ -208,7 +208,7 @@ function Mine({
           <li key={t}>{t}</li>
         ))}
       </ul>
-      {allIn && <p className="text-lg">We’ll text you when it’s time to play. Your partner checks in too.</p>}
+      {allIn && <p className="text-lg">When it’s your turn, your court shows under My matches on the tournament page. Your partner needs to check in separately.</p>}
       <ErrorText>{error}</ErrorText>
       {allIn ? (
         <Button
