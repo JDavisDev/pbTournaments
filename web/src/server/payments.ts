@@ -13,6 +13,18 @@ export type PaymentsMode = 'stripe' | 'test';
 export const paymentsMode = (): PaymentsMode =>
   process.env.STRIPE_SECRET_KEY && process.env.NEXT_PUBLIC_DEMO_MODE !== '1' ? 'stripe' : 'test';
 
+// Every Checkout Session's settings, as chosen in Stripe's Checkout Studio.
+const checkoutSettings = {
+  ui_mode: 'hosted_page',
+  billing_address_collection: 'auto',
+  phone_number_collection: { enabled: false },
+  automatic_tax: { enabled: false },
+  allow_promotion_codes: false,
+  submit_type: 'auto',
+  integration_identifier: 'hosted_web_0001',
+  origin_context: 'web',
+} satisfies Stripe.Checkout.SessionCreateParams;
+
 let stripeClient: Stripe | null = null;
 export function stripe(): Stripe {
   stripeClient ??= new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -68,6 +80,7 @@ export async function startCheckout(registrationId: string): Promise<string> {
   // refunds and disputes are theirs; Courtside's fee comes out of it.
   const session = await stripe().checkout.sessions.create(
     {
+    ...checkoutSettings,
     mode: 'payment',
     // A pending registration holds its spots for 30 minutes, so the checkout
     // closes then too (30 minutes is Stripe's shortest): a late payment can't overfill a division.
@@ -144,6 +157,7 @@ export async function startSetupCheckout(tournamentId: string): Promise<string> 
   if (paymentsMode() === 'test') return `${appUrl()}/checkout/test?setup=${tournamentId}`;
 
   const session = await stripe().checkout.sessions.create({
+    ...checkoutSettings,
     mode: 'payment',
     line_items: [
       {
@@ -194,6 +208,7 @@ export async function startPlayerFeesCheckout(tournamentId: string): Promise<str
   if (paymentsMode() === 'test') return `${appUrl()}/checkout/test?fees=${tournamentId}`;
 
   const session = await stripe().checkout.sessions.create({
+    ...checkoutSettings,
     mode: 'payment',
     line_items: [
       {
