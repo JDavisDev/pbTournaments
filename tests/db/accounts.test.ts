@@ -112,3 +112,17 @@ describe('one account', () => {
     expect(await createUser(db)).toBeTruthy();
   });
 });
+
+describe('bot sign-ups', () => {
+  const check = async (email: string) =>
+    (await one(db, `select public.before_user_created(jsonb_build_object('user', jsonb_build_object('email', $1::text))) as r`, [email])).r;
+
+  it('refuses Gmail addresses with three or more dots, and nothing else', async () => {
+    for (const bad of ['a.r.d.a.dkf@gmail.com', 'x.y.z.w@googlemail.com', 'A.B.C.D+tag@GMAIL.com']) {
+      expect((await check(bad)).error).toMatchObject({ http_code: 400 });
+    }
+    for (const good of ['pat.davis@gmail.com', 'mary.jo.smith@gmail.com', 'a.b.c.d@example.com', 'pat+x.y.z.w@gmail.com', 'ardadkf@gmail.com']) {
+      expect(await check(good)).toEqual({});
+    }
+  });
+});

@@ -1,4 +1,5 @@
 // Director sign-in: Supabase Auth in production, a local account in local mode.
+import { takeCaptchaToken } from './captcha';
 import { demoGuest, isLocalMode } from './config';
 import { getLocalUser, localCall, setLocalUser, type LocalUser } from './localClient';
 import type { PlayerProfile } from './profileTypes';
@@ -39,8 +40,9 @@ const remoteAuth: Auth = {
     );
     return () => data.subscription.unsubscribe();
   },
+  // Sign-up, log-in and sign-in links carry a captcha token when it's on (lib/captcha).
   async signIn(email, password) {
-    const { error } = await supabase().auth.signInWithPassword({ email, password });
+    const { error } = await supabase().auth.signInWithPassword({ email, password, options: { captchaToken: takeCaptchaToken() } });
     if (error) throw new Error(error.message);
   },
   async signUp(email, password, profile) {
@@ -48,6 +50,7 @@ const remoteAuth: Auth = {
       email,
       password,
       options: {
+        captchaToken: takeCaptchaToken(),
         emailRedirectTo: window.location.origin,
         // When they agreed to the Terms of Service and Privacy Policy (the sign-up checkbox), and what
         // they filled in, kept with the account until it's confirmed: the link may open on another browser.
@@ -76,7 +79,7 @@ const remoteAuth: Auth = {
     // Only logs in: signing up goes through the form, with its Terms checkbox.
     const { error } = await supabase().auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
+      options: { captchaToken: takeCaptchaToken(), emailRedirectTo: window.location.origin, shouldCreateUser: false },
     });
     if (error) throw new Error(/signups? not allowed/i.test(error.message) ? 'No account with that email yet. Sign up first.' : error.message);
   },

@@ -424,6 +424,13 @@ const authOps: Record<string, Op> = {
   signUp: async (tx, email: string, password: string) => {
     const address = email.trim().toLowerCase();
     if (password.length < 6) throw new Error('Use at least 6 characters for the password');
+    // The same check Supabase Auth runs before it makes an account.
+    const { r } = await one<{ r: { error?: { message: string } } }>(
+      tx,
+      `select public.before_user_created(jsonb_build_object('user', jsonb_build_object('email', $1::text))) as r`,
+      [address],
+    );
+    if (r.error) throw new Error(r.error.message);
     if ((await all(tx, 'select 1 from auth.users where email = $1', [address])).length) {
       throw new Error('An account with this email already exists. Log in instead.');
     }

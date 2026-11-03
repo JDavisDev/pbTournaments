@@ -12,6 +12,7 @@ import { isBackendConfigured, isDemoMode } from '@/lib/config';
 import { isUnder18 } from '@/lib/eligibility';
 import { formatDate } from '@/lib/format';
 import { useAction, useLoad, useSession } from '@/lib/hooks';
+import { Captcha } from '@/lib/captcha';
 import { logInPlayer, logOut, saveProfile, signUpPlayer, useProfile, type PlayerProfile } from '@/lib/profile';
 import { setViewMode } from '@/lib/viewMode';
 import { ConnectNotice } from '@/components/ConnectNotice';
@@ -130,6 +131,7 @@ function LogIn({ home, onSignUp }: { home: string; onSignUp: () => void }) {
           Forgot password?
         </button>
       </Card>
+      <Captcha />
       <ErrorText>{error}</ErrorText>
       {note && <p className="rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent">{note}</p>}
       <Button variant="primary" type="submit" className="h-14 text-base" disabled={busy}>
@@ -224,6 +226,7 @@ function SignUp({ home, onLogIn }: { home: string; onLogIn: () => void }) {
           .
         </span>
       </label>
+      <Captcha />
       <ErrorText>{error}</ErrorText>
       <Button variant="primary" type="submit" className="h-14 text-base" disabled={busy || !agreed}>
         Sign up
