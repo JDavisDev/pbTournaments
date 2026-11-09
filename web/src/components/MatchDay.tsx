@@ -80,7 +80,7 @@ export function CourtSign({ name, tone = 'called' }: { name: string; tone?: 'cal
         </g>
       </svg>
       <div className="relative grid h-full place-items-center">
-        <span className="rounded-xl bg-black/25 px-4 py-1 font-display text-7xl leading-none font-extrabold text-white uppercase sm:text-8xl">
+        <span className="font-display text-7xl leading-none font-extrabold text-white uppercase sm:text-8xl">
           {name}
         </span>
       </div>

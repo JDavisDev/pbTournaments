@@ -121,9 +121,9 @@ describe('self check-in', () => {
     const davis = (await one(db, `select tp.player_id from public.team_players tp join public.players p on p.id = tp.player_id
                                   where tp.team_id = $1 and p.last_name = 'Davis'`, [t])).player_id;
 
-    // Signed out: the tournament's name only.
+    // Signed out: the tournament's name and id only.
     await actAs(db, null);
-    expect((await one(db, 'select public.self_checkin_info($1) as i', [code])).i).toEqual({ tournament_name: 'Test Open', staff: false });
+    expect((await one(db, 'select public.self_checkin_info($1) as i', [code])).i).toEqual({ tournament_id: tournamentId, tournament_name: 'Test Open', staff: false });
     expect((await one(db, `select public.self_checkin_info('wrong') as i`)).i).toBeNull();
     expect(await rows(db, `select * from public.self_checkin_search($1, 'davis')`, [code])).toEqual([]);
     await expect(db.query('select public.self_check_in($1, $2)', [code, davis])).rejects.toThrow(/Log in/);

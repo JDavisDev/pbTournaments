@@ -5,7 +5,7 @@
 // anyone from the same link (a tablet at the door).
 import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
-import { Button, Empty, ErrorText, Input, Spinner } from '@/components/ui';
+import { Button, Empty, ErrorText, Input, LinkButton, Spinner } from '@/components/ui';
 import { getMySelfCheckin, getSelfCheckinInfo, searchSelfCheckin, selfCheckIn } from '@/lib/api';
 import { isGuest } from '@/lib/auth';
 import { useAction, useLoad, useSession } from '@/lib/hooks';
@@ -72,7 +72,7 @@ export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
       );
     }
     if (me.data.length > 0) {
-      return <Mine code={code} tournament={info.data.tournament_name} players={me.data} onChanged={me.reload} />;
+      return <Mine code={code} tournament={info.data} players={me.data} onChanged={me.reload} />;
     }
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-5 p-6 text-center">
@@ -90,7 +90,7 @@ export function SelfCheckIn({ params }: { params: Promise<{ code: string }> }) {
     return (
       <Mine
         code={code}
-        tournament={info.data.tournament_name}
+        tournament={info.data}
         players={me.data}
         onCancel={() => setSearching(true)}
         onChanged={me.reload}
@@ -186,7 +186,7 @@ function Mine({
   onChanged,
 }: {
   code: string;
-  tournament: string;
+  tournament: { tournament_id: string; tournament_name: string };
   players: SelfCheckinPlayer[];
   /** Staff only: back to finding someone by name. */
   onCancel?: () => void;
@@ -201,7 +201,7 @@ function Mine({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-6 p-6 text-center">
-      <p className="text-lg text-muted">{tournament}</p>
+      <p className="text-lg text-muted">{tournament.tournament_name}</p>
       <h1 className={`text-6xl ${allIn ? 'text-live' : ''}`}>{allIn ? `${first.first_name}, you’re in` : `${first.first_name} Checking In`}</h1>
       <ul className="text-lg text-muted">
         {teams.map((t) => (
@@ -211,21 +211,33 @@ function Mine({
       {allIn && <p className="text-lg">When it’s your turn, your court shows under My matches on the tournament page. Your partner needs to check in separately.</p>}
       <ErrorText>{error}</ErrorText>
       {allIn ? (
-        <Button
-          variant="ghost"
-          disabled={busy}
-          onClick={() =>
-            run(
-              async () => {
-                await setAll(false);
-                setJustIn(false);
-              },
-              onChanged,
-            )
-          }
-        >
-          {justIn ? 'Undo' : 'Undo my check-in'}
-        </Button>
+        <div className="flex flex-col gap-2">
+          {/* Players go on to the tournament page; staff, back to finding the next person. */}
+          {onCancel ? (
+            <Button variant="primary" className="h-16 text-lg" onClick={onCancel}>
+              Done
+            </Button>
+          ) : (
+            <LinkButton variant="primary" className="h-16 text-lg" href={`/t/${tournament.tournament_id}`}>
+              Done
+            </LinkButton>
+          )}
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() =>
+              run(
+                async () => {
+                  await setAll(false);
+                  setJustIn(false);
+                },
+                onChanged,
+              )
+            }
+          >
+            {justIn ? 'Undo' : 'Undo my check-in'}
+          </Button>
+        </div>
       ) : (
         <div className={`grid gap-3 ${onCancel ? 'grid-cols-2' : ''}`}>
           {onCancel && (

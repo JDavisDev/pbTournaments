@@ -474,7 +474,7 @@ export const setSelfCheckin = (tournamentId: string, on: boolean) =>
   rpc<string | null>('set_self_checkin', { p_tournament: tournamentId, p_on: on });
 /** The link's tournament (null when it's off); `staff`: the caller can find and check in anyone. */
 export const getSelfCheckinInfo = (code: string) =>
-  rpc<{ tournament_name: string; staff: boolean } | null>('self_checkin_info', { p_code: code });
+  rpc<{ tournament_id: string; tournament_name: string; staff: boolean } | null>('self_checkin_info', { p_code: code });
 export const searchSelfCheckin = (code: string, query: string) =>
   rpc<SelfCheckinPlayer[]>('self_checkin_search', { p_code: code, p_query: query });
 /** Signed in: the caller's teams in this tournament (their players, or under their email). */
