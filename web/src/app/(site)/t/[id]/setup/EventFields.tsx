@@ -267,6 +267,19 @@ export function FormatFields({
             />
           </Field>
         )}
+        {hasPools && !swiss && (
+          <Field label="Teams play each other" hint="A double round robin plays everyone, then everyone again.">
+            <Select
+              disabled={scheduled}
+              value={form.round_robin_times}
+              onChange={(e) => set('round_robin_times', Number(e.target.value))}
+            >
+              <option value={1}>Once</option>
+              <option value={2}>Twice (double round robin)</option>
+              <option value={3}>3 times (triple round robin)</option>
+            </Select>
+          </Field>
+        )}
         {hasPools && (
           <Field
             label={swiss ? 'Swiss rounds' : 'Max rounds'}

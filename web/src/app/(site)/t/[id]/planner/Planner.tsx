@@ -19,7 +19,7 @@ import {
   setBracketSize,
   updateTournament,
 } from '@/lib/api';
-import { advanceRule, bracketSeeds, formatSummary, formatTime, fromZonedInput, toZonedInput } from '@/lib/format';
+import { advanceRule, bracketSeeds, formatSummary, formatTime, fromZonedInput, roundRobinName, toZonedInput } from '@/lib/format';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import { type Plan, type PlanDivision, planDay, suggestMinutes } from '@/lib/planner';
 import type { BracketType, EventFormat, PoolPlay, RoundKey, Tournament, TournamentEvent } from '@/lib/types';
@@ -50,6 +50,7 @@ interface Draft {
   poolPlay: PoolPlay;
   pools: string;
   maxRounds: string;
+  roundRobinTimes: number;
   bracketSize: string;
   bracketType: BracketType;
   thirdPlace: boolean;
@@ -71,6 +72,7 @@ function formatOf(d: Draft) {
     advance_per_pool: Math.max(1, Math.floor(size / pools)),
     bracket_size: d.format === 'pools_to_bracket' ? size : null,
     max_rounds: hasPools && rounds > 0 ? rounds : null,
+    round_robin_times: hasPools && !swiss ? d.roundRobinTimes : 1,
     bracket_type: d.bracketType,
     third_place_match: d.bracketType === 'single' && d.thirdPlace,
     grand_final_reset: d.bracketType === 'double' && d.gfReset,
@@ -102,6 +104,7 @@ function initialDraft(e: TournamentEvent, t: Tournament, teamCount: number): Dra
     poolPlay: e.pool_play,
     pools: String(e.pool_count),
     maxRounds: e.max_rounds?.toString() ?? '',
+    roundRobinTimes: e.round_robin_times ?? 1,
     bracketSize: String(bracketSeeds(e)),
     bracketType: e.bracket_type,
     thirdPlace: e.third_place_match,
@@ -167,6 +170,7 @@ export function Planner({ params }: { params: Promise<{ id: string }> }) {
       bracketSize: f.bracket_size === null ? null : Math.min(f.bracket_size, teamCount),
       swiss: f.pool_play === 'swiss',
       maxRounds: f.max_rounds,
+      roundRobinTimes: f.round_robin_times,
       bracketType: f.bracket_type,
       thirdPlace: f.third_place_match,
       gfReset: f.grand_final_reset,
@@ -592,6 +596,20 @@ function FormatSettings({
             <Input type="number" min={1} max={26} className="h-10 w-20" value={d.pools} disabled={scheduled} onChange={(ev) => onChange({ pools: ev.target.value })} />
           </Field>
         )}
+        {hasPools && !swiss && (
+          <Field label="Play each other">
+            <Select
+              className="h-10"
+              value={d.roundRobinTimes}
+              disabled={scheduled}
+              onChange={(ev) => onChange({ roundRobinTimes: Number(ev.target.value) })}
+            >
+              <option value={1}>Once</option>
+              <option value={2}>Twice</option>
+              <option value={3}>3 times</option>
+            </Select>
+          </Field>
+        )}
         {hasPools && (
           <Field label={swiss ? 'Swiss rounds' : 'Max rounds'}>
             <Input
@@ -639,6 +657,7 @@ function FormatSettings({
         {[
           `${teams} teams`,
           hasPools && (swiss ? `${f.max_rounds ?? '?'} Swiss rounds` : pools),
+          hasPools && !swiss && f.round_robin_times > 1 && roundRobinName(f.round_robin_times),
           poolPlay && `Pool play: ${poolPlay}`,
           f.format === 'pools_to_bracket' && f.bracket_type !== 'medal' && advanceRule(f.pool_count, Math.min(f.bracket_size!, teams)).replace(/\.$/, ''),
           bracket && `Bracket: ${bracket}`,

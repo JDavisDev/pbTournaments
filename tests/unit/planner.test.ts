@@ -30,6 +30,13 @@ describe('planner', () => {
     expect((plan.end - T0) / MIN).toBe(7 * 15);
   });
 
+  it('plays a double round robin twice through', () => {
+    const plan = planDay([division({ roundRobinTimes: 2 })], { courts: 4 });
+    expect(count(plan)).toBe(56);
+    expect((plan.end - T0) / MIN).toBe(14 * 15);
+    expect(count(planDay([division({ roundRobinTimes: 2, maxRounds: 10 })], { courts: 4 }))).toBe(40);
+  });
+
   it('honors max rounds', () => {
     expect(count(planDay([division({ maxRounds: 6 })], { courts: 4 }))).toBe(24);
   });

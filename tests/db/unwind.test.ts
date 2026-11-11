@@ -392,6 +392,21 @@ describe('changing pool play', () => {
     expect((await one(db, 'select played from public.standings where team_id = $1', [late])).played).toBe(4);
   });
 
+  it('a late team in a double round robin plays everyone in its pool twice', async () => {
+    const { eventId } = await division(4);
+    await db.query('update public.events set round_robin_times = 2 where id = $1', [eventId]);
+    await generate(db, eventId);
+    const late = await addPair(db, eventId, ['Late', 'Comer'], 5);
+    expect((await one(db, 'select public.place_team_in_pool($1, 1) as n', [late])).n).toBe(8);
+    const opponents = await rows(
+      db,
+      `select case when team1_id = $2 then team2_id else team1_id end as other, count(*)::int as n
+       from public.matches where event_id = $1 and $2 in (team1_id, team2_id) group by 1`,
+      [eventId, late],
+    );
+    expect(opponents.map((o) => o.n)).toEqual([2, 2, 2, 2]);
+  });
+
   it('moves a team that hasn’t played to another pool, not one that has', async () => {
     const { tournamentId, eventId, teams } = await division(6, { pools: 2 });
     await db.query('update public.tournaments set auto_assign = false where id = $1', [tournamentId]);

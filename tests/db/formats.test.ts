@@ -128,6 +128,55 @@ describe('teams in the bracket', () => {
   });
 });
 
+describe('double and triple round robins', () => {
+  const pairKey = (m: { team1_id: string; team2_id: string }) => [m.team1_id, m.team2_id].sort().join();
+
+  it('a double round robin plays everyone twice, sides swapped, then goes to the bracket', async () => {
+    const { tournamentId, eventId, seedOf } = await division(4, { bracketSize: 2 });
+    await db.query('update public.events set round_robin_times = 2 where id = $1', [eventId]);
+    // 4 teams: 3 rounds of 2 matches, twice, then the final.
+    expect(await generate(db, eventId)).toBe(2 * 3 * 2 + 1);
+
+    const pool = await poolMatches(eventId);
+    expect(Math.max(...pool.map((m) => m.round))).toBe(6);
+    const meetings = new Map<string, typeof pool>();
+    for (const m of pool) meetings.set(pairKey(m), [...(meetings.get(pairKey(m)) ?? []), m]);
+    expect(meetings.size).toBe(6);
+    for (const [first, second] of meetings.values()) {
+      // Everyone meets once in rounds 1-3 and again in 4-6, with sides swapped.
+      expect(first.round).toBeLessThanOrEqual(3);
+      expect(second.round).toBeGreaterThan(3);
+      expect([second.team1_id, second.team2_id]).toEqual([first.team2_id, first.team1_id]);
+    }
+    const final = await one(db, `select wave from public.matches where event_id = $1 and stage = 'bracket'`, [eventId]);
+    expect(final.wave).toBe(7);
+
+    await play(tournamentId, seedOf, 'pool');
+    const standings = await rows(db, 'select played from public.standings where event_id = $1', [eventId]);
+    expect(standings.map((s) => s.played)).toEqual([6, 6, 6, 6]);
+    await finishPoolPlay(db, eventId);
+    expect(await bracketTeams(eventId)).toHaveLength(2);
+  });
+
+  it('a triple round robin with an odd team count, capped by max rounds', async () => {
+    const { eventId } = await division(5, { format: 'round_robin' });
+    await db.query('update public.events set round_robin_times = 3 where id = $1', [eventId]);
+    // 5 teams: 5 rounds of 2 matches (one sits out), 3 times.
+    expect(await generate(db, eventId)).toBe(3 * 5 * 2);
+    const pool = await poolMatches(eventId);
+    const counts = new Map<string, number>();
+    for (const m of pool) counts.set(pairKey(m), (counts.get(pairKey(m)) ?? 0) + 1);
+    expect(counts.size).toBe(10);
+    expect([...counts.values()].every((n) => n === 3)).toBe(true);
+  });
+
+  it('max rounds caps the total', async () => {
+    const { eventId } = await division(4, { format: 'round_robin', maxRounds: 4 });
+    await db.query('update public.events set round_robin_times = 2 where id = $1', [eventId]);
+    expect(await generate(db, eventId)).toBe(4 * 2);
+  });
+});
+
 describe('straight to the medal matches', () => {
   it('2 pools: the pool winners play for gold and the runners-up for bronze', async () => {
     const { tournamentId, eventId, seedOf } = await division(8, { pools: 2, advancePerPool: 2, bracketType: 'medal' });

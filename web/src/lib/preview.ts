@@ -56,13 +56,16 @@ export function previewSchedule(e: TournamentEvent, entered: Team[]): SchedulePr
     let ring: (Team | null)[] = members.length % 2 ? [...members, null] : [...members];
     const size = ring.length;
     const rounds: PoolPreview['rounds'] = [];
-    for (let round = 1; round <= Math.min(size - 1, e.max_rounds ?? size - 1); round++) {
+    // A double or triple round robin repeats it, sides swapped each time, as generate_pools does.
+    const total = (size - 1) * Math.max(1, e.round_robin_times ?? 1);
+    for (let round = 1; round <= Math.min(total, e.max_rounds ?? total); round++) {
+      const swap = Math.floor((round - 1) / (size - 1)) % 2 === 1;
       const matches: Pairing[] = [];
       let sitsOut: Team | null = null;
       for (let slot = 0; slot < size / 2; slot++) {
         const a = ring[slot];
         const b = ring[size - 1 - slot];
-        if (a && b) matches.push([a, b]);
+        if (a && b) matches.push(swap ? [b, a] : [a, b]);
         else sitsOut = a ?? b;
       }
       rounds.push({ round, matches, sitsOut });

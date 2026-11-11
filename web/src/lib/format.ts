@@ -44,6 +44,7 @@ export function formatSummary(e: {
   bracket_size?: number | null;
   bracket_type?: BracketType;
   max_rounds?: number | null;
+  round_robin_times?: number;
   pool_play?: PoolPlay;
 }) {
   const bracket =
@@ -53,9 +54,14 @@ export function formatSummary(e: {
     e.pool_play === 'swiss'
       ? `${e.max_rounds ?? '?'} Swiss rounds`
       : `${e.pool_count === 1 ? '1 pool' : `${e.pool_count} pools`}${e.max_rounds ? ` · ${e.max_rounds} rounds max` : ''}`;
-  if (e.format === 'round_robin') return e.pool_play === 'swiss' ? play : `Round robin · ${play}`;
-  return `${play} → ${e.bracket_type === 'medal' ? 'gold and bronze matches' : `top ${bracketSeeds(e)} to ${bracket}`}`;
+  const repeats = e.pool_play !== 'swiss' && (e.round_robin_times ?? 1) > 1;
+  if (e.format === 'round_robin') return e.pool_play === 'swiss' ? play : `${roundRobinName(e.round_robin_times)} · ${play}`;
+  return `${repeats ? `${roundRobinName(e.round_robin_times)} · ` : ''}${play} → ${e.bracket_type === 'medal' ? 'gold and bronze matches' : `top ${bracketSeeds(e)} to ${bracket}`}`;
 }
+
+/** "Round robin", "Double round robin", "Triple round robin". */
+export const roundRobinName = (times = 1) =>
+  times === 3 ? 'Triple round robin' : times === 2 ? 'Double round robin' : 'Round robin';
 
 /** Teams that go from pool play to the bracket. */
 export const bracketSeeds = (e: { pool_count: number; advance_per_pool: number; bracket_size?: number | null }) =>

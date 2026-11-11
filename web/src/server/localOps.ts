@@ -70,6 +70,7 @@ const EVENT_COLUMNS = [
   'team_rating_max',
   'team_age_min',
   'max_rounds',
+  'round_robin_times',
   'pool_play',
   'bracket_size',
   'bracket_type',

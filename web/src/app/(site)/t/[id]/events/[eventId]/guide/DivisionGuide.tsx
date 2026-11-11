@@ -175,13 +175,15 @@ function formatItems(e: TournamentEvent, teamCount: number): string[] {
         `Pool play is ${e.max_rounds ?? 'a few'} Swiss rounds: each round pairs teams with similar records who haven’t played each other yet.`,
       );
     } else {
-      // The biggest pool's round robin; with uneven pools, some play one fewer.
-      const each = teamCount >= 2 * pools ? Math.ceil(teamCount / pools) - 1 : null;
+      // The biggest pool's round robin; with uneven pools, some play fewer.
+      const times = Math.max(1, e.round_robin_times ?? 1);
+      const each = teamCount >= 2 * pools ? (Math.ceil(teamCount / pools) - 1) * times : null;
+      const again = times === 3 ? ' 3 times' : times === 2 ? ' twice' : '';
       const split = pools === 1 ? 'Everyone plays in one pool' : `Teams are split into ${pools} pools by seed`;
       lines.push(
         e.max_rounds
           ? `${split}, and you play ${e.max_rounds} matches against teams in your pool.`
-          : `${split}, and you play everyone in your pool${
+          : `${split}, and you play everyone in your pool${again}${
               each ? ` (${teamCount % pools ? 'about ' : ''}${each} match${each === 1 ? '' : 'es'})` : ''
             }.`,
       );

@@ -702,6 +702,8 @@ export interface TournamentEvent {
   team_age_min: number | null;
   /** Round robin: stop after this many rounds (null = everyone plays everyone). Swiss: the number of rounds. */
   max_rounds: number | null;
+  /** Round robin: how many times teams in a pool play each other (2 = double round robin). */
+  round_robin_times: number;
   pool_play: PoolPlay;
   /** Teams in the bracket; null = pool_count × advance_per_pool. */
   bracket_size: number | null;

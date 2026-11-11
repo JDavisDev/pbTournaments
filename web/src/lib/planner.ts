@@ -20,6 +20,8 @@ export interface PlanDivision {
   /** Swiss rounds instead of a round robin: maxRounds rounds, each drawn when the last one ends. */
   swiss?: boolean;
   maxRounds: number | null;
+  /** Round robin: how many times teams in a pool play each other (default 1). */
+  roundRobinTimes?: number;
   /** 'medal': seeds 1 v 2 for gold and 3 v 4 for bronze, nothing else. */
   bracketType: 'single' | 'double' | 'medal';
   thirdPlace: boolean;
@@ -146,7 +148,8 @@ function buildDivision(d: PlanDivision, divisionIndex: number): Node[] {
       }
       if (ring.length % 2 === 1) ring.push(null);
       const size = ring.length;
-      const rounds = Math.min(size - 1, d.maxRounds ?? size - 1);
+      const total = (size - 1) * Math.max(1, d.roundRobinTimes ?? 1);
+      const rounds = Math.min(total, d.maxRounds ?? total);
       poolRounds = Math.max(poolRounds, rounds);
       let r = ring;
       for (let round = 1; round <= rounds; round++) {
