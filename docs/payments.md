@@ -15,7 +15,7 @@ Players pay **into the director's own Stripe account**. Courtside never holds to
 
 ## Free tournaments
 
-- **Basic tournaments** (`tournaments.simple`) are free: no registration, payments or texts. Check-in is optional (Setup → Check-in, `set_basic_checkin`).
+- **Basic tournaments** (`tournaments.simple`) are free: no registration, payments or texts. Check-in is optional (Setup → Check-in, `set_basic_checkin`). Started from the home page, one stands alone with no organization (`organization_id` null): its creator is a tournament admin and can share it like any other. A Basic tournament is deleted only when abandoned: a division started over 14 days ago, and it's neither marked complete nor fully played (the daily `clean_up_demo_tournaments` job).
 - **Platform admins** (`private.platform_admins`): every tournament in an organization a platform admin owns is free with every feature. Add one with `insert into private.platform_admins (user_id) select id from auth.users where email = '…';`
 
 ## Without Stripe keys (local mode, the demo site)

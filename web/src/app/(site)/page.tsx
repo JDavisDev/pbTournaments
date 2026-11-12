@@ -24,11 +24,14 @@ export default function Home() {
 
   // One organization or none (the account gets its own), or a demo site: straight to Setup.
   const direct = isDemoMode || (session && orgs.data && orgs.data.length <= 1);
+  // Basic tournaments need no organization, so any signed-in account can start one.
+  const directBasic = isDemoMode || !!session;
   const start = (simple: boolean) =>
     create.run(async () => {
       if (!session) await auth.signInAsGuest();
       setViewMode('admin');
-      const t = await newTournament(isDemoMode ? null : (orgs.data?.[0]?.id ?? null), simple);
+      // Basic: standalone (no organization); its Setup can't take payments anyway.
+      const t = await newTournament(isDemoMode || simple ? null : (orgs.data?.[0]?.id ?? null), simple);
       router.push(`/t/${t.id}/setup`);
     });
 
@@ -62,7 +65,7 @@ export default function Home() {
         </div>
         <p className="mt-4 text-muted">
           Just need pools and brackets?{' '}
-          {direct ? (
+          {directBasic ? (
             <button
               type="button"
               disabled={create.busy || session === undefined}
@@ -73,7 +76,7 @@ export default function Home() {
             </button>
           ) : (
             <Link
-              href={!session ? '/profile?mode=login' : '#your-organizations'}
+              href="/profile?mode=login"
               className="font-medium text-text underline underline-offset-4 hover:text-brand"
             >
               Start a Basic tournament for free:

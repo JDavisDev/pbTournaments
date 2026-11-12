@@ -39,6 +39,7 @@ export default function TermsPage() {
         <li>Players can register and follow a tournament without an account. Directors and their staff need one.</li>
         <li>Give accurate information, keep your password private, and tell us if you think your account has been misused. You’re responsible for what happens under your account.</li>
         <li>Demo and practice tournaments are for trying the Service. They may be shared with other visitors and are deleted after about two weeks.</li>
+        <li>Free Basic tournaments stay as long as you like, except one that was started and not finished within 14 days, which is deleted as abandoned.</li>
       </ul>
 
       <h2>3. Registration and payments</h2>

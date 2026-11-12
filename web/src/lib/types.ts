@@ -45,7 +45,8 @@ export interface Organization {
 
 export interface Tournament {
   id: string;
-  organization_id: string;
+  /** Null: a standalone Basic tournament, run by its tournament admins. */
+  organization_id: string | null;
   name: string;
   starts_on: string;
   time_zone: string;
