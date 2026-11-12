@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/next';
 import type { Metadata, Viewport } from 'next';
 import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next, Barlow_Condensed, Montserrat, Saira } from 'next/font/google';
 import { AppSetup } from '@/components/AppSetup';
@@ -69,6 +70,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       <body className="min-h-full">
         <AppSetup />
         {children}
+        <Analytics />
       </body>
     </html>
   );
