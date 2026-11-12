@@ -7,6 +7,7 @@ import { mapProfile } from './profileTypes';
 import { supabase } from './supabase';
 import { pastedTeams } from './teamText';
 import type {
+  PayoutBalance,
   ChampionshipHold,
   CheckinPlayer,
   CodeMatch,
@@ -464,6 +465,15 @@ export async function connectPayments(tournamentId: string) {
   return url;
 }
 
+/** Owner or admin: the organization's Stripe balance, held until they pay it out. */
+export const getPayoutBalance = (tournamentId: string) =>
+  postJson<PayoutBalance>('/api/connect/payout', { tournamentId }, { signedIn: true });
+/** Owner or admin: pay the whole available balance out to their bank. Returns the amount. */
+export async function payOutBalance(tournamentId: string) {
+  const { paid_cents } = await postJson<{ paid_cents: number }>('/api/connect/payout', { tournamentId, payout: true }, { signedIn: true });
+  return paid_cents;
+}
+
 // Sharing with other admins and court monitors -------------------------------
 
 /** 'admin', 'monitor' or null for the signed-in user. */
@@ -553,6 +563,10 @@ export const getTeamRoster = (tournamentId: string) =>
 
 export const checkInPlayer = (tournamentId: string, playerId: string, checkedIn = true) =>
   rpc('check_in_player', { p_tournament: tournamentId, p_player: playerId, p_checked_in: checkedIn });
+
+/** Basic tournaments: turn check-in on (before play starts) or off (everyone is checked in). */
+export const setBasicCheckin = (tournamentId: string, on: boolean) =>
+  rpc('set_basic_checkin', { p_tournament: tournamentId, p_on: on });
 
 export const withdrawTeam = (teamId: string) => rpc<number>('withdraw_team', { p_team: teamId });
 export const reinstateTeam = (teamId: string) => rpc<number>('reinstate_team', { p_team: teamId });

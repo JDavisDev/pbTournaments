@@ -32,6 +32,7 @@ import { championshipModes, isPlayable, toZonedInput } from '@/lib/format';
 import { rulesOf } from '@/lib/scoring';
 import { useAction, useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import type { ChampionshipMode, CourtBoardRow } from '@/lib/types';
+import { usesCheckin } from '@/lib/types';
 
 type Tab = 'courts' | 'queue' | 'checkin' | 'results';
 
@@ -231,8 +232,8 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
       {waitingToday.length > 0 && (
         <p className="rounded-lg bg-surface-2 px-3 py-2 text-sm">
           Not started yet today: {waitingToday.map((e) => e.name).join(', ')}.{' '}
-          <Link href={t.simple ? `/t/${id}/events/${waitingToday[0].id}` : `/t/${id}/checkin`} className="font-semibold underline">
-            {t.simple ? 'Start it from its page' : 'Start from Check-in'}
+          <Link href={usesCheckin(t) ? `/t/${id}/checkin` : `/t/${id}/events/${waitingToday[0].id}`} className="font-semibold underline">
+            {usesCheckin(t) ? 'Start from Check-in' : 'Start it from its page'}
           </Link>
         </p>
       )}
@@ -250,8 +251,8 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
           tabs={[
             ['courts', `Courts`],
             ['queue', `Queue ${queue.length}`],
-            // Simple tournaments have no check-in.
-            ...(t.simple ? [] : [['checkin', notIn ? `Check-in ${notIn}` : 'Check-in'] as [Tab, string]]),
+            // Basic tournaments have no check-in unless the director turned it on.
+            ...(!usesCheckin(t) ? [] : [['checkin', notIn ? `Check-in ${notIn}` : 'Check-in'] as [Tab, string]]),
             ['results', 'Results'],
           ]}
         />
@@ -296,7 +297,7 @@ export function CourtDesk({ params }: { params: Promise<{ id: string }> }) {
               onChange={setTab}
               tabs={[
                 ['queue', `Queue (${queue.length})`],
-                ...(t.simple ? [] : [['checkin', `Check-in${notIn ? ` (${notIn})` : ''}`] as [Tab, string]]),
+                ...(!usesCheckin(t) ? [] : [['checkin', `Check-in${notIn ? ` (${notIn})` : ''}`] as [Tab, string]]),
                 ['results', 'Results'],
               ]}
             />

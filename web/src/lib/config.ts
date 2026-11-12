@@ -24,3 +24,11 @@ export const demoGuest = {
   email: process.env.NEXT_PUBLIC_DEMO_GUEST_EMAIL?.trim().toLowerCase() || null,
   password: process.env.NEXT_PUBLIC_DEMO_GUEST_PASSWORD || null,
 };
+
+/**
+ * Texting players (court calls, messages, waitlist offers by text). Off until
+ * the sending number is fully set up: hides the director's "Text players"
+ * switch, the texting fee and the players' "Text me" box. Turning it back on
+ * also needs the database grant back (see the texting_off migration).
+ */
+export const textingAvailable = false;

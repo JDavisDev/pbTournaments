@@ -53,7 +53,7 @@ async function open(id: string) {
 export const scenarios = [
   {
     key: 'free',
-    label: 'Simple and free',
+    label: 'Basic and free',
     hint: 'Two open divisions, no fee, no waiver.',
     run: async () => {
       const id = await build('Test: simple and free', { entry: 0, extra: 0 });

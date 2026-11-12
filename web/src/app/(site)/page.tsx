@@ -13,7 +13,7 @@ import { setViewMode } from '@/lib/viewMode';
 import { DemoCard } from '@/components/DemoTools';
 import { ListingsNearYou } from './ListingsNearYou';
 import { PricingBlock } from '@/components/PricingBlock';
-import { isBackendConfigured, isDemoMode } from '@/lib/config';
+import { isBackendConfigured, isDemoMode, textingAvailable } from '@/lib/config';
 
 export default function Home() {
   const session = useSession();
@@ -42,8 +42,8 @@ export default function Home() {
           <LogoStacked className="h-auto w-full max-w-[34rem]" />
         </h1>
         <p className="mt-5 max-w-xl text-lg text-muted">
-          Registration, brackets and live court assignment. Players get a text when they’re up, and the next match goes
-          out the moment a score comes in.
+          Registration, brackets and live court assignment. {textingAvailable ? 'Players get a text when they’re up' : 'Players see their court on their phone the moment they’re up'}, and the next match
+          goes out the moment a score comes in.
         </p>
         <div className="mt-7 flex flex-wrap gap-3">
           {direct ? (
@@ -69,17 +69,17 @@ export default function Home() {
               onClick={() => start(true)}
               className="font-medium text-text underline underline-offset-4 hover:text-brand"
             >
-              Start a simple tournament for free:
+              Start a Basic tournament for free:
             </button>
           ) : (
             <Link
               href={!session ? '/profile?mode=login' : '#your-organizations'}
               className="font-medium text-text underline underline-offset-4 hover:text-brand"
             >
-              Start a simple tournament for free:
+              Start a Basic tournament for free:
             </Link>
           )}{' '}
-          paste in the teams, and players follow their courts on the tournament page. No registration or texts.
+          paste in the teams, check players in if you like, and players follow their courts on the tournament page. No registration or payments.
         </p>
         <p className="mt-2 text-muted">
           Taking sign-ups somewhere else?{' '}

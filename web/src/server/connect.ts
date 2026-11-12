@@ -1,8 +1,13 @@
 // Stripe Connect: each organization connects its own Stripe account and
 // players pay into it (server/payments.ts). Onboarding is Stripe's hosted
 // form (Account Links); account.updated keeps whether it can take payments.
+// Payouts are held (a manual payout schedule): players' money stays in the
+// account's Stripe balance until the owner pays it out after the tournament,
+// so refunds come out of it. It's a soft hold: a Standard account's owner can
+// still pay out from their own Stripe dashboard.
 // Without Stripe keys, a pretend test account is connected at once.
 import type Stripe from 'stripe';
+import type { PayoutBalance } from '@/lib/types';
 import { paymentsMode, stripe } from './payments';
 import { appUrl, serverRpc } from './serverRpc';
 
@@ -41,6 +46,7 @@ export async function startOnboarding(tournamentId: string, setup: PaymentSetup)
     });
     account = created.id;
     await save(setup.organization_id, account, false, false);
+    await holdPayouts(account).catch((err: Error) => console.error(`Couldn’t hold payouts for ${account}: ${err.message}`));
   }
   const link = await stripe().accountLinks.create({
     account,
@@ -65,5 +71,46 @@ export async function refreshAccountStatus(tournamentId: string) {
     p_tournament: tournamentId,
   });
   if (!found?.stripe_account_id || found.stripe_account_id.startsWith('acct_test_')) return;
-  await updateAccountStatus(await stripe().accounts.retrieve(found.stripe_account_id));
+  const account = await stripe().accounts.retrieve(found.stripe_account_id);
+  await updateAccountStatus(account);
+  // In case holding them failed when the account was made.
+  if (account.settings?.payouts?.schedule?.interval !== 'manual') {
+    await holdPayouts(account.id).catch((err: Error) => console.error(`Couldn’t hold payouts for ${account.id}: ${err.message}`));
+  }
+}
+
+/**
+ * Manual payouts: Stripe keeps the balance until we pay it out. Needs
+ * Connect → Payouts → schedules in Courtside's Stripe dashboard to let the
+ * platform manage connected accounts' payout schedules.
+ */
+export const holdPayouts = (account: string) =>
+  stripe().accounts.update(account, { settings: { payouts: { schedule: { interval: 'manual' } } } });
+
+/** The organization's Stripe balance in US dollars. */
+export async function payoutBalance(account: string | null): Promise<PayoutBalance> {
+  if (paymentsMode() === 'test' || !account || account.startsWith('acct_test_')) {
+    return { available_cents: 0, pending_cents: 0, held: true, test: true };
+  }
+  const [balance, acct] = await Promise.all([
+    stripe().balance.retrieve({}, { stripeAccount: account }),
+    stripe().accounts.retrieve(account),
+  ]);
+  const usd = (list: { amount: number; currency: string }[]) =>
+    list.filter((b) => b.currency === 'usd').reduce((sum, b) => sum + b.amount, 0);
+  return {
+    available_cents: usd(balance.available),
+    pending_cents: usd(balance.pending),
+    held: acct.settings?.payouts?.schedule?.interval === 'manual',
+    test: false,
+  };
+}
+
+/** Pays the whole available balance out to the organization's bank. Returns the amount. */
+export async function payOutAll(account: string | null): Promise<number> {
+  const { available_cents, test } = await payoutBalance(account);
+  if (test) throw new Error('Test mode: there’s no real balance to pay out');
+  if (available_cents <= 0) throw new Error('Nothing is ready to pay out yet');
+  await stripe().payouts.create({ amount: available_cents, currency: 'usd' }, { stripeAccount: account! });
+  return available_cents;
 }

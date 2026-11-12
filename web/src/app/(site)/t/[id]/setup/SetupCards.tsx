@@ -20,7 +20,10 @@ import {
   updateTournament,
   connectPayments,
   getPaymentsStatus,
+  getPayoutBalance,
+  payOutBalance,
 } from '@/lib/api';
+import { textingAvailable } from '@/lib/config';
 import { formatMoney, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
 import { goToCheckout } from '@/lib/http';
@@ -338,7 +341,6 @@ export function DiscountCodesCard({ tournament }: { tournament: Tournament }) {
   );
 }
 
-/** What this tournament costs on the platform, the setup fee, and the texting switch. */
 /** Where players' money goes: the organization's own Stripe account (Stripe Connect). */
 export function PaymentsCard({ tournament }: { tournament: Tournament }) {
   const status = useLoad(() => getPaymentsStatus(tournament.id), [tournament.id]);
@@ -356,7 +358,7 @@ export function PaymentsCard({ tournament }: { tournament: Tournament }) {
       title="Payments"
       foldable
       summary={p.ready ? 'Stripe connected' : p.connected ? 'Finish Stripe setup' : 'Stripe not connected'}
-      description="Players pay into your own Stripe account. Stripe’s card fee and Courtside’s per-player fee come out of each payment, and Stripe pays out the rest to your bank."
+      description="Players pay into your own Stripe account. Stripe’s card fee and Courtside’s per-player fee come out of each payment. The rest waits in your Stripe balance until you pay it out, so refunds are easy until then."
     >
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-2 p-3">
         <span>
@@ -383,6 +385,7 @@ export function PaymentsCard({ tournament }: { tournament: Tournament }) {
       {p.test && (
         <p className="text-sm text-muted">Test mode: a pretend Stripe account. Nothing is charged until the site has Stripe keys.</p>
       )}
+      {p.ready && !p.test && p.can_manage && <PayoutPanel tournamentId={tournament.id} />}
       {p.ready && !p.test && (
         <a href="https://dashboard.stripe.com" target="_blank" rel="noopener noreferrer" className="self-start text-sm font-medium underline">
           Open your Stripe dashboard
@@ -390,6 +393,39 @@ export function PaymentsCard({ tournament }: { tournament: Tournament }) {
       )}
       <ErrorText>{error}</ErrorText>
     </SettingsGroup>
+  );
+}
+
+/** What this tournament costs on the platform, the setup fee, and the texting switch. */
+/** The organization's held Stripe balance, and paying it out once the tournament is over. */
+function PayoutPanel({ tournamentId }: { tournamentId: string }) {
+  const balance = useLoad(() => getPayoutBalance(tournamentId), [tournamentId]);
+  const { busy, error, run } = useAction();
+  const [paid, setPaid] = useState<number | null>(null);
+  const b = balance.data;
+  if (balance.error) return <ErrorText>{balance.error}</ErrorText>;
+  if (!b) return null;
+  const payOut = () => {
+    if (!confirm(`Pay ${formatMoney(b.available_cents)} out to your bank now? Refunds after this come out of your bank account.`)) return;
+    run(async () => setPaid(await payOutBalance(tournamentId)), balance.reload);
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-surface-2 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span>
+          <span className="block font-semibold">{formatMoney(b.available_cents)} ready to pay out</span>
+          <span className="text-sm text-muted">
+            {b.pending_cents > 0 ? `${formatMoney(b.pending_cents)} more is still settling. ` : ''}
+            {b.held ? 'Held until you pay it out: do it after the tournament, once refunds are done.' : 'Stripe pays this out on your own schedule.'}
+          </span>
+        </span>
+        <Button size="sm" disabled={busy || b.available_cents <= 0} onClick={payOut}>
+          {busy ? 'Paying out…' : 'Pay out to bank'}
+        </Button>
+      </div>
+      {paid !== null && <p className="text-sm text-live">{formatMoney(paid)} is on its way to your bank (usually 2 business days).</p>}
+      <ErrorText>{error}</ErrorText>
+    </div>
   );
 }
 
@@ -406,9 +442,11 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
       title="Fees"
       foldable
       summary={[
-        f.is_demo ? 'Practice: free' : f.setup_due_cents ? `Setup fee ${formatMoney(f.setup_due_cents)} due` : 'Setup fee paid',
-        f.texts_enabled ? 'texting on' : 'texting off',
-      ].join(' · ')}
+        f.is_demo ? 'Practice: free' : f.fees_waived ? 'Free: platform admin' : f.setup_due_cents ? `Setup fee ${formatMoney(f.setup_due_cents)} due` : 'Setup fee paid',
+        textingAvailable && (f.texts_enabled ? 'texting on' : 'texting off'),
+      ]
+        .filter(Boolean)
+        .join(' · ')}
       description="What this tournament costs on Courtside. Tip: build these into your entry price so players see one all-in price."
     >
       <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 p-3">
@@ -417,7 +455,7 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
           <span className="text-sm text-muted">One time. Needed before registration opens or play starts.</span>
         </span>
         {f.setup_due_cents === 0 ? (
-          <Badge tone="live">{f.is_demo ? 'Not needed' : 'Paid'}</Badge>
+          <Badge tone="live">{f.is_demo ? 'Not needed' : f.fees_waived ? 'Waived' : 'Paid'}</Badge>
         ) : (
           <Button size="sm" variant="primary" disabled={busy} onClick={paySetup}>
             Pay {formatMoney(f.setup_due_cents)}
@@ -430,19 +468,28 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
           Players · {formatMoney(f.per_player_cents)} each × {f.players}
         </dt>
         <dd className="tnum text-right">{formatMoney(f.players * f.per_player_cents)}</dd>
+        {textingAvailable && (
+          <>
         <dt className={f.texts_enabled ? '' : 'text-muted line-through'}>
           Texting · {formatMoney(f.texting_per_player_cents)} each × {f.players}
         </dt>
         <dd className={`tnum text-right ${f.texts_enabled ? '' : 'text-muted line-through'}`}>
           {formatMoney(f.players * f.texting_per_player_cents)}
         </dd>
+          </>
+        )}
         <dt className="border-t border-border pt-1 font-semibold">{f.is_demo ? 'Would cost (practice is free)' : 'Player fees so far'}</dt>
         <dd className="tnum border-t border-border pt-1 text-right font-semibold">
           {formatMoney(f.is_demo ? f.players * (f.per_player_cents + (f.texts_enabled ? f.texting_per_player_cents : 0)) : f.player_fees_cents)}
         </dd>
       </dl>
 
-      {!f.is_demo && (
+      {f.fees_waived && (
+        <p className="text-sm text-muted">
+          A platform admin owns this organization, so its tournaments are free with every feature: no setup or player fees.
+        </p>
+      )}
+      {!f.is_demo && !f.fees_waived && (
         <p className="text-sm text-muted">
           Player fees come out of each card payment automatically ({formatMoney(f.fees_collected_cents)} so far). Players who didn’t
           pay by card (added at the desk, free entries) are billed to you
@@ -450,6 +497,7 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
         </p>
       )}
 
+      {textingAvailable && (
       <label className="flex items-start gap-3 rounded-xl bg-surface-2 p-3">
         <input
           type="checkbox"
@@ -466,6 +514,7 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
           </span>
         </span>
       </label>
+      )}
       <ErrorText>{error}</ErrorText>
     </SettingsGroup>
   );

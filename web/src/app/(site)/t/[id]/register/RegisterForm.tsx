@@ -16,6 +16,7 @@ import {
   startRegistration,
 } from '@/lib/api';
 import { isGuest } from '@/lib/auth';
+import { textingAvailable } from '@/lib/config';
 import { describeDivision, entryProblem, type PlayerFacts } from '@/lib/eligibility';
 import { entryCost, formatMoney, formatTime, priceAt, priceSummary, registrationOpen } from '@/lib/format';
 import { useAction, useLoad, useNow, useSession, useStaffAccess } from '@/lib/hooks';
@@ -375,6 +376,7 @@ function Form({ id, saved, isStaff }: { id: string; saved: PlayerProfile | null;
             />
           </Field>
         )}
+        {textingAvailable && (
         <label className="flex items-start gap-3 rounded-xl bg-surface p-3 text-sm">
           <input
             type="checkbox"
@@ -390,6 +392,7 @@ function Form({ id, saved, isStaff }: { id: string; saved: PlayerProfile | null;
             </span>
           </span>
         </label>
+        )}
       </Card>
       )}
 

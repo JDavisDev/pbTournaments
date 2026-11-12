@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { sendMessage } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
 import type { MessageScope } from '@/lib/types';
+import { textingAvailable } from '@/lib/config';
 import { Button, ErrorText, Field, Input, Select, Textarea } from './ui';
 
 export interface Recipient {
@@ -28,7 +29,7 @@ export function MessageComposer({
   const [to, setTo] = useState(0);
   const [body, setBody] = useState('');
   const [subject, setSubject] = useState('');
-  const [via, setVia] = useState({ sms: true, email: false });
+  const [via, setVia] = useState({ sms: textingAvailable, email: !textingAvailable });
   const [sent, setSent] = useState<string | null>(null);
   const { busy, error, run } = useAction();
   const recipient = recipients[to];
@@ -59,6 +60,7 @@ export function MessageComposer({
           </Select>
         </Field>
       )}
+      {textingAvailable && (
       <div className="flex gap-4 text-sm">
         {(['sms', 'email'] as const).map((c) => (
           <label key={c} className="flex items-center gap-2">
@@ -72,6 +74,7 @@ export function MessageComposer({
           </label>
         ))}
       </div>
+      )}
       {via.email && (
         <Field label="Email subject">
           <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Tournament update" />

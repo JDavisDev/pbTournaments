@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Card, Empty, Field, Input, Select, Spinner } from '@/components/ui';
 import { getPlatformPricing } from '@/lib/api';
+import { textingAvailable } from '@/lib/config';
 import { formatMoney } from '@/lib/format';
 import { useLoad } from '@/lib/hooks';
 import { CARD_FIXED_CENTS, CARD_PERCENT, calculate, type PricingInputs } from '@/lib/pricing';
@@ -19,7 +20,7 @@ export function PricingPage() {
     entryFee: 45,
     extraEventFee: 15,
     extraEvents: 0.5,
-    texting: true,
+    texting: textingAvailable,
     passToPlayers: false,
   });
   const set = <K extends keyof PricingInputs>(key: K, value: PricingInputs[K]) => setInputs((i) => ({ ...i, [key]: value }));
@@ -42,10 +43,12 @@ export function PricingPage() {
           A small flat fee per player. No percentage of your entries, no ads, no setup surprises. Card processing is passed
           through at cost.
         </p>
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <PriceCard price={money(p.setup_fee_cents)} per="per tournament" what="One-time setup, paid when you open registration. Practice tournaments are free." />
+        <div className={`mt-6 grid gap-3 ${textingAvailable ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+          <PriceCard price={money(p.setup_fee_cents)} per="per tournament" what="One-time setup, paid when you open registration. Basic tournaments are free." />
           <PriceCard price={money(p.per_player_cents)} per="per player" what="Registration, check-in, live courts, brackets, results and DUPR export." />
-          <PriceCard price={money(p.texting_per_player_cents)} per="per player" what="Texting: court calls and score links by text. Optional; turn it off to skip it." />
+          {textingAvailable && (
+            <PriceCard price={money(p.texting_per_player_cents)} per="per player" what="Texting: court calls and score links by text. Optional; turn it off to skip it." />
+          )}
         </div>
       </section>
 
@@ -81,6 +84,7 @@ export function PricingPage() {
               ))}
             </Select>
           </Field>
+          {textingAvailable && (
           <label className="flex items-start gap-3">
             <input type="checkbox" className="mt-0.5 h-6 w-6 accent-[var(--accent)]" checked={inputs.texting} onChange={(e) => set('texting', e.target.checked)} />
             <span>
@@ -88,6 +92,7 @@ export function PricingPage() {
               <span className="text-sm text-muted">{money(p.texting_per_player_cents)} per player</span>
             </span>
           </label>
+          )}
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium">Who pays the fees?</span>
             <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface p-1" role="radiogroup">
@@ -172,18 +177,18 @@ export function PricingPage() {
           see one price at checkout, with no surprise fees.
         </Explainer>
         <Explainer title="No ads, no tricks">
-          No ads on your tournament pages, no blocked VPNs, no selling player data. Practice tournaments are free, so try
-          everything first.
+          No ads on your tournament pages, no blocked VPNs, no selling player data. Basic tournaments are free, so try
+          it first.
         </Explainer>
         <Explainer title="Built for match day">
-          Players get a text with their court, format and a score link. Big, clear screens for every age, and directors run
+          {textingAvailable ? 'Players get a text with their court, format and a score link.' : 'Players see their court, format and a score link on their phone.'} Big, clear screens for every age, and directors run
           the courts from one desk.
         </Explainer>
       </section>
 
       <p className="text-center">
         <Link href="/" className="inline-flex h-12 items-center rounded-full bg-accent px-6 font-medium text-accent-text">
-          Try a practice tournament
+          Try a Basic tournament
         </Link>
       </p>
     </div>

@@ -5,6 +5,7 @@ import { ConnectNotice } from '@/components/ConnectNotice';
 import { MessageComposer, type Recipient } from '@/components/MessageComposer';
 import { Badge, Card, Empty, Input, Spinner } from '@/components/ui';
 import { getEvents, getTextLog, getTournament } from '@/lib/api';
+import { textingAvailable } from '@/lib/config';
 import { formatTime } from '@/lib/format';
 import { useLiveTournament, useLoad, useStaffAccess } from '@/lib/hooks';
 import type { TextLogRow, TwilioCheck } from '@/lib/types';
@@ -130,15 +131,15 @@ export function Messages({ params }: { params: Promise<{ id: string }> }) {
           <h2 className="mb-3 text-2xl">New message</h2>
           <MessageComposer tournamentId={id} recipients={recipients} onSent={reload} />
           <p className="mt-3 text-xs text-muted">
-            For one team or player, use Team actions on the Players page. Texts only go to players who opted in.
+            For one team or player, use Team actions on the Players page.{textingAvailable && ' Texts only go to players who opted in.'}
           </p>
         </Card>
-        {!data.tournament.texts_enabled && (
+        {textingAvailable && !data.tournament.texts_enabled && (
           <p className="rounded-xl bg-called-soft px-3 py-2 text-sm text-called">
             Texting is off for this tournament (Settings → Fees), so only emails go out.
           </p>
         )}
-        <TextingHealth check={twilio.data} messages={data.messages} />
+        {textingAvailable && <TextingHealth check={twilio.data} messages={data.messages} />}
         {testModes.length > 0 && (
           <p className="rounded-xl bg-called-soft px-3 py-2 text-sm text-called">
             Test mode: {testModes.join(' and ')} are written to this log instead of being sent.

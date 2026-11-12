@@ -7,6 +7,7 @@ import { AddToCalendar } from '@/components/AddToCalendar';
 import { MatchAlerts } from '@/components/MatchAlerts';
 import { Badge, Button, Card, Empty, ErrorText, Modal, Spinner } from '@/components/ui';
 import { getRegistration, withdrawRegistration } from '@/lib/api';
+import { textingAvailable } from '@/lib/config';
 import { formatMoney } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
 import { goToCheckout } from '@/lib/http';
@@ -57,7 +58,7 @@ export function RegistrationDone() {
           <p className="font-semibold text-called">You’re on the waitlist</p>
           <h2 className="mt-1 text-4xl">Thanks, {reg.player_name.split(' ')[0]}!</h2>
           <p className="mt-1 text-muted">
-            {reg.tournament_name} is full right now. Nothing has been charged. If a spot opens, we’ll text and email you
+            {reg.tournament_name} is full right now. Nothing has been charged. If a spot opens, we’ll {textingAvailable ? 'text and email' : 'email'} you
             a link to pay and claim it.
           </p>
         </>

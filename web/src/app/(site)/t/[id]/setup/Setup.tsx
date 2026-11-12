@@ -9,7 +9,7 @@ import { Icon } from '@/components/Icon';
 import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
 import { getCourtBoard, getEventMerges, getEvents, getMatches, getTeams, getTournament } from '@/lib/api';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
-import { BasicsCard, ScoresCard } from './BasicsCard';
+import { BasicsCard, CheckinCard, ScoresCard } from './BasicsCard';
 import { ChampionshipCard, StreamsCard } from './CourtCards';
 import { EventCard } from './EventCard';
 import { EventForm } from './EventForm';
@@ -73,7 +73,10 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
           />
           <AboutCard key={`about-${data.tournament.id}`} tournament={data.tournament} />
           {simple ? (
-            <ScoresCard key={`scores-${data.tournament.id}`} tournament={data.tournament} />
+            <>
+              <ScoresCard key={`scores-${data.tournament.id}`} tournament={data.tournament} />
+              <CheckinCard tournament={data.tournament} onChanged={reload} />
+            </>
           ) : (
             <>
               <PricesCard key={`prices-${data.tournament.id}`} tournament={data.tournament} />

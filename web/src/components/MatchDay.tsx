@@ -3,6 +3,7 @@
 // The player's match day in five plain steps, plus the court sign. Used on the
 // team page and the score link from the text, so both read the same way.
 import { useSyncExternalStore } from 'react';
+import { textingAvailable } from '@/lib/config';
 import { Icon } from './Icon';
 
 export const STEPS = [
@@ -25,7 +26,7 @@ export function MatchSteps({
   hints?: Partial<Record<number, string>>;
   simple?: boolean;
 }) {
-  const steps = simple
+  const steps = simple || !textingAvailable
     ? STEPS.map((s, i) => (i === 1 ? { ...s, hint: 'Stay nearby. Your court shows here and on the court board when you’re up.' } : s))
     : STEPS;
   return (

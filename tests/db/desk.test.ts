@@ -124,6 +124,7 @@ describe('swaps and drops', () => {
 describe('messages', () => {
   it('queues a message per player and channel for the chosen recipients', async () => {
     const { tournamentId } = await createLiveTournament(db, { courts: 1, start: START });
+    await db.query('update public.tournaments set texts_enabled = true where id = $1', [tournamentId]);
     const mens = await addEvent(db, tournamentId, "Men's");
     const womens = await addEvent(db, tournamentId, "Women's");
     const a = await addPair(db, mens, ['Davis', 'Lee']);

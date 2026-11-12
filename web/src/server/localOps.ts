@@ -157,7 +157,6 @@ const ops: Record<string, Op> = {
       'details',
       'announcement',
       'times_published_at',
-      'texts_enabled',
       'championship_mode',
       'championship_rounds',
       'championship_wait_minutes',
@@ -251,6 +250,8 @@ const ops: Record<string, Op> = {
     all(tx, 'select * from public.team_roster where tournament_id = $1 order by event_sort_order, seed, name', [id]),
   checkInPlayer: (tx, tournamentId: string, playerId: string, checkedIn = true) =>
     tx.query('select public.check_in_player($1, $2, $3)', [tournamentId, playerId, checkedIn]).then(() => null),
+  setBasicCheckin: (tx, tournamentId: string, on: boolean) =>
+    tx.query('select public.set_basic_checkin($1, $2)', [tournamentId, on]).then(() => null),
   withdrawTeam: async (tx, id: string) => (await one<{ n: number }>(tx, 'select public.withdraw_team($1) as n', [id])).n,
   reinstateTeam: async (tx, id: string) => (await one<{ n: number }>(tx, 'select public.reinstate_team($1) as n', [id])).n,
   substitutePlayer: (tx, teamId: string, oldPlayer: string, p: { first_name: string; last_name: string; phone?: string; email?: string }) =>
@@ -504,6 +505,11 @@ const demoOps: Record<string, Op> = {
     const account = setup.stripe_account_id ?? `acct_test_${setup.organization_id.replace(/-/g, '').slice(0, 16)}`;
     await tx.query('select public.save_payment_account($1, $2, true, true)', [setup.organization_id, account]);
     return `/t/${id}/setup?payments=connected`;
+  },
+  // Local mode is always test mode: no real balance.
+  getPayoutBalance: async () => ({ available_cents: 0, pending_cents: 0, held: true, test: true }),
+  payOutBalance: async () => {
+    throw new Error('Test mode: there’s no real balance to pay out');
   },
   // Not a demo tool, but like them it needs the database's own rights (to remove the login).
   deleteMyAccount: async (tx) => {

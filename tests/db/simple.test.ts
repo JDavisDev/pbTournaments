@@ -74,3 +74,46 @@ describe('simple tournaments', () => {
     expect((await one(db, 'select status from public.matches where id = $1', [match])).status).toBe('completed');
   });
 });
+
+describe('Basic tournament check-in', () => {
+  const notHere = (event: string) =>
+    one<{ n: number }>(db, 'select count(*)::int as n from public.teams where event_id = $1 and checked_in_at is null', [event]);
+
+  it('is optional: on clears check-ins and new teams wait for the desk, off checks everyone in', async () => {
+    const { t, event } = await simpleTournament();
+    await addTeams(event, [team('Davis', 'Lee')]);
+    expect((await notHere(event)).n).toBe(0);
+
+    await asUser(() => db.query('select public.set_basic_checkin($1, true)', [t.id]));
+    expect((await notHere(event)).n).toBe(1);
+    await addTeams(event, [team('Park', 'Cho')], 2);
+    expect((await notHere(event)).n).toBe(2);
+
+    const player = (await one(db, `select player_id from public.team_players tp join public.teams tm on tm.id = tp.team_id
+                                   where tm.event_id = $1 and tm.name = 'Davis/Lee' limit 1`, [event])).player_id;
+    await asUser(() => db.query('select public.check_in_player($1, $2, true)', [t.id, player]));
+    expect((await one(db, 'select count(*)::int as n from public.player_checkins where tournament_id = $1', [t.id])).n).toBe(1);
+
+    await asUser(() => db.query('select public.set_basic_checkin($1, false)', [t.id]));
+    expect((await notHere(event)).n).toBe(0);
+  });
+
+  it('only exists at Basic tournaments', async () => {
+    const { organizationId } = await createOrganization(db);
+    const t = await asUser(() => one(db, 'select * from public.new_tournament($1)', [organizationId]));
+    await expect(asUser(() => db.query('select public.set_basic_checkin($1, true)', [t.id]))).rejects.toThrow(/Only Basic/);
+  });
+});
+
+describe('platform admins', () => {
+  it('run every tournament in an organization they own for free', async () => {
+    const { owner, organizationId } = await createOrganization(db);
+    const t = await asUser(() => one(db, 'select * from public.new_tournament($1)', [organizationId]));
+    const fees = () => asUser(() => one<{ f: Record<string, unknown> }>(db, 'select public.tournament_fees($1) as f', [t.id]));
+    expect((await fees()).f).toMatchObject({ fees_waived: false });
+    expect(((await fees()).f.setup_due_cents as number) > 0).toBe(true);
+
+    await db.query('insert into private.platform_admins (user_id) values ($1)', [owner]);
+    expect((await fees()).f).toMatchObject({ fees_waived: true, setup_due_cents: 0, player_fees_cents: 0 });
+  });
+});

@@ -111,7 +111,12 @@ export interface Tournament {
   simple: boolean;
   /** Simple tournaments: anyone with the link may enter the score of a match on court. */
   anyone_scores: boolean;
+  /** Simple (Basic) tournaments: players check in at the desk, as at a full tournament. */
+  basic_checkin: boolean;
 }
+
+/** Whether the tournament uses check-in: always, except Basic tournaments that haven't turned it on. */
+export const usesCheckin = (t: Pick<Tournament, 'simple' | 'basic_checkin'>) => !t.simple || t.basic_checkin;
 
 export interface PlatformPricing {
   setup_fee_cents: number;
@@ -122,6 +127,8 @@ export interface PlatformPricing {
 /** tournament_fees(): what the director owes the platform. */
 export interface TournamentFees extends PlatformPricing {
   is_demo: boolean;
+  /** A platform admin owns the organization: free, every feature. */
+  fees_waived: boolean;
   setup_due_cents: number;
   setup_paid_at: string | null;
   players: number;
@@ -178,6 +185,17 @@ export interface CardRefundPlan {
 }
 
 /** payments_status(): the organization's connected Stripe account. */
+/** The organization's Stripe balance (POST /api/connect/payout). */
+export interface PayoutBalance {
+  /** Ready to pay out now. */
+  available_cents: number;
+  /** Still settling from recent card payments (usually about two business days). */
+  pending_cents: number;
+  /** Payouts wait for the owner (manual schedule). */
+  held: boolean;
+  test: boolean;
+}
+
 export interface PaymentsStatus {
   connected: boolean;
   /** Stripe lets it take payments. */

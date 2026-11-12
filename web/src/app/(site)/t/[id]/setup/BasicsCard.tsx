@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Field, Input, Select } from '@/components/ui';
-import { setCourtCount, updateTournament } from '@/lib/api';
+import { ErrorText, Field, Input, Select } from '@/components/ui';
+import { setBasicCheckin, setCourtCount, updateTournament } from '@/lib/api';
+import { useAction } from '@/lib/hooks';
 import { US_STATES } from '@/lib/places';
 import type { Tournament } from '@/lib/types';
 import { optionalNumber } from './fields';
@@ -125,7 +126,7 @@ export function BasicsCard({
             )}
           </Select>
         </Field>
-        {/* Simple tournaments have no check-in, and nobody confirms they're on court. */}
+        {/* Basic tournaments have no check-in deadline, and nobody confirms they're on court. */}
         <div className={`grid grid-cols-2 gap-4 sm:col-span-2 ${tournament.simple ? '' : 'sm:grid-cols-4'}`}>
           {!tournament.simple && (
             <Field label="No-show (min)" hint="Flag a court after">
@@ -152,6 +153,40 @@ export function BasicsCard({
           )}
         </div>
       </div>
+    </SettingsGroup>
+  );
+}
+
+/** Basic tournaments: check-in is optional. Saved at once, since turning it on clears everyone's check-in. */
+export function CheckinCard({ tournament, onChanged }: { tournament: Tournament; onChanged: () => void }) {
+  const { busy, error, run } = useAction();
+  const toggle = (on: boolean) => {
+    if (on && !confirm('Turn check-in on? Every team starts as not here until the desk checks its players in.')) return;
+    run(() => setBasicCheckin(tournament.id, on), onChanged);
+  };
+  return (
+    <SettingsGroup
+      title="Check-in"
+      foldable
+      summary={tournament.basic_checkin ? 'On: the desk marks players present' : 'Off: everyone entered is here'}
+    >
+      <label className="flex items-start gap-3 rounded-xl bg-surface-2 p-3">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-6 w-6 shrink-0 accent-[var(--accent)]"
+          checked={tournament.basic_checkin}
+          disabled={busy}
+          onChange={(e) => toggle(e.target.checked)}
+        />
+        <span>
+          <span className="block font-semibold">Check players in at the desk</span>
+          <span className="text-sm text-muted">
+            Mark players present as they arrive, and only teams that are here go on court. Turn it on before play starts. Off:
+            everyone entered counts as here.
+          </span>
+        </span>
+      </label>
+      <ErrorText>{error}</ErrorText>
     </SettingsGroup>
   );
 }

@@ -17,6 +17,7 @@ import { useLiveTournament } from '@/lib/hooks';
 import { previewSchedule } from '@/lib/preview';
 import { describeRules } from '@/lib/scoring';
 import type { MatchDetails, RoundKey, Team, Tournament, TournamentEvent } from '@/lib/types';
+import { usesCheckin } from '@/lib/types';
 
 async function load(id: string) {
   const [tournament, events, teams, matches] = await Promise.all([getTournament(id), getEvents(id), getTeams(id), getMatches(id)]);
@@ -64,7 +65,7 @@ export function DivisionGuide({
 
       <Section title="When">
         <Item>{startLine(e, t)}</Item>
-        {!t.simple && <Item>Check in at the desk when you arrive. Your division can start before every team is here.</Item>}
+        {usesCheckin(t) && <Item>Check in at the desk when you arrive. Your division can start before every team is here.</Item>}
         {!t.simple && t.checkin_grace_minutes !== null && (
           <Item>
             Once it starts, a team that isn’t checked in has {t.checkin_grace_minutes} minutes to check in, or it forfeits its

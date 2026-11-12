@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { use, useMemo, type ReactNode } from 'react';
 import { Bracket } from '@/components/Bracket';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { textingAvailable } from '@/lib/config';
 import { DemoInbox } from '@/components/DemoTools';
 import { Expandable } from '@/components/Expandable';
 import { QueueStatus } from '@/components/desk/QueuePanel';
@@ -31,6 +32,7 @@ import { useLiveTournament, useLoad, useNow, useSession, useStaffAccess } from '
 import { rulesOf } from '@/lib/scoring';
 import { estimateWait, formatWaitRange } from '@/lib/waitTime';
 import type { MatchDetails, QueueRow, Team } from '@/lib/types';
+import { usesCheckin } from '@/lib/types';
 
 async function load(id: string) {
   const [tournament, events, teams, matches, standings, queue, courts] = await Promise.all([
@@ -137,6 +139,7 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
         tournamentId={id}
         team={team}
         simple={data.tournament.simple}
+        checkin={usesCheckin(data.tournament)}
         anyoneScores={data.tournament.simple && data.tournament.anyone_scores}
         checkInBy={
           event.started_at && data.tournament.checkin_grace_minutes !== null
@@ -243,12 +246,15 @@ function MatchDayPanel({
   started,
   checkInBy,
   simple,
+  checkin,
   anyoneScores,
 }: {
   tournamentId: string;
   team: Team;
-  /** A simple tournament: no check-in, no texts. */
+  /** A simple (Basic) tournament: no texts. */
   simple: boolean;
+  /** Players check in at the desk (not at a Basic tournament, unless turned on). */
+  checkin: boolean;
   /** Anyone may enter the score of a match on court. */
   anyoneScores: boolean;
   /** The division has started (start_event). */
@@ -302,7 +308,7 @@ function MatchDayPanel({
       {mine.length > 0 && (
         <MatchSteps
           current={step}
-          simple={simple}
+          simple={!checkin}
           hints={{
             0: team.checked_in_at
               ? undefined
@@ -312,7 +318,7 @@ function MatchDayPanel({
                   ? 'Your division has started. Both players check in at the front desk now.'
                   : 'At the front desk. Both players check in.',
             1: nextQueue
-              ? `You’re number ${nextQueue.queue_rank} in line. ${simple ? 'Your court shows here when you’re up.' : 'We’ll text you the court.'}`
+              ? `You’re number ${nextQueue.queue_rank} in line. ${simple || !textingAvailable ? 'Your court shows here when you’re up.' : 'We’ll text you the court.'}`
               : undefined,
             2: onCourt ? `Go to ${onCourt.court_name} now and play. ${capitalized(onCourt.format_text)}.` : undefined,
           }}
@@ -388,7 +394,7 @@ function MatchDayPanel({
             {nextQueue && <QueueStatus row={nextQueue} />}
           </div>
           <p className="text-muted">
-            {simple
+            {simple || !textingAvailable
               ? 'Stay nearby. Your court shows here and on the court board when it’s your turn.'
               : 'Stay nearby. We’ll text you the court number when it’s your turn.'}
           </p>

@@ -44,6 +44,7 @@ import { advanceRule, bracketSeeds, formatSummary, formatTime, isPlayable, podiu
 import { useAction, useLiveTournament, useLoad, useNow, useStaffAccess } from '@/lib/hooks';
 import { rulesOf } from '@/lib/scoring';
 import type { CourtBoardRow, MatchDetails, QueueRow, Team } from '@/lib/types';
+import { usesCheckin } from '@/lib/types';
 
 async function load(id: string) {
   const [tournament, events, teams, matches, standings, queue, courts] = await Promise.all([
@@ -240,7 +241,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
             teams={teams.length}
             teamsReady={teams.filter((t) => t.checked_in_at).length}
             graceMinutes={grace}
-            simple={data.tournament.simple}
+            simple={!usesCheckin(data.tournament)}
             scheduledFor={event.not_before}
             timeZone={data.tournament.time_zone}
             onStarted={reload}

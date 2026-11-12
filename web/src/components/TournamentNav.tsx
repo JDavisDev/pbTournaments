@@ -16,6 +16,7 @@ import { ShareDialog } from './ShareDialog';
 import { Icon, type IconName } from './Icon';
 import { WatchChip } from './StreamEmbed';
 import { Badge, Button, Modal } from './ui';
+import { usesCheckin } from '@/lib/types';
 
 const statusTone = { draft: 'neutral', registration: 'called', live: 'live', complete: 'info' } as const;
 const statusText = { draft: 'Draft', registration: 'Registration', live: 'Live', complete: 'Complete' };
@@ -56,9 +57,10 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   let tabs: Tab[];
   let more: MoreItem[] = [];
   if (staff.data && t.simple) {
-    // Simple: no check-in, players, money, texts or DUPR. Teams are added in Setup, so it stays a tab.
+    // Basic: no players, money, texts or DUPR; check-in only if turned on. Teams are added in Setup, so it stays a tab.
     const setup = { href: `${base}/setup`, label: 'Setup' };
-    tabs = draft ? [setup, { href: base, label: 'Overview' }] : [{ href: base, label: 'Overview' }, ...desk, setup];
+    const checkin = t.basic_checkin ? [{ href: `${base}/checkin`, label: 'Check-in' }] : [];
+    tabs = draft ? [setup, { href: base, label: 'Overview' }] : [{ href: base, label: 'Overview' }, ...checkin, ...desk, setup];
     more = [{ href: `${base}/planner`, label: 'Planner', icon: 'calendar', hint: 'Plan the day’s divisions and courts' }, tv];
   } else if (staff.data) {
     // A draft is set up first; the other tabs come once registration opens.
@@ -80,7 +82,7 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
       tv,
     ];
   } else if (staff.monitor) {
-    tabs = [{ href: base, label: 'Overview' }, ...(t.simple ? [] : [{ href: `${base}/checkin`, label: 'Check-in' }]), ...desk];
+    tabs = [{ href: base, label: 'Overview' }, ...(usesCheckin(t) ? [{ href: `${base}/checkin`, label: 'Check-in' }] : []), ...desk];
     more = [tv];
   } else {
     tabs = [
@@ -108,9 +110,9 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
             ? `${base}/setup`
             : playing
               ? `${base}/desk`
-              : t.simple
-                ? base
-                : `${base}/checkin`,
+              : usesCheckin(t)
+                ? `${base}/checkin`
+                : base,
       );
     });
   const showDemoBar = isDemoMode && (staff.account || t.is_demo);

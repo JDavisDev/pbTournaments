@@ -3,6 +3,7 @@
 Players pay **into the director's own Stripe account**. Courtside never holds tournament money.
 
 - Each organization connects a Stripe account (Setup → **Payments** → **Connect Stripe**), owners and admins only. Stripe's hosted form collects their business details and bank account.
+- **Payouts are held** (a manual payout schedule, set when the account is made and again when the owner comes back from onboarding). Players' money waits in the organization's Stripe balance until an owner or admin presses **Pay out to bank** (Setup → Payments), so refunds come out of the balance. It's a soft hold: a Standard account's owner can still pay out from their own Stripe dashboard. US balances can be held up to 2 years.
 - Each registration is a **direct charge** on that account. The director is the seller: Stripe's card fee, refunds, disputes and the tax form (1099-K) are theirs.
 - **One checkout at a time:** a registration's checkout closes after 31 minutes (its spots are held for 30), and starting a new one closes the old one, so a player can't pay twice or pay after their spot went to someone else.
 - **The webhook trusts where the money went, not the metadata:** directors can make checkouts on their own Stripe accounts with any metadata. A registration counts as paid only when paid to the account its checkout was started on (`registrations.stripe_account_id`), and setup and player fees only when paid to Courtside's own account (events with no `account`).
@@ -12,6 +13,11 @@ Players pay **into the director's own Stripe account**. Courtside never holds to
 - **Players who didn't pay by card** (added at the desk, free entries, cash): Courtside's per-player fee couldn't come out of a payment, so the director pays it from the **Finance** page (`/api/checkout/fees`, to Courtside's own Stripe account). `private.uncovered_players` counts players on a team that no paid card registration covered (their own, or a partner's who paid for them).
 - **Finance page** (`/t/<id>/finance`, More → Finance): card and desk payments, refunds, Courtside and (estimated) Stripe fees, what's left after fees, who still owes or is owed, fees due, and players by division.
 
+## Free tournaments
+
+- **Basic tournaments** (`tournaments.simple`) are free: no registration, payments or texts. Check-in is optional (Setup → Check-in, `set_basic_checkin`).
+- **Platform admins** (`private.platform_admins`): every tournament in an organization a platform admin owns is free with every feature. Add one with `insert into private.platform_admins (user_id) select id from auth.users where email = '…';`
+
 ## Without Stripe keys (local mode, the demo site)
 
 **Connect Stripe** connects a pretend account (`acct_test_…`) at once, and the test checkout stands in for Stripe. Nothing is charged. Once real keys are set, a pretend account is replaced the next time the owner clicks **Connect Stripe**.
@@ -19,6 +25,7 @@ Players pay **into the director's own Stripe account**. Courtside never holds to
 ## Setup
 
 1. In Stripe, turn on **Connect** for Courtside's account (Settings → Connect). Choose **Standard** accounts (directors get their own full Stripe dashboard).
+   Then, under Connect settings → **Payouts → schedules**, let the platform manage connected accounts' payout schedules and stop accounts from changing their own. Without it, holding payouts fails (logged) and Stripe pays out on its usual schedule.
 2. Set `STRIPE_SECRET_KEY` (an `sk_test_` key while testing).
 3. Two webhooks, both to `https://<site>/api/stripe/webhook`:
    - **Your account:** `checkout.session.completed` (setup and player fees) → `STRIPE_WEBHOOK_SECRET`.

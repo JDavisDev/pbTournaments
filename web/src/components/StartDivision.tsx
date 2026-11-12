@@ -31,7 +31,7 @@ export function StartDivision({
   /** events.not_before: starting before it is fine, and play begins right away. */
   scheduledFor?: string | null;
   timeZone: string;
-  /** A simple tournament: no check-in, everyone entered is there. */
+  /** No check-in (a Basic tournament without it): everyone entered is there. */
   simple?: boolean;
   onStarted: () => void;
 }) {

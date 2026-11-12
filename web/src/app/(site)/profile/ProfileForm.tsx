@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { Badge, Button, Card, ErrorText, Field, Input, Select, Spinner } from '@/components/ui';
 import { claimStaffInvites, getMyTournaments } from '@/lib/api';
 import { auth, isGuest, type AuthUser } from '@/lib/auth';
-import { isBackendConfigured, isDemoMode } from '@/lib/config';
+import { isBackendConfigured, isDemoMode, textingAvailable } from '@/lib/config';
 import { isUnder18 } from '@/lib/eligibility';
 import { formatDate } from '@/lib/format';
 import { useAction, useLoad, useSession } from '@/lib/hooks';
@@ -284,7 +284,7 @@ function PersonFields({ p, set, children }: { p: PlayerProfile; set: (p: PlayerP
         </Field>
       </div>
       {children}
-      <Field label="Mobile number" hint="We text you which court to go to.">
+      <Field label="Mobile number" hint={textingAvailable ? 'We text you which court to go to.' : 'So the desk can reach you on the day.'}>
         <Input type="tel" autoComplete="tel" placeholder="(555) 123-4567" value={p.phone} onChange={(e) => set({ ...p, phone: e.target.value })} />
       </Field>
       <div className="grid grid-cols-2 gap-3">

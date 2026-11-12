@@ -88,9 +88,9 @@ export function OrganizationView({ params }: { params: Promise<{ slug: string }>
                   })
                 }
               >
-                Simple tournament (free)
+                Basic tournament (free)
               </Button>
-              <p className="text-sm text-muted">Simple: paste in the teams and run pools and brackets. No registration, payments or texts.</p>
+              <p className="text-sm text-muted">Basic: paste in the teams and run pools and brackets, with optional check-in. No registration or payments.</p>
             </Card>
 
             <Card className="p-5">

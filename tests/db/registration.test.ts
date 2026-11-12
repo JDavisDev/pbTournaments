@@ -366,6 +366,8 @@ describe('division rules', () => {
 describe('texts and score links', () => {
   async function liveMatch() {
     const setup = await createLiveTournament(db, { courts: 1, start: START });
+    // Texting is off by default (see the texting_off migration); these tests cover it.
+    await db.query('update public.tournaments set texts_enabled = true where id = $1', [setup.tournamentId]);
     const eventId = await addEvent(db, setup.tournamentId, 'Open');
     const a = await addPair(db, eventId, ['Davis', 'Lee']);
     const b = await addPair(db, eventId, ['Park', 'Cho']);

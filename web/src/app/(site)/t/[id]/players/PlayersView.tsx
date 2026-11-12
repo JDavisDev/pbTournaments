@@ -8,6 +8,7 @@ import { use, useState } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { Icon } from '@/components/Icon';
 import { MessageComposer } from '@/components/MessageComposer';
+import { textingAvailable } from '@/lib/config';
 import { Badge, Button, Card, Empty, ErrorText, Field, Input, Modal, Select, Spinner } from '@/components/ui';
 import {
   checkInTeam,
@@ -674,6 +675,7 @@ function PlayerProfile({ tournamentId, player, onDone }: { tournamentId: string;
           />
           I checked these ratings on DUPR
         </label>
+        {textingAvailable && (
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -683,6 +685,7 @@ function PlayerProfile({ tournamentId, player, onDone }: { tournamentId: string;
           />
           Wants texts
         </label>
+        )}
         <Button
           disabled={busy}
           onClick={() =>
