@@ -36,13 +36,14 @@ function Frame({ image, children }: { image: string | null; children: ReactNode 
 }
 
 /**
- * Whether a tournament run here shows among the listings (it takes sign-ups).
+ * Whether a tournament run here shows among the listings: registration open,
+ * or a published Basic tournament (no sign-ups, but players can follow it).
  * Demo sites show their practice tournaments.
  */
 export const isListed = (t: Tournament, today: string) =>
-  t.status === 'registration' && !t.simple && (!t.is_demo || isDemoMode) && t.starts_on >= today;
+  t.status === 'registration' && (!t.is_demo || isDemoMode) && t.starts_on >= today;
 
-/** A tournament run here with registration open: like a listing, signing up on its own page. */
+/** A tournament run here: like a listing, signing up on its own page (a Basic one: followed there). */
 export function HostedCard({ tournament: t }: { tournament: Tournament }) {
   return (
     <Frame image={t.image_data}>
@@ -50,17 +51,29 @@ export function HostedCard({ tournament: t }: { tournament: Tournament }) {
       <p className="font-medium">{formatDateRange(t.starts_on, null)}</p>
       {venueLine(t) && <p className="text-muted">{venueLine(t)}</p>}
       {t.ball && <p className="text-muted">Ball: {t.ball}</p>}
-      <p className="font-semibold">{oneEventPrice(t)}</p>
+      {/* Basic tournaments take no sign-ups here: the director adds the teams. */}
+      <p className="font-semibold">{t.simple ? 'Teams added by the director' : oneEventPrice(t)}</p>
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
-        <Link
-          href={`/t/${t.id}/register`}
-          className="inline-flex h-12 items-center justify-center rounded-full bg-accent px-6 font-medium text-accent-text transition hover:opacity-80"
-        >
-          Register
-        </Link>
-        <Link href={`/t/${t.id}`} className="inline-flex h-12 items-center rounded-full px-4 font-medium hover:bg-surface">
-          Details
-        </Link>
+        {t.simple ? (
+          <Link
+            href={`/t/${t.id}`}
+            className="inline-flex h-12 items-center justify-center rounded-full bg-accent px-6 font-medium text-accent-text transition hover:opacity-80"
+          >
+            Follow
+          </Link>
+        ) : (
+          <>
+            <Link
+              href={`/t/${t.id}/register`}
+              className="inline-flex h-12 items-center justify-center rounded-full bg-accent px-6 font-medium text-accent-text transition hover:opacity-80"
+            >
+              Register
+            </Link>
+            <Link href={`/t/${t.id}`} className="inline-flex h-12 items-center rounded-full px-4 font-medium hover:bg-surface">
+              Details
+            </Link>
+          </>
+        )}
       </div>
     </Frame>
   );
