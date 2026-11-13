@@ -6,6 +6,7 @@ import { Button, Card, ErrorText, Field, Input, LinkButton, Select, Spinner, Tex
 import { deleteListing, saveListing } from '@/lib/api';
 import { auth } from '@/lib/auth';
 import { isDemoMode } from '@/lib/config';
+import { localToday } from '@/lib/format';
 import { useAction, useSession } from '@/lib/hooks';
 import { shrinkImage } from '@/lib/image';
 import { US_STATES } from '@/lib/places';
@@ -62,6 +63,10 @@ export function ListingForm({ listing }: { listing?: TournamentListing }) {
         onSubmit={(e) => {
           e.preventDefault();
           run(async () => {
+            // A past date (an easy slip of the year in the date picker) would save a listing nobody sees.
+            if ((form.ends_on || form.starts_on) < localToday()) {
+              throw new Error('That date has already passed, so the listing wouldn’t show. Check the year.');
+            }
             await saveListing(listing?.id ?? null, {
               name: form.name.trim(),
               signup_url: withScheme(form.signup_url.trim()),
@@ -95,7 +100,7 @@ export function ListingForm({ listing }: { listing?: TournamentListing }) {
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="First day">
-            <Input required type="date" value={form.starts_on} onChange={set('starts_on')} />
+            <Input required type="date" min={listing ? undefined : localToday()} value={form.starts_on} onChange={set('starts_on')} />
           </Field>
           <Field label="Last day" hint="Leave empty for a one-day tournament.">
             <Input type="date" min={form.starts_on || undefined} value={form.ends_on} onChange={set('ends_on')} />
