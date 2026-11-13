@@ -10,6 +10,7 @@ import { textingAvailable } from '@/lib/config';
 import { formatMoney } from '@/lib/format';
 import { useLoad } from '@/lib/hooks';
 import { CARD_FIXED_CENTS, CARD_PERCENT, calculate, type PricingInputs } from '@/lib/pricing';
+import { OurCosts } from './OurCosts';
 
 const money = (c: number) => formatMoney(Math.round(c));
 
@@ -41,7 +42,11 @@ export function PricingPage() {
         <h1 className="text-5xl sm:text-7xl">Simple pricing</h1>
         <p className="mt-3 max-w-2xl text-lg text-muted">
           A small flat fee per player. No percentage of your entries, no ads, no setup surprises. Card processing is passed
-          through at cost.
+          through at cost.{' '}
+          <a href="#costs" className="font-medium text-text underline underline-offset-4">
+            See where the money goes
+          </a>
+          .
         </p>
         <div className={`mt-6 grid gap-3 ${textingAvailable ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
           <PriceCard price={money(p.setup_fee_cents)} per="per tournament" what="One-time setup, paid when you open registration. Basic tournaments are free." />
@@ -185,6 +190,8 @@ export function PricingPage() {
           the courts from one desk.
         </Explainer>
       </section>
+
+      <OurCosts pricing={p} />
 
       <p className="text-center">
         <Link href="/" className="inline-flex h-12 items-center rounded-full bg-accent px-6 font-medium text-accent-text">
