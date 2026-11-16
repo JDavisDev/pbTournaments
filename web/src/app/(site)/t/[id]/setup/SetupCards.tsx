@@ -17,6 +17,7 @@ import {
   getTournamentFees,
   getTournamentTeam,
   removeTournamentStaff,
+  setTournamentImage,
   updateTournament,
   connectPayments,
   getPaymentsStatus,
@@ -27,7 +28,7 @@ import { textingAvailable } from '@/lib/config';
 import { formatMoney, fromZonedInput, toZonedInput } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
 import { goToCheckout } from '@/lib/http';
-import { shrinkImage } from '@/lib/image';
+import { imageUrl, shrinkImage } from '@/lib/image';
 import { ANNOUNCEMENT_MAX } from '@/components/Announcement';
 import { useUnsaved } from './SaveAll';
 import type { RegistrationQuestion, StaffRole, Tournament } from '@/lib/types';
@@ -221,27 +222,27 @@ export function RegistrationCard({ tournament, onChanged }: { tournament: Tourna
     <SettingsGroup title="Registration" description="Limits, the closing date, and what players agree to when they sign up.">
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium">Tournament image</span>
-        {tournament.image_data ? (
+        {tournament.image_id ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={tournament.image_data} alt="" className="max-h-40 w-full rounded-xl object-cover" />
+          <img src={imageUrl(tournament.image_id)!} alt="" decoding="async" className="max-h-40 w-full rounded-xl object-cover" />
         ) : (
           <p className="text-sm text-muted">A logo or banner, shown on the tournament page and sign-up form.</p>
         )}
         <div className="flex gap-2">
           <label className="inline-flex h-10 cursor-pointer items-center rounded-full border border-border px-4 text-sm font-medium hover:border-text">
-            {tournament.image_data ? 'Change image' : 'Add an image'}
+            {tournament.image_id ? 'Change image' : 'Add an image'}
             <input
               type="file"
               accept="image/*"
               className="sr-only"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) run(async () => updateTournament(tournament.id, { image_data: await shrinkImage(file) }), onChanged);
+                if (file) run(async () => setTournamentImage(tournament.id, await shrinkImage(file)), onChanged);
               }}
             />
           </label>
-          {tournament.image_data && (
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => updateTournament(tournament.id, { image_data: null }), onChanged)}>
+          {tournament.image_id && (
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => setTournamentImage(tournament.id, null), onChanged)}>
               Remove
             </Button>
           )}
@@ -435,7 +436,7 @@ export function FeesCard({ tournament, onChanged }: { tournament: Tournament; on
   const f = fees.data;
   if (!f) return null;
 
-  const paySetup = () => run(() => goToCheckout('/api/checkout/setup', { tournamentId: tournament.id }));
+  const paySetup = () => run(() => goToCheckout('/api/checkout/setup', { tournamentId: tournament.id }, { signedIn: true }));
 
   return (
     <SettingsGroup

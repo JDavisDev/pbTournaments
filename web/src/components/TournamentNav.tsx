@@ -29,7 +29,10 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const pathname = usePathname();
   // Live: the tabs change as the tournament moves along (a division starting shows the court desk).
-  const tournament = useLiveTournament(id, () => Promise.all([getTournament(id), getEvents(id)]));
+  const tournament = useLiveTournament(id, () => Promise.all([getTournament(id), getEvents(id)]), undefined, [
+    'tournament',
+    'events',
+  ]);
   const [sharing, setSharing] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const staff = useStaffAccess(id);

@@ -6,6 +6,7 @@ import type { Tournament, TournamentListing } from '@/lib/types';
 import { Icon } from './Icon';
 import { LogoMark } from './Logo';
 import { Card } from './ui';
+import { imageUrl } from '@/lib/image';
 
 /** "pickleballtournaments.com", so players know where the sign-up link goes. */
 function siteName(url: string) {
@@ -25,7 +26,7 @@ function Frame({ image, children }: { image: string | null; children: ReactNode 
         {image ? (
           // Logos and flyers come in every shape: show all of it, not a crop.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt="" className="h-full w-full object-contain" />
+          <img src={image} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
         ) : (
           <LogoMark className="h-10 w-auto opacity-25" />
         )}
@@ -46,7 +47,7 @@ export const isListed = (t: Tournament, today: string) =>
 /** A tournament run here: like a listing, signing up on its own page (a Basic one: followed there). */
 export function HostedCard({ tournament: t }: { tournament: Tournament }) {
   return (
-    <Frame image={t.image_data}>
+    <Frame image={imageUrl(t.image_id)}>
       <h3 className="text-2xl leading-tight">{t.name}</h3>
       <p className="font-medium">{formatDateRange(t.starts_on, null)}</p>
       {venueLine(t) && <p className="text-muted">{venueLine(t)}</p>}
@@ -82,7 +83,7 @@ export function HostedCard({ tournament: t }: { tournament: Tournament }) {
 /** A listed tournament: image, dates, place, and the sign-up link out. `mine` adds Edit. */
 export function ListingCard({ listing: l, mine = false }: { listing: TournamentListing; mine?: boolean }) {
   return (
-    <Frame image={l.image_data}>
+    <Frame image={imageUrl(l.image_id)}>
       <h3 className="text-2xl leading-tight">{l.name}</h3>
       <p className="font-medium">{formatDateRange(l.starts_on, l.ends_on)}</p>
       <p className="text-muted">

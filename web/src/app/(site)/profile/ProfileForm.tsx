@@ -6,17 +6,18 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Badge, Button, Card, ErrorText, Field, Input, Select, Spinner } from '@/components/ui';
-import { claimStaffInvites, getMyTournaments } from '@/lib/api';
+import { claimStaffInvites, getMyRegistrations, getMyTournaments } from '@/lib/api';
 import { auth, isGuest, type AuthUser } from '@/lib/auth';
 import { isBackendConfigured, isDemoMode, textingAvailable } from '@/lib/config';
 import { isUnder18 } from '@/lib/eligibility';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatMoney } from '@/lib/format';
 import { useAction, useLoad, useSession } from '@/lib/hooks';
 import { Captcha } from '@/lib/captcha';
 import { logInPlayer, logOut, saveProfile, signUpPlayer, useProfile, type PlayerProfile } from '@/lib/profile';
 import { setViewMode } from '@/lib/viewMode';
 import { ConnectNotice } from '@/components/ConnectNotice';
 import { MatchAlerts } from '@/components/MatchAlerts';
+import type { MyRegistration } from '@/lib/types';
 import { DeleteAccount } from './DeleteAccount';
 
 const under18 = 'You must be 18 or older to have an account.';
@@ -52,6 +53,7 @@ export function ProfileForm() {
         {/* Keyed so a fake player from the Test menu shows up here too. */}
         <Details key={session.id} user={session} saved={profile} home={home} />
         <MatchAlerts />
+        <MyRegistrations />
         <MyTournaments />
         <DeleteAccount />
       </div>
@@ -300,6 +302,49 @@ function PersonFields({ p, set, children }: { p: PlayerProfile; set: (p: PlayerP
         </Field>
       </div>
     </>
+  );
+}
+
+/** Where a registration's payment stands, for the player. */
+function PaymentStatus({ r }: { r: MyRegistration }) {
+  if (r.disputed) return <Badge tone="late">Payment disputed</Badge>;
+  if (r.status === 'waitlisted') return <Badge tone="info">Waitlisted</Badge>;
+  if (r.status === 'refunded') return <Badge>Refunded</Badge>;
+  if (r.status === 'pending') return <Badge tone="called">Not paid yet</Badge>;
+  if (r.balance_cents > 0) return <Badge tone="late">You owe {formatMoney(r.balance_cents)}</Badge>;
+  if (r.balance_cents < 0) return <Badge tone="called">Owed {formatMoney(-r.balance_cents)}</Badge>;
+  return <Badge tone="live">{r.amount_cents > 0 ? 'Paid' : 'Free entry'}</Badge>;
+}
+
+/** The tournaments this player signed up for, and whether each is paid. */
+function MyRegistrations() {
+  const mine = useLoad(() => getMyRegistrations(), []);
+  if (mine.error) return <ErrorText>{mine.error}</ErrorText>;
+  if (!mine.data || mine.data.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-3xl">Your registrations</h2>
+      <ul className="flex flex-col divide-y divide-border rounded-2xl border border-border bg-surface">
+        {mine.data.map((r) => (
+          <li key={r.registration_id}>
+            <Link
+              href={`/t/${r.tournament_id}/register/done?r=${r.registration_id}`}
+              className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface-2"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">{r.tournament_name}</span>
+                <span className="block text-sm text-muted">
+                  {formatDate(r.starts_on)}
+                  {r.events.length > 0 && <> · {r.events.join(', ')}</>}
+                </span>
+                {r.refunded_cents > 0 && <span className="block text-sm text-muted">Refunded {formatMoney(r.refunded_cents)}</span>}
+              </span>
+              <PaymentStatus r={r} />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

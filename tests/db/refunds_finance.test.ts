@@ -54,11 +54,13 @@ describe('Courtside’s fee for every player', () => {
   it('bills the director for players no card payment covered', async () => {
     const { tournamentId } = await setup();
     const f = await finance(tournamentId);
-    expect(f.courtside).toMatchObject({ from_cards_cents: 275, uncovered_players: 1, owed_cents: 275, rate_cents: 275 });
+    // The per-player rate is set in platform_pricing; one player wasn't covered by a card payment.
+    const rate = f.courtside.rate_cents;
+    expect(f.courtside).toMatchObject({ from_cards_cents: 275, uncovered_players: 1, owed_cents: rate });
     expect(f.divisions[0]).toMatchObject({ name: 'Open', teams: 1, players: 2 });
 
-    await db.query(`select public.confirm_player_fees_payment($1, 'stripe', 'cs_fees', 275)`, [tournamentId]);
-    await db.query(`select public.confirm_player_fees_payment($1, 'stripe', 'cs_fees', 275)`, [tournamentId]);
-    expect((await finance(tournamentId)).courtside).toMatchObject({ owed_cents: 0, paid_separately_cents: 275 });
+    await db.query(`select public.confirm_player_fees_payment($1, 'stripe', 'cs_fees', $2)`, [tournamentId, rate]);
+    await db.query(`select public.confirm_player_fees_payment($1, 'stripe', 'cs_fees', $2)`, [tournamentId, rate]);
+    expect((await finance(tournamentId)).courtside).toMatchObject({ owed_cents: 0, paid_separately_cents: rate });
   });
 });

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { claimStaffInvites, getMyRole } from './api';
 import { auth, isGuest, type AuthUser } from './auth';
 import { isBackendConfigured } from './config';
-import { invalidateTournament, serverNow, watchTournament } from './live';
+import { invalidateTournament, serverNow, watchTournament, type LiveArea } from './live';
 import type { StaffRole } from './types';
 import { useViewMode } from './viewMode';
 
@@ -52,15 +52,22 @@ function useLoader<T>(load: () => Promise<T>) {
  * Loads data for a tournament and reloads it whenever anything in the
  * tournament changes (lib/live.ts: one feed per tournament, shared by every
  * component watching it). `pollMs`: the safety net while Realtime is down.
+ * `areas`: reload only for changes to these (default: any change).
  */
-export function useLiveTournament<T>(tournamentId: string, load: () => Promise<T>, pollMs = 20_000): LiveState<T> {
+export function useLiveTournament<T>(
+  tournamentId: string,
+  load: () => Promise<T>,
+  pollMs = 20_000,
+  areas?: LiveArea[],
+): LiveState<T> {
   const state = useLoader(load);
   const refresh = useEffectEvent(() => state.reload());
+  const areaKey = areas?.join(',') ?? '';
 
   useEffect(() => {
     if (!isBackendConfigured) return;
-    return watchTournament(tournamentId, refresh, pollMs);
-  }, [tournamentId, pollMs]);
+    return watchTournament(tournamentId, refresh, pollMs, areaKey ? (areaKey.split(',') as LiveArea[]) : null);
+  }, [tournamentId, pollMs, areaKey]);
 
   // Asked for (after an action): fetch again, not a read another component shared.
   const reload = () => {

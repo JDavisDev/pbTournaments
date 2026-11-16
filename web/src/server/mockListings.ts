@@ -52,6 +52,13 @@ function flyer(name: string, [bg, accent]: [string, string]) {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
+/** A sample flyer (an SVG data URL) saved as an image; returns its id. */
+async function saveFlyer(db: PGlite, dataUrl: string) {
+  const [, type, data] = /^data:([^;]+);base64,(.*)$/.exec(dataUrl)!;
+  return (await db.query<{ id: string }>('insert into private.images (content_type, data) values ($1, $2) returning id', [type, data]))
+    .rows[0].id;
+}
+
 export async function seedMockListings(db: PGlite) {
   await db.query(`insert into auth.users (email) values ($1) on conflict (email) do nothing`, [POSTER]);
   const poster = (await db.query<{ id: string }>('select id from auth.users where email = $1', [POSTER])).rows[0].id;
@@ -63,10 +70,10 @@ export async function seedMockListings(db: PGlite) {
   for (const [i, s] of samples.entries()) {
     await db.query(
       `insert into public.tournament_listings
-         (name, starts_on, ends_on, venue, city, state, signup_url, image_data, created_by, created_at)
+         (name, starts_on, ends_on, venue, city, state, signup_url, image_id, created_by, created_at)
        values ($1, current_date + $2::int, case when $3::int > 1 then current_date + $2::int + $3::int - 1 end,
                $4, $5, $6, $7, $8, $9, now() - make_interval(hours => $10))`,
-      [s.name, s.start, s.days ?? 1, s.venue ?? null, s.city, s.state, s.url, s.colors ? flyer(s.name, s.colors) : null, poster, i * 7],
+      [s.name, s.start, s.days ?? 1, s.venue ?? null, s.city, s.state, s.url, s.colors ? await saveFlyer(db, flyer(s.name, s.colors)) : null, poster, i * 7],
     );
   }
 }

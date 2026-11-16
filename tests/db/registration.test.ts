@@ -336,6 +336,33 @@ describe('division rules', () => {
     });
   });
 
+  it('renews a pending hold at checkout, unless the spot was taken after it lapsed', async () => {
+    const { tournamentId, eventId } = await division({ max_teams: 1 });
+    await setClock(db, START);
+    const late = await register(tournamentId, { first: 'A', last: 'B', email: 'a@x.test' }, partner(eventId));
+    const renew = async (id: string) =>
+      (await one(db, 'select public.renew_registration_hold($1) as r', [id])).r;
+
+    // Still held: renewed.
+    await setClock(db, addMinutes(START, 20));
+    await expect(renew(late.registration_id)).resolves.toMatchObject({ ok: true });
+    // Lapsed, with room left: renewed.
+    await setClock(db, addMinutes(START, 55));
+    await expect(renew(late.registration_id)).resolves.toMatchObject({ ok: true });
+
+    // Lapsed again, and two others filled the division meanwhile: refused.
+    await setClock(db, addMinutes(START, 90));
+    for (const email of ['c@x.test', 'e@x.test']) {
+      const r = await register(tournamentId, { first: 'C', last: 'D', email }, partner(eventId));
+      expect(r.status).toBe('pending');
+      await pay(r.registration_id, r.amount_cents);
+    }
+    await expect(renew(late.registration_id)).resolves.toMatchObject({ ok: false, full: 'Division' });
+    // And it stays lapsed, so it doesn't count against the division.
+    const { taken } = await one(db, 'select private.event_spots_taken($1) as taken', [eventId]);
+    expect(taken).toBe(2);
+  });
+
   it('lets players register without a partner when allowed', async () => {
     const required = await division({});
     await expect(

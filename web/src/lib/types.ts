@@ -93,8 +93,8 @@ export interface Tournament {
   registration_closes_at: string | null;
   /** Players must agree to this to register. */
   waiver_text: string | null;
-  /** One image (logo or banner) as a data URL. */
-  image_data: string | null;
+  /** Its image (logo or banner), at imageUrl(image_id). Set with setTournamentImage. */
+  image_id: string | null;
   /** Shown before players register and before they withdraw. */
   refund_policy: string | null;
   /** More about the event, on the tournament page. */
@@ -274,8 +274,8 @@ export interface TournamentListing {
   /** Two-letter code, e.g. 'TX'. */
   state: string;
   signup_url: string;
-  /** A logo or flyer as a data URL. */
-  image_data: string | null;
+  /** A logo or flyer, at imageUrl(image_id). Set with setListingImage. */
+  image_id: string | null;
   refund_policy: string | null;
   /** All-in price for one event, as the poster gives it. */
   price_cents: number | null;
@@ -285,7 +285,7 @@ export interface TournamentListing {
 
 export type ListingFields = Pick<
   TournamentListing,
-  'name' | 'starts_on' | 'ends_on' | 'venue' | 'city' | 'state' | 'signup_url' | 'image_data' | 'refund_policy' | 'price_cents'
+  'name' | 'starts_on' | 'ends_on' | 'venue' | 'city' | 'state' | 'signup_url' | 'refund_policy' | 'price_cents'
 >;
 
 /** demo_inbox(): a text sent to a demo team's player; links are paths (/s/<code>). */
@@ -363,6 +363,43 @@ export type LedgerKind = 'entry_fees' | 'discount' | 'payment' | 'withdrawal' | 
 export type PaymentMethod = 'stripe' | 'test' | 'cash' | 'check' | 'other';
 
 /** One money event for a player (ledger_entries). Positive adds to what they owe. */
+/** Something Stripe told us about a payment (the stripe_notices migration). */
+export interface StripeNotice {
+  id: number;
+  tournament_id: string;
+  registration_id: string | null;
+  player_id: string | null;
+  /** The player's name, when known. */
+  player_name: string | null;
+  /** A payment that couldn't be applied, a refund made in Stripe's dashboard, or a dispute. */
+  kind: 'unmatched_payment' | 'outside_refund' | 'dispute';
+  status: 'open' | 'resolved' | 'won' | 'lost';
+  amount_cents: number;
+  stripe_account_id: string | null;
+  payment_intent_id: string | null;
+  stripe_ref: string;
+  detail: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+/** A signed-in player's own registration and where its payment stands. */
+export interface MyRegistration {
+  registration_id: string;
+  tournament_id: string;
+  tournament_name: string;
+  starts_on: string;
+  status: 'pending' | 'paid' | 'waitlisted' | 'refunded';
+  amount_cents: number;
+  paid_at: string | null;
+  events: string[];
+  /** Positive: they owe; negative: they're owed. */
+  balance_cents: number;
+  refunded_cents: number;
+  /** A dispute of their payment is open. */
+  disputed: boolean;
+}
+
 export interface LedgerEntry {
   id: number;
   tournament_id: string;
@@ -858,6 +895,8 @@ export interface MatchDetails {
   point_cap: number | null;
   /** e.g. "one game to 15, win by 2" */
   format_text: string;
+  /** When the match last changed (live screens fetch only what changed). */
+  updated_at?: string;
 }
 
 /** The match behind a score link. */

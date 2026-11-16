@@ -60,11 +60,31 @@ export async function startCheckout(registrationId: string): Promise<string> {
   const done = `${appUrl()}/t/${r.tournament_id}/register/done?r=${r.id}`;
   if (r.status === 'paid') return done;
   if (r.status !== 'pending') throw new Error(`This registration is ${r.status}`);
-
-  if (paymentsMode() === 'test') return `${appUrl()}/checkout/test?r=${r.id}`;
-  if (!r.stripe_account_id || !r.payments_ready) {
+  if (paymentsMode() === 'stripe' && (!r.stripe_account_id || !r.payments_ready)) {
     throw new Error('This tournament can’t take card payments yet. Contact the director.');
   }
+  // Stripe's smallest card payment.
+  if (paymentsMode() === 'stripe' && r.amount_cents < 50) {
+    throw new Error('Card payments start at $0.50. Contact the director to finish registering.');
+  }
+
+  // The 30-minute hold on the spots starts again now (the checkout closes
+  // with it), unless it lapsed and someone else took them meanwhile.
+  const hold = await serverRpc<{ ok: boolean; status: string; full?: string }>('renew_registration_hold', {
+    p_registration: r.id,
+  });
+  if (hold.status === 'paid') return done;
+  if (!hold.ok) {
+    throw new Error(
+      hold.full
+        ? `${hold.full} filled up while this registration waited to be paid. Register again to join the waitlist.`
+        : `This registration is ${hold.status}`,
+    );
+  }
+
+  if (paymentsMode() === 'test') return `${appUrl()}/checkout/test?r=${r.id}`;
+  const account = r.stripe_account_id;
+  if (!account) throw new Error('This tournament can’t take card payments yet. Contact the director.');
 
   // One open checkout per registration, so the player can't pay twice (going
   // back from Stripe and pressing Pay again starts a new one).
@@ -82,8 +102,8 @@ export async function startCheckout(registrationId: string): Promise<string> {
     {
     ...checkoutSettings,
     mode: 'payment',
-    // A pending registration holds its spots for 30 minutes, so the checkout
-    // closes then too (30 minutes is Stripe's shortest): a late payment can't overfill a division.
+    // The hold just renewed lasts 30 minutes, so the checkout closes then too
+    // (30 minutes is Stripe's shortest): a late payment can't overfill a division.
     expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
     customer_email: r.email,
     line_items: [
@@ -107,12 +127,12 @@ export async function startCheckout(registrationId: string): Promise<string> {
     success_url: done,
     cancel_url: `${appUrl()}/t/${r.tournament_id}/register?cancelled=1`,
     },
-    { stripeAccount: r.stripe_account_id },
+    { stripeAccount: account },
   );
   await serverRpc('attach_checkout_session', {
     p_registration: r.id,
     p_session_id: session.id,
-    p_account: r.stripe_account_id,
+    p_account: account,
     p_platform_fee_cents: r.platform_fee_cents,
   });
   return session.url!;
@@ -140,8 +160,9 @@ interface SetupFee {
 export const getSetupFee = (tournamentId: string) =>
   serverRpc<SetupFee | null>('setup_fee_for_checkout', { p_tournament: tournamentId });
 
+/** `duplicate`: an earlier payment already covered it, so this one is extra. */
 export const confirmSetupPayment = (tournamentId: string, provider: string, ref: string, amountCents: number) =>
-  serverRpc('confirm_setup_payment', {
+  serverRpc<{ paid: boolean; already: boolean; duplicate: boolean }>('confirm_setup_payment', {
     p_tournament: tournamentId,
     p_provider: provider,
     p_payment_ref: ref,
@@ -156,9 +177,7 @@ export async function startSetupCheckout(tournamentId: string): Promise<string> 
   if (fee.paid || fee.amount_cents === 0) return done;
   if (paymentsMode() === 'test') return `${appUrl()}/checkout/test?setup=${tournamentId}`;
 
-  const session = await stripe().checkout.sessions.create({
-    ...checkoutSettings,
-    mode: 'payment',
+  return platformCheckout(tournamentId, 'setup', fee.amount_cents, done, () => ({
     line_items: [
       {
         quantity: 1,
@@ -173,6 +192,41 @@ export async function startSetupCheckout(tournamentId: string): Promise<string> 
     payment_intent_data: { metadata: { setup_tournament_id: tournamentId } },
     success_url: done,
     cancel_url: `${appUrl()}/t/${tournamentId}/setup`,
+  }));
+}
+
+/**
+ * A checkout for one of Courtside's fees, on Courtside's own account. The one
+ * already open for the same amount is reused (a second tab, or Pay pressed
+ * twice, goes to the same checkout), so it can't be paid twice; one for a
+ * different amount is closed first. One just paid goes to `done`.
+ */
+async function platformCheckout(
+  tournamentId: string,
+  kind: 'setup' | 'fees',
+  amountCents: number,
+  done: string,
+  params: () => Omit<Stripe.Checkout.SessionCreateParams, 'mode'>,
+): Promise<string> {
+  const previous = await serverRpc<{ session_id: string; amount_cents: number } | null>('platform_checkout', {
+    p_tournament: tournamentId,
+    p_kind: kind,
+  });
+  if (previous) {
+    const session = await stripe().checkout.sessions.retrieve(previous.session_id).catch(() => null);
+    // Paid, and the webhook hasn't caught up yet.
+    if (session?.status === 'complete') return done;
+    if (session?.status === 'open') {
+      if (previous.amount_cents === amountCents && session.url) return session.url;
+      await stripe().checkout.sessions.expire(session.id).catch(() => null);
+    }
+  }
+  const session = await stripe().checkout.sessions.create({ ...checkoutSettings, mode: 'payment', ...params() });
+  await serverRpc('save_platform_checkout', {
+    p_tournament: tournamentId,
+    p_kind: kind,
+    p_session: session.id,
+    p_amount_cents: amountCents,
   });
   return session.url!;
 }
@@ -191,8 +245,9 @@ interface PlayerFees {
 export const getPlayerFees = (tournamentId: string) =>
   serverRpc<PlayerFees | null>('player_fees_for_checkout', { p_tournament: tournamentId });
 
+/** `excess_cents`: paid beyond what was owed, to give back. */
 export const confirmPlayerFeesPayment = (tournamentId: string, provider: string, ref: string, amountCents: number) =>
-  serverRpc('confirm_player_fees_payment', {
+  serverRpc<{ paid: boolean; already: boolean; excess_cents: number }>('confirm_player_fees_payment', {
     p_tournament: tournamentId,
     p_provider: provider,
     p_payment_ref: ref,
@@ -207,9 +262,7 @@ export async function startPlayerFeesCheckout(tournamentId: string): Promise<str
   if (fees.amount_cents === 0) return done;
   if (paymentsMode() === 'test') return `${appUrl()}/checkout/test?fees=${tournamentId}`;
 
-  const session = await stripe().checkout.sessions.create({
-    ...checkoutSettings,
-    mode: 'payment',
+  return platformCheckout(tournamentId, 'fees', fees.amount_cents, done, () => ({
     line_items: [
       {
         quantity: 1,
@@ -224,6 +277,5 @@ export async function startPlayerFeesCheckout(tournamentId: string): Promise<str
     payment_intent_data: { metadata: { fees_tournament_id: tournamentId } },
     success_url: done,
     cancel_url: `${appUrl()}/t/${tournamentId}/finance`,
-  });
-  return session.url!;
+  }));
 }

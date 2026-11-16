@@ -63,7 +63,7 @@ The prompt said to remove every other parameter. These were kept because payment
 1. **Turn on Connect:** Settings → Connect, with **Standard** accounts.
 2. **Add two webhooks,** both to `https://courtsidetournaments.com/api/stripe/webhook`:
    - **Your account:** `checkout.session.completed`
-   - **Connected accounts:** `checkout.session.completed` and `account.updated`
+   - **Connected accounts:** `checkout.session.completed`, `account.updated`, `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`
 3. **Database:** run `npx supabase db push` so the payment tables and functions exist.
 
 ### Local testing

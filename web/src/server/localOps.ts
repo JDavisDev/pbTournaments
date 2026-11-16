@@ -82,7 +82,7 @@ const EVENT_COLUMNS = [
   'sort_order',
 ];
 
-const LISTING_COLUMNS = ['name', 'starts_on', 'ends_on', 'venue', 'city', 'state', 'signup_url', 'image_data', 'refund_policy', 'price_cents'];
+const LISTING_COLUMNS = ['name', 'starts_on', 'ends_on', 'venue', 'city', 'state', 'signup_url', 'refund_policy', 'price_cents'];
 
 const games = (g: unknown) => JSON.stringify(g);
 
@@ -95,8 +95,13 @@ const ops: Record<string, Op> = {
     all(tx, 'select * from public.court_board where tournament_id = $1 order by sort_order, court_name', [id]),
   getQueue: (tx, id: string) => all(tx, 'select * from public.up_next($1)', [id]),
   getChampionshipHolds: (tx, id: string) => all(tx, 'select * from public.championship_holds($1)', [id]),
-  getMatches: (tx, id: string) =>
-    all(tx, 'select * from public.match_details where tournament_id = $1 order by queue_seq', [id]),
+  getMatches: (tx, id: string, since?: string | null) =>
+    all(
+      tx,
+      `select * from public.match_details where tournament_id = $1 and ($2::timestamptz is null or updated_at > $2)
+       order by queue_seq, id`,
+      [id, since ?? null],
+    ),
   getStandings: (tx, id: string) =>
     all(tx, 'select * from public.standings where tournament_id = $1 order by pool, pool_rank', [id]),
   isStaff: async (tx, id: string) => (await one<{ v: boolean }>(tx, 'select public.is_tournament_staff($1) as v', [id])).v,
@@ -128,6 +133,8 @@ const ops: Record<string, Op> = {
   setAutoAssign: (tx, id: string, on: boolean) => one(tx, 'select * from public.set_auto_assign($1, $2)', [id, on]),
   setCourtCount: async (tx, id: string, count: number) =>
     (await one<{ n: number }>(tx, 'select public.set_court_count($1, $2) as n', [id, count])).n,
+  setTournamentImage: async (tx, id: string, data: string | null) =>
+    (await one<{ v: string | null }>(tx, 'select public.set_tournament_image($1, $2) as v', [id, data])).v,
   updateTournament: (tx, id: string, changes: Row) =>
     updateColumns(tx, 'tournaments', id, 'price_schedule' in changes ? { ...changes, price_schedule: JSON.stringify(changes.price_schedule) } : changes, [
       'name',
@@ -152,7 +159,6 @@ const ops: Record<string, Op> = {
       'max_players',
       'registration_closes_at',
       'waiver_text',
-      'image_data',
       'refund_policy',
       'details',
       'announcement',
@@ -286,7 +292,15 @@ const ops: Record<string, Op> = {
     balances: await all(tx, 'select * from public.player_balances where tournament_id = $1 order by player_id', [id]),
     ledger: await all(tx, 'select * from public.ledger_entries where tournament_id = $1 order by id', [id]),
     withdrawals: await all(tx, 'select * from public.withdrawal_details where tournament_id = $1 order by id', [id]),
+    notices: await all(tx, `select n.*, p.first_name || ' ' || p.last_name as player_name
+       from public.stripe_notices n left join public.players p on p.id = n.player_id
+       where n.tournament_id = $1 order by n.created_at desc limit 200`, [id]),
   }),
+  getStripeNotices: (tx, id: string) => all(tx, `select n.*, p.first_name || ' ' || p.last_name as player_name
+       from public.stripe_notices n left join public.players p on p.id = n.player_id
+       where n.tournament_id = $1 order by n.created_at desc limit 200`, [id]),
+  resolveStripeNotice: (tx, id: number) => tx.query('select public.resolve_stripe_notice($1)', [id]).then(() => null),
+  getMyRegistrations: (tx) => all(tx, 'select * from public.my_registrations()'),
   withdrawRegistration: async (tx, reg: string, event: string | null) =>
     (await one<{ r: unknown }>(tx, 'select public.withdraw_registration($1, $2) as r', [reg, event])).r,
   moveRegistrationEntry: (tx, reg: string, from: string, to: string) =>
@@ -346,6 +360,8 @@ const ops: Record<string, Op> = {
       columns.map((c) => fields[c]),
     );
   },
+  setListingImage: async (tx, id: string, data: string | null) =>
+    (await one<{ v: string | null }>(tx, 'select public.set_listing_image($1, $2) as v', [id, data])).v,
   deleteListing: (tx, id: string) => tx.query('delete from public.tournament_listings where id = $1', [id]).then(() => null),
   getPlatformPricing: async (tx) => (await one<{ r: unknown }>(tx, 'select public.platform_pricing() as r')).r,
   getTournamentFees: async (tx, id: string) => (await one<{ r: unknown }>(tx, 'select public.tournament_fees($1) as r', [id])).r,
@@ -470,7 +486,7 @@ const authOps: Record<string, Op> = {
     (
       await all(
         tx,
-        `select (select revision::text from public.tournament_live where tournament_id = $1) as revision,
+        `select (select revs from public.tournament_live where tournament_id = $1) as revs,
                 coalesce(nullif(current_setting('engine.sim_now', true), '')::timestamptz, now()) as now`,
         [id],
       )

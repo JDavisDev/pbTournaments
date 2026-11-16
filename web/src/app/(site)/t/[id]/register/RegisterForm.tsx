@@ -22,6 +22,7 @@ import { entryCost, formatMoney, formatTime, priceAt, priceSummary, registration
 import { useAction, useLoad, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { goToCheckout } from '@/lib/http';
 import { saveProfile, useProfile, type PlayerProfile } from '@/lib/profile';
+import { imageUrl } from '@/lib/image';
 
 interface Choice {
   partner_name: string;
@@ -210,9 +211,9 @@ function Form({ id, saved, isStaff }: { id: string; saved: PlayerProfile | null;
         });
       }}
     >
-      {t.image_data && (
+      {t.image_id && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={t.image_data} alt="" className="max-h-56 w-full rounded-2xl object-cover" />
+        <img src={imageUrl(t.image_id)!} alt="" decoding="async" className="max-h-56 w-full rounded-2xl object-cover" />
       )}
       <div>
         <h2 className="text-4xl">Register</h2>

@@ -147,6 +147,7 @@ export function PlayersView({ params }: { params: Promise<{ id: string }> }) {
       entries: p.entries,
       withdrawals: p.withdrawals,
       ledger: data.money.ledger.filter((l) => l.player_id === p.playerId),
+      notices: data.money.notices.filter((n) => n.player_id === p.playerId),
       balance: balanceOf(p.playerId),
     };
   };
@@ -209,7 +210,7 @@ export function PlayersView({ params }: { params: Promise<{ id: string }> }) {
                 key={p.playerId}
                 person={p}
                 problems={problemsOf(p)}
-                balance={<BalanceBadge balance={balanceOf(p.playerId)} />}
+                balance={<BalanceBadge balance={balanceOf(p.playerId)} notices={data.money.notices.filter((n) => n.player_id === p.playerId)} />}
                 onOpen={() => setOpen({ playerId: p.playerId, sheet: 'profile' })}
               />
             ))}

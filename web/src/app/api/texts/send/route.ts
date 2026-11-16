@@ -1,5 +1,8 @@
 import { sendPendingTexts } from '@/server/texts';
 
+// Sending stops itself after about 20 seconds (server/texts.ts); this leaves room.
+export const maxDuration = 60;
+
 /**
  * Delivers queued texts. Call it every minute or so from a scheduler (Vercel
  * Cron, or Supabase pg_cron + pg_net) with "Authorization: Bearer $CRON_SECRET".

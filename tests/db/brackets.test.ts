@@ -284,6 +284,8 @@ describe('round formats', () => {
       format: 'single_elim',
       roundFormats: [{ key: 'final', games_to: 15, best_of: 3 }],
     });
+    // Texting is off by default (see the texting_off migration).
+    await db.query('update public.tournaments set texts_enabled = true where id = $1', [tournamentId]);
     await generate(db, eventId);
     const [final] = await liveMatches(db, tournamentId);
     const texts = await rows(db, 'select body from public.notifications where match_id = $1', [final.id]);

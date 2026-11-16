@@ -1,5 +1,7 @@
 // Calls from the browser to the site's own routes (src/app/api), which answer
 // JSON and put what went wrong in `error`.
+import { isLocalMode } from './config';
+import { getLocalUser } from './localClient';
 import { supabase } from './supabase';
 
 /**
@@ -8,7 +10,10 @@ import { supabase } from './supabase';
  */
 export async function postJson<T>(path: string, body?: unknown, { signedIn = false } = {}): Promise<T> {
   const headers: Record<string, string> = body === undefined ? {} : { 'content-type': 'application/json' };
-  if (signedIn) {
+  if (signedIn && isLocalMode) {
+    const user = getLocalUser();
+    if (user) headers['x-local-user'] = user.id;
+  } else if (signedIn) {
     const { data } = await supabase().auth.getSession();
     if (data.session) headers.authorization = `Bearer ${data.session.access_token}`;
   }
@@ -19,9 +24,9 @@ export async function postJson<T>(path: string, body?: unknown, { signedIn = fal
   return answer;
 }
 
-/** Starts a checkout (Stripe's, or the test one) and goes there. */
-export async function goToCheckout(path: string, body: unknown) {
-  const { url } = await postJson<{ url?: string }>(path, body);
+/** Starts a checkout (Stripe's, or the test one) and goes there. `signedIn`: for directors' checkouts. */
+export async function goToCheckout(path: string, body: unknown, { signedIn = false } = {}) {
+  const { url } = await postJson<{ url?: string }>(path, body, { signedIn });
   if (!url) throw new Error('Could not start checkout');
   window.location.href = url;
 }

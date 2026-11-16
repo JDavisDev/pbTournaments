@@ -29,7 +29,7 @@ async function load(id: string) {
 export function DuprResults({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const staff = useStaffAccess(id);
-  const { data, error, reload } = useLiveTournament(id, () => load(id));
+  const { data, error, reload } = useLiveTournament(id, () => load(id), undefined, ['tournament', 'events', 'matches', 'team_names']);
 
   if (error === 'not-configured') return <ConnectNotice />;
   if (error) return <Empty>{error}</Empty>;

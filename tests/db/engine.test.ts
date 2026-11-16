@@ -82,6 +82,8 @@ describe('score validation', () => {
 describe('court assignment', () => {
   it('fills every open court and texts all four players', async () => {
     const { tournamentId } = await createLiveTournament(db, { courts: 2, start: START });
+    // Texting is off by default (see the texting_off migration).
+    await db.query('update public.tournaments set texts_enabled = true where id = $1', [tournamentId]);
     const { eventId } = await eventWithTeams(tournamentId, "Men's 3.5", 4);
     expect(await generate(db, eventId)).toBe(6);
 
@@ -316,6 +318,8 @@ describe('the queue', () => {
 
   it('moves a live match to another court, swapping when that court is busy', async () => {
     const setup = await createLiveTournament(db, { courts: 3, start: START });
+    // Texting is off by default (see the texting_off migration).
+    await db.query('update public.tournaments set texts_enabled = true where id = $1', [setup.tournamentId]);
     const { eventId } = await eventWithTeams(setup.tournamentId, 'Open', 4);
     await generate(db, eventId); // two matches: Courts 1 and 2
     const [onOne, onTwo] = await liveMatches(db, setup.tournamentId);
@@ -535,6 +539,25 @@ describe('director tools', () => {
     await reportScore(db, match.id, [[11, 4]]);
     const after = (await one(db, 'select revision from public.tournament_live where tournament_id = $1', [tournamentId])).revision;
     expect(Number(after)).toBeGreaterThan(Number(before));
+  });
+
+  it('bumps only the areas that changed, once per transaction', async () => {
+    const { tournamentId, match } = await oneMatchOnOneCourt();
+    const revs = async () =>
+      (await one(db, 'select revs from public.tournament_live where tournament_id = $1', [tournamentId])).revs as Record<string, number>;
+    const before = await revs();
+    const { updated_at: was } = await one(db, 'select updated_at from public.match_details where id = $1', [match.id]);
+    await reportScore(db, match.id, [[11, 4]]);
+    const after = await revs();
+    // However many matches the report moved, one bump.
+    expect(after.matches).toBe((before.matches ?? 0) + 1);
+    expect(after.team_names).toBe(before.team_names);
+    expect(after.match_deletes).toBe(before.match_deletes);
+    const { updated_at: now } = await one(db, 'select updated_at from public.match_details where id = $1', [match.id]);
+    expect(new Date(now).getTime()).toBeGreaterThan(new Date(was).getTime());
+
+    await db.query(`update public.teams set name = 'Renamed' where id = $1`, [match.team1_id]);
+    expect((await revs()).team_names).toBe((after.team_names ?? 0) + 1);
   });
 });
 

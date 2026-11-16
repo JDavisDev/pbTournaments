@@ -20,6 +20,7 @@ import { StreamEmbed, WatchChip } from '@/components/StreamEmbed';
 import { formatTime, isPlayable, priceSummary, registrationOpen, venueLine } from '@/lib/format';
 import { useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
 import { rulesOf } from '@/lib/scoring';
+import { imageUrl } from '@/lib/image';
 
 async function load(id: string) {
   const [tournament, events, teams, matches, courts] = await Promise.all([
@@ -68,9 +69,9 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
     <div className={`grid gap-10 ${aside ? 'lg:grid-cols-[1fr_22rem]' : ''}`}>
       <div className="flex min-w-0 flex-col gap-10">
         {!tournament.simple && <EligibilityAlert tournamentId={id} />}
-        {tournament.image_data && (
+        {tournament.image_id && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={tournament.image_data} alt="" className="max-h-72 w-full rounded-2xl object-cover" />
+          <img src={imageUrl(tournament.image_id)!} alt="" decoding="async" className="max-h-72 w-full rounded-2xl object-cover" />
         )}
         {tournament.stream_url && <StreamEmbed url={tournament.stream_url} title={`${tournament.name} live`} />}
         {registrationOpen(tournament) && (

@@ -126,15 +126,41 @@ async function deliver(n: Claimed) {
   }
 }
 
-/** Sends (or logs) one batch of queued messages. Returns how many it handled. */
-export async function sendPendingTexts(limit = 50): Promise<number> {
-  const batch = (await serverRpc<Claimed[]>('claim_notifications', { p_limit: limit })) ?? [];
-  for (const n of batch) {
-    // Claimed messages aren't claimed again, so one that fails is marked failed
-    // (the Messages page shows why) rather than stopping the rest of the batch.
-    await deliver(n).catch((err: Error) =>
-      finish(n.id, 'none', null, n.body, err.message).catch((e: Error) => console.error(`Message ${n.id} failed: ${err.message}; ${e.message}`)),
-    );
+// The outbox goes out in small batches, a few messages at a time, until it's
+// empty or the time budget is used: one run never comes near the function's
+// time limit, and a run cut off part way strands at most one small batch
+// (claimed messages aren't claimed again).
+const BATCH = 10;
+const AT_ONCE = 5;
+const BUDGET_MS = 20_000;
+
+/** Sends one message; one that fails is marked failed (the Messages page shows why) and the rest go on. */
+const deliverOrFail = (n: Claimed) =>
+  deliver(n).catch((err: Error) =>
+    finish(n.id, 'none', null, n.body, err.message).catch((e: Error) => console.error(`Message ${n.id} failed: ${err.message}; ${e.message}`)),
+  );
+
+let running: Promise<number> | null = null;
+
+/** Sends (or logs) the queued messages. Returns how many it handled. */
+export function sendPendingTexts(): Promise<number> {
+  // One run at a time per server (local mode starts one every few seconds).
+  running ??= drainOutbox().finally(() => {
+    running = null;
+  });
+  return running;
+}
+
+async function drainOutbox(): Promise<number> {
+  const started = Date.now();
+  let handled = 0;
+  while (Date.now() - started < BUDGET_MS) {
+    const batch = (await serverRpc<Claimed[]>('claim_notifications', { p_limit: BATCH })) ?? [];
+    for (let i = 0; i < batch.length; i += AT_ONCE) {
+      await Promise.all(batch.slice(i, i + AT_ONCE).map(deliverOrFail));
+    }
+    handled += batch.length;
+    if (batch.length < BATCH) break;
   }
-  return batch.length;
+  return handled;
 }

@@ -5,8 +5,9 @@
 import Link from 'next/link';
 import { use } from 'react';
 import { ConnectNotice } from '@/components/ConnectNotice';
+import { StripeNoticeList, needsDirector } from '@/components/StripeNotices';
 import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
-import { getTournament, getTournamentFinance } from '@/lib/api';
+import { getStripeNotices, getTournament, getTournamentFinance } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import { goToCheckout } from '@/lib/http';
@@ -14,8 +15,8 @@ import { CARD_FIXED_CENTS, CARD_PERCENT } from '@/lib/pricing';
 import type { TournamentFinance } from '@/lib/types';
 
 async function load(id: string) {
-  const [tournament, finance] = await Promise.all([getTournament(id), getTournamentFinance(id)]);
-  return { tournament, finance };
+  const [tournament, finance, notices] = await Promise.all([getTournament(id), getTournamentFinance(id), getStripeNotices(id)]);
+  return { tournament, finance, notices };
 }
 
 /** One number with what it is. */
@@ -34,12 +35,13 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 export function FinanceView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const staff = useStaffAccess(id);
-  const { data, error } = useLiveTournament(id, () => load(id));
+  const { data, error, reload } = useLiveTournament(id, () => load(id), undefined, ['tournament', 'teams']);
   if (error === 'not-configured') return <ConnectNotice />;
   if (error) return <Empty>{error}</Empty>;
   if (!data || staff.data === undefined) return <Spinner />;
   if (!staff.data) return <Empty>The tournament’s money is for its directors.</Empty>;
-  const { tournament, finance: f } = data;
+  const { tournament, finance: f, notices } = data;
+  const waiting = notices.filter(needsDirector).length;
   const m = f.money;
 
   // Stripe's card fees are in the director's Stripe account; this is the standard US rate.
@@ -73,6 +75,18 @@ export function FinanceView({ params }: { params: Promise<{ id: string }> }) {
           <dd className="tnum text-right">{formatMoney(m.discounts_cents)}</dd>
         </dl>
       </section>
+
+      {notices.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-3xl">From Stripe</h2>
+          <p className="text-muted">
+            {waiting
+              ? `${plural(waiting, 'item')} to look at: payments that couldn’t be applied, refunds made in Stripe, and disputes.`
+              : 'Payments that couldn’t be applied, refunds made in Stripe, and disputes. All dealt with.'}
+          </p>
+          <StripeNoticeList notices={notices} onChanged={reload} />
+        </section>
+      )}
 
       <OpenItems tournamentId={tournament.id} finance={f} />
 
@@ -132,7 +146,7 @@ export function FinanceView({ params }: { params: Promise<{ id: string }> }) {
 function OpenItems({ tournamentId, finance: f }: { tournamentId: string; finance: TournamentFinance }) {
   const { busy, error, run } = useAction();
   const b = f.balances;
-  const payFees = () => run(() => goToCheckout('/api/checkout/fees', { tournamentId }));
+  const payFees = () => run(() => goToCheckout('/api/checkout/fees', { tournamentId }, { signedIn: true }));
   if (!b.players_owing && !b.players_owed && !f.courtside.owed_cents) return null;
   return (
     <section className="flex flex-col gap-3">

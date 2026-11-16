@@ -3,12 +3,12 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button, Card, ErrorText, Field, Input, LinkButton, Select, Spinner, Textarea } from '@/components/ui';
-import { deleteListing, saveListing } from '@/lib/api';
+import { deleteListing, saveListing, setListingImage } from '@/lib/api';
 import { auth } from '@/lib/auth';
 import { isDemoMode } from '@/lib/config';
 import { localToday } from '@/lib/format';
 import { useAction, useSession } from '@/lib/hooks';
-import { shrinkImage } from '@/lib/image';
+import { imageUrl, shrinkImage } from '@/lib/image';
 import { US_STATES } from '@/lib/places';
 import type { TournamentListing } from '@/lib/types';
 
@@ -30,7 +30,9 @@ export function ListingForm({ listing }: { listing?: TournamentListing }) {
     refund_policy: listing?.refund_policy ?? '',
     price: listing?.price_cents != null ? (listing.price_cents / 100).toString() : '',
   });
-  const [image, setImage] = useState(listing?.image_data ?? null);
+  // The saved image's address, or a new one (a data URL) to save with the listing.
+  const [image, setImage] = useState(imageUrl(listing?.image_id));
+  const imageChanged = image !== imageUrl(listing?.image_id);
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
   const { busy, error, run } = useAction();
   const guest = useAction();
@@ -67,7 +69,7 @@ export function ListingForm({ listing }: { listing?: TournamentListing }) {
             if ((form.ends_on || form.starts_on) < localToday()) {
               throw new Error('That date has already passed, so the listing wouldn’t show. Check the year.');
             }
-            await saveListing(listing?.id ?? null, {
+            const saved = await saveListing(listing?.id ?? null, {
               name: form.name.trim(),
               signup_url: withScheme(form.signup_url.trim()),
               starts_on: form.starts_on,
@@ -75,10 +77,10 @@ export function ListingForm({ listing }: { listing?: TournamentListing }) {
               venue: form.venue.trim() || null,
               city: form.city.trim(),
               state: form.state,
-              image_data: image,
               refund_policy: form.refund_policy.trim() || null,
               price_cents: form.price.trim() === '' ? null : Math.round(Number(form.price) * 100),
             });
+            if (imageChanged) await setListingImage(saved.id, image);
             router.push('/tournaments');
           });
         }}

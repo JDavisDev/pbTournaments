@@ -52,6 +52,8 @@ import type {
   PaymentsStatus,
   TournamentFinance,
   CardRefundPlan,
+  MyRegistration,
+  StripeNotice,
   TournamentListing,
   TournamentStatus,
   WithdrawalRow,
@@ -121,10 +123,13 @@ export const getQueue = (tournamentId: string) => rpcAll<QueueRow>('up_next', { 
 export const getChampionshipHolds = (tournamentId: string) =>
   rpcAll<ChampionshipHold>('championship_holds', { p_tournament: tournamentId });
 
-export const getMatches = (tournamentId: string) =>
-  selectAll<MatchDetails>((from, to) =>
-    supabase().from('match_details').select('*').eq('tournament_id', tournamentId).order('queue_seq').order('id').range(from, to),
-  );
+/** `since`: only the matches that changed after then (lib/live.ts merges them in). */
+export const getMatches = (tournamentId: string, since?: string | null) =>
+  selectAll<MatchDetails>((from, to) => {
+    let query = supabase().from('match_details').select('*').eq('tournament_id', tournamentId);
+    if (since) query = query.gt('updated_at', since);
+    return query.order('queue_seq').order('id').range(from, to);
+  });
 
 export const getStandings = (tournamentId: string) =>
   selectAll<StandingRow>((from, to) =>
@@ -199,6 +204,10 @@ export const setAutoAssign = (tournamentId: string, on: boolean) =>
 
 export const setCourtCount = (tournamentId: string, count: number) =>
   rpc<number>('set_court_count', { p_tournament: tournamentId, p_count: count });
+
+/** Staff: sets (a data URL from shrinkImage) or removes (null) the tournament's image. Returns its new id. */
+export const setTournamentImage = (tournamentId: string, dataUrl: string | null) =>
+  rpc<string | null>('set_tournament_image', { p_tournament: tournamentId, p_data: dataUrl });
 
 export async function updateTournament(id: string, changes: Partial<Tournament>) {
   await select(supabase().from('tournaments').update(changes).eq('id', id).select('id'));
@@ -323,6 +332,25 @@ export const removeWaitlistEntry = (registrationId: string, eventId: string) =>
 // Money and withdrawals ---------------------------------------------------------
 
 /** Admin: each registrant's ledger, balance and withdrawals. */
+/** What Stripe reported about the tournament's payments (staff), newest first. */
+export async function getStripeNotices(tournamentId: string): Promise<StripeNotice[]> {
+  const rows = await select<(Omit<StripeNotice, 'player_name'> & { players: { first_name: string; last_name: string } | null })[]>(
+    supabase()
+      .from('stripe_notices')
+      .select('*, players(first_name, last_name)')
+      .eq('tournament_id', tournamentId)
+      .order('created_at', { ascending: false })
+      .limit(200),
+  );
+  return rows.map(({ players, ...n }) => ({ ...n, player_name: players ? `${players.first_name} ${players.last_name}` : null }));
+}
+
+/** Staff: dismiss a payment or refund notice once it's dealt with. */
+export const resolveStripeNotice = (id: number) => rpc<void>('resolve_stripe_notice', { p_notice: id });
+
+/** The signed-in player's registrations, with what they've paid and are owed. */
+export const getMyRegistrations = () => rpc<MyRegistration[]>('my_registrations', {});
+
 export async function getMoney(tournamentId: string) {
   const [balances, ledger, withdrawals] = await Promise.all([
     selectAll<PlayerBalance>((from, to) =>
@@ -335,7 +363,7 @@ export async function getMoney(tournamentId: string) {
       supabase().from('withdrawal_details').select('*').eq('tournament_id', tournamentId).order('id').range(from, to),
     ),
   ]);
-  return { balances, ledger, withdrawals };
+  return { balances, ledger, withdrawals, notices: await getStripeNotices(tournamentId) };
 }
 
 /** Withdraw from one event, or all of them (null). The player (with their registration link) or an admin. */
@@ -440,6 +468,10 @@ export function saveListing(id: string | null, fields: ListingFields) {
   const table = supabase().from('tournament_listings');
   return select<TournamentListing>((id ? table.update(fields).eq('id', id) : table.insert(fields)).select().single());
 }
+
+/** The poster: sets (a data URL from shrinkImage) or removes (null) the listing's image. Returns its new id. */
+export const setListingImage = (listingId: string, dataUrl: string | null) =>
+  rpc<string | null>('set_listing_image', { p_listing: listingId, p_data: dataUrl });
 
 export async function deleteListing(id: string) {
   await select(supabase().from('tournament_listings').delete().eq('id', id).select('id'));

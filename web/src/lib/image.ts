@@ -18,3 +18,6 @@ export async function shrinkImage(file: File, maxWidth = 1200): Promise<string> 
     URL.revokeObjectURL(url);
   }
 }
+
+/** Where an image (a tournament's or listing's image_id) is served: cached for good, since it never changes. */
+export const imageUrl = (id: string | null | undefined) => (id ? `/api/images/${id}` : null);

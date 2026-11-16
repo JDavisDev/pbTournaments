@@ -60,7 +60,8 @@ export async function refundToCard(
         const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
         if (!intent) throw new Error('Couldn’t find that card payment on Stripe.');
         const refund = await stripe().refunds.create(
-          { payment_intent: intent, amount: part, metadata: { registration_id: p.registration_id } },
+          // Tagged so the webhook knows it was made here (it records refunds made in Stripe's dashboard).
+          { payment_intent: intent, amount: part, metadata: { registration_id: p.registration_id, courtside: 'refund' } },
           // The same click twice makes one refund.
           { ...options, idempotencyKey: `refund-${p.registration_id}-${p.refundable_cents}-${part}` },
         );

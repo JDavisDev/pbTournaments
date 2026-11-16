@@ -202,6 +202,8 @@ describe('resetting a bracket', () => {
 
   it('goes back to reviewing pool play until the second round has started', async () => {
     const { tournamentId, eventId } = await bracketOnCourt();
+    // Texting is off by default (see the texting_off migration).
+    await db.query('update public.tournaments set texts_enabled = true where id = $1', [tournamentId]);
     const [semi] = await liveMatches(db, tournamentId);
     await reportScore(db, semi.id, [[11, 5]]);
 
@@ -516,6 +518,8 @@ describe('changing pool play', () => {
 describe('undoing a start', () => {
   it('calls off matches on court, clears the schedule and any no-show forfeits', async () => {
     const { tournamentId, eventId, teams } = await division(4, { grace: 10, absent: [4] });
+    // Texting is off by default (see the texting_off migration).
+    await db.query('update public.tournaments set texts_enabled = true where id = $1', [tournamentId]);
     await start(eventId);
     await setClock(db, addMinutes(START, 11));
     await tick(db);

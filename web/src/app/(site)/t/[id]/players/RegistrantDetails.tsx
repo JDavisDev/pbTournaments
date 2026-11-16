@@ -4,12 +4,13 @@
 // division), what they've paid and been credited, who owes whom, and
 // payments, refunds and fees recorded by hand.
 import { useState } from 'react';
+import { StripeNoticeList } from '@/components/StripeNotices';
 import { Badge, Button, ErrorText, Field, Input, Select } from '@/components/ui';
 import { getCardRefundPlan, moveRegistrationEntry, recordLedgerEntry, refundPlayerToCard, withdrawRegistration } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useAction, useLoad } from '@/lib/hooks';
 import { balanceText, describeLedger, extraEventFee, withdrawalCredit } from '@/lib/money';
-import type { LedgerEntry, PaymentMethod, PlayerBalance, RegistrationRow, Tournament, TournamentEvent, WithdrawalRow } from '@/lib/types';
+import type { LedgerEntry, PaymentMethod, PlayerBalance, RegistrationRow, StripeNotice, Tournament, TournamentEvent, WithdrawalRow } from '@/lib/types';
 
 export interface Registrant {
   playerId: string;
@@ -22,6 +23,8 @@ export interface Registrant {
   entries: RegistrationRow[];
   withdrawals: WithdrawalRow[];
   ledger: LedgerEntry[];
+  /** What Stripe reported about their payments. */
+  notices: StripeNotice[];
   balance: PlayerBalance | null;
 }
 
@@ -194,6 +197,11 @@ export function RegistrantDetails({
 
       <section>
         <h3 className="text-xl">Payments</h3>
+        {who.notices.length > 0 && (
+          <div className="mt-2 mb-3">
+            <StripeNoticeList notices={who.notices} showPlayer={false} onChanged={onChanged} />
+          </div>
+        )}
         {who.ledger.length === 0 ? (
           <p className="text-muted">Nothing yet. Fees and payments show here once they’ve paid at checkout.</p>
         ) : (
@@ -432,8 +440,17 @@ function CardRefund({ who, tournament, owed, onChanged }: { who: Registrant; tou
   );
 }
 
-/** "Owes $10" / "Owed $40" next to a registrant's name. */
-export function BalanceBadge({ balance }: { balance: PlayerBalance | null }) {
-  if (!balance || balance.balance_cents === 0) return null;
-  return <Badge tone={balance.balance_cents > 0 ? 'late' : 'called'}>{balanceText(balance.balance_cents)}</Badge>;
+/** "Owes $10" / "Owed $40" next to a registrant's name, and a flag when Stripe reported something to look at. */
+export function BalanceBadge({ balance, notices = [] }: { balance: PlayerBalance | null; notices?: StripeNotice[] }) {
+  const disputed = notices.some((n) => n.kind === 'dispute' && n.status === 'open');
+  const unapplied = notices.some((n) => n.kind === 'unmatched_payment' && n.status === 'open');
+  return (
+    <>
+      {disputed && <Badge tone="late">Disputed</Badge>}
+      {unapplied && <Badge tone="called">Payment not applied</Badge>}
+      {balance && balance.balance_cents !== 0 && (
+        <Badge tone={balance.balance_cents > 0 ? 'late' : 'called'}>{balanceText(balance.balance_cents)}</Badge>
+      )}
+    </>
+  );
 }

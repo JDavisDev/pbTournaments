@@ -29,7 +29,14 @@ Players pay **into the director's own Stripe account**. Courtside never holds to
 2. Set `STRIPE_SECRET_KEY` (an `sk_test_` key while testing).
 3. Two webhooks, both to `https://<site>/api/stripe/webhook`:
    - **Your account:** `checkout.session.completed` (setup and player fees) → `STRIPE_WEBHOOK_SECRET`.
-   - **Connected accounts:** `checkout.session.completed`, `account.updated` → `STRIPE_CONNECT_WEBHOOK_SECRET`.
+   - **Connected accounts:** `checkout.session.completed`, `account.updated`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed` → `STRIPE_CONNECT_WEBHOOK_SECRET`.
 4. Locally: `stripe listen --forward-to localhost:3000/api/stripe/webhook --forward-connect-to localhost:3000/api/stripe/webhook`.
+
+What Stripe reports after a payment shows on the Finance page, in each player's details on the Players page, and on the player's profile (`stripe_notices`):
+
+- **A payment that couldn't be applied** (the registration was cancelled, its price changed while checkout was open, or it was already paid) is noted for the director, and the webhook answers 200 so Stripe doesn't retry it for days. The director refunds it in Stripe; that refund closes the notice.
+- **A refund made in the Stripe dashboard** goes on the player's ledger like one made from the Players page. Refunds made here are tagged (`metadata.courtside = refund`) and recorded once, whichever side records first.
+- **A dispute** shows until Stripe decides. A lost dispute goes on the ledger as a refund to the player.
+- **The setup fee and player fees** reuse the checkout already open for the same amount, so they can't be paid twice. A duplicate setup payment, or player fees paid beyond what's owed, is refunded automatically.
 
 Onboarding: `/api/connect/onboard` creates the account and a Stripe Account Link; Stripe sends the owner back to `/api/connect/return`, which reads the account's status. `account.updated` keeps it current. Checkout refuses card payments until the account can take charges.

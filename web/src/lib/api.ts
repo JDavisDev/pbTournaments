@@ -35,6 +35,10 @@ export const {
   setAutoAssign,
   setCourtCount,
   updateTournament,
+  getStripeNotices,
+  resolveStripeNotice,
+  getMyRegistrations,
+  setTournamentImage,
   saveEvent,
   deleteEvent,
   addTeamsFromText,
@@ -155,4 +159,5 @@ export const {
   getListing,
   saveListing,
   deleteListing,
+  setListingImage,
 } = api;
