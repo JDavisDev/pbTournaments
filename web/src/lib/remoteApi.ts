@@ -38,6 +38,9 @@ import type {
   StaffMember,
   EventMerge,
   MyTournament,
+  CancelledTournament,
+  RefundDue,
+  TournamentRemoval,
   SelfCheckinPlayer,
   PlayerProfile,
   StaffRole,
@@ -208,6 +211,19 @@ export const setCourtCount = (tournamentId: string, count: number) =>
 /** Staff: sets (a data URL from shrinkImage) or removes (null) the tournament's image. Returns its new id. */
 export const setTournamentImage = (tournamentId: string, dataUrl: string | null) =>
   rpc<string | null>('set_tournament_image', { p_tournament: tournamentId, p_data: dataUrl });
+
+/** Staff: cancels it, posting `announcement` (and emailing it to its players). Refunds are left to send. */
+export const cancelTournament = (tournamentId: string, announcement: string) =>
+  rpc<Tournament>('cancel_tournament', { p_tournament: tournamentId, p_announcement: announcement });
+/** The owner: deletes it for good. Only when nothing is on record (tournament_removal). */
+export const deleteTournament = (tournamentId: string) => rpc<void>('delete_tournament', { p_tournament: tournamentId });
+export const getTournamentRemoval = (tournamentId: string) =>
+  rpc<TournamentRemoval>('tournament_removal', { p_tournament: tournamentId });
+/** Staff: players the tournament owes money, by name. */
+export const getRefundsDue = (tournamentId: string) => rpcAll<RefundDue>('refunds_due', { p_tournament: tournamentId });
+/** Anyone: a cancelled tournament's name and announcement, or null. */
+export const getCancelledTournament = (tournamentId: string) =>
+  rpc<CancelledTournament | null>('cancelled_tournament', { p_tournament: tournamentId });
 
 export async function updateTournament(id: string, changes: Partial<Tournament>) {
   await select(supabase().from('tournaments').update(changes).eq('id', id).select('id'));

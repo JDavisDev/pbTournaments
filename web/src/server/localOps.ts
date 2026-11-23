@@ -130,6 +130,13 @@ const ops: Record<string, Op> = {
     (await one<{ n: number }>(tx, 'select public.add_mock_teams($1, $2) as n', [id, count])).n,
   setTournamentStatus: (tx, id: string, status: string) =>
     one(tx, 'select * from public.set_tournament_status($1, $2::public.tournament_status)', [id, status]),
+  cancelTournament: (tx, id: string, announcement: string) =>
+    one(tx, 'select * from public.cancel_tournament($1, $2)', [id, announcement]),
+  deleteTournament: (tx, id: string) => tx.query('select public.delete_tournament($1)', [id]).then(() => null),
+  getTournamentRemoval: async (tx, id: string) => (await one<{ r: unknown }>(tx, 'select public.tournament_removal($1) as r', [id])).r,
+  getRefundsDue: (tx, id: string) => all(tx, 'select * from public.refunds_due($1)', [id]),
+  getCancelledTournament: async (tx, id: string) =>
+    (await one<{ r: unknown }>(tx, 'select public.cancelled_tournament($1) as r', [id])).r,
   setAutoAssign: (tx, id: string, on: boolean) => one(tx, 'select * from public.set_auto_assign($1, $2)', [id, on]),
   setCourtCount: async (tx, id: string, count: number) =>
     (await one<{ n: number }>(tx, 'select public.set_court_count($1, $2) as n', [id, count])).n,

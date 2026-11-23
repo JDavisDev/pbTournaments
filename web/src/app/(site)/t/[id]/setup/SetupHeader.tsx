@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/Icon';
 import { Button, ErrorText } from '@/components/ui';
 import { setTournamentStatus, updateTournament } from '@/lib/api';
-import { registrationOpen } from '@/lib/format';
+import { formatDate, registrationOpen } from '@/lib/format';
 import { useAction, useNow } from '@/lib/hooks';
 import type { Tournament, TournamentEvent, TournamentStatus } from '@/lib/types';
 
@@ -32,6 +32,18 @@ export function SetupHeader({ tournament, events, onChanged }: { tournament: Tou
           : s,
       )
     : stages;
+  if (tournament.status === 'cancelled') {
+    return (
+      <div className="flex flex-col gap-2 rounded-2xl border-2 border-late p-5">
+        <h2 className="text-3xl">Settings</h2>
+        <p className="font-semibold text-late">Cancelled{tournament.cancelled_at ? ` ${formatDate(tournament.cancelled_at.slice(0, 10))}` : ''}</p>
+        <p className="text-sm text-muted">
+          Only managers can see it now; its link shows players just the announcement. You can still change anything here. Send refunds from
+          the Overview.
+        </p>
+      </div>
+    );
+  }
   const at = steps.findIndex((s) => s.value === tournament.status);
   const allFinal = events.length > 0 && events.every((e) => e.finalized_at);
   const ready = events.length > 0 && !!tournament.name.trim();

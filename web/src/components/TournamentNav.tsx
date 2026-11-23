@@ -18,8 +18,8 @@ import { WatchChip } from './StreamEmbed';
 import { Badge, Button, Modal } from './ui';
 import { usesCheckin } from '@/lib/types';
 
-const statusTone = { draft: 'neutral', registration: 'called', live: 'live', complete: 'info' } as const;
-const statusText = { draft: 'Draft', registration: 'Registration', live: 'Live', complete: 'Complete' };
+const statusTone = { draft: 'neutral', registration: 'called', live: 'live', complete: 'info', cancelled: 'late' } as const;
+const statusText = { draft: 'Draft', registration: 'Registration', live: 'Live', complete: 'Complete', cancelled: 'Cancelled' };
 
 type Tab = { href: string; label: string };
 /** A page in the More sheet: used less often than the tabs. */
@@ -52,8 +52,10 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   const [t, events] = tournament.data;
   const base = `/t/${id}`;
   const draft = t.status === 'draft';
+  // Cancelled: archived. Managers see the players (and refunds), settings, messages and money.
+  const cancelled = t.status === 'cancelled';
   // The court desk is for play: it shows once a director starts a division.
-  const playing = events.some((e) => e.started_at) && t.status !== 'complete';
+  const playing = events.some((e) => e.started_at) && t.status !== 'complete' && !cancelled;
   const desk = playing ? [{ href: `${base}/desk`, label: 'Court desk' }] : [];
   const register = registrationOpen(t, now) ? [{ href: `${base}/register`, label: 'Register' }] : [];
   const tv: MoreItem = { href: `/tv/${id}`, label: 'TV board', icon: 'tv', hint: 'Courts and results for a big screen', newTab: true };
@@ -62,9 +64,16 @@ export function TournamentNav({ params }: { params: Promise<{ id: string }> }) {
   if (staff.data && t.simple) {
     // Basic: no players, money, texts or DUPR; check-in only if turned on. Teams are added in Setup, so it stays a tab.
     const setup = { href: `${base}/setup`, label: 'Setup' };
-    const checkin = t.basic_checkin ? [{ href: `${base}/checkin`, label: 'Check-in' }] : [];
+    const checkin = t.basic_checkin && !cancelled ? [{ href: `${base}/checkin`, label: 'Check-in' }] : [];
     tabs = draft ? [setup, { href: base, label: 'Overview' }] : [{ href: base, label: 'Overview' }, ...checkin, ...desk, setup];
     more = [{ href: `${base}/planner`, label: 'Planner', icon: 'calendar', hint: 'Plan the day’s divisions and courts' }, tv];
+  } else if (staff.data && cancelled) {
+    tabs = [{ href: base, label: 'Overview' }, { href: `${base}/players`, label: 'Players' }];
+    more = [
+      { href: `${base}/setup`, label: 'Settings', icon: 'sliders', hint: 'Details, divisions, prices and registration' },
+      { href: `${base}/messages`, label: 'Messages', icon: 'message', hint: 'Text and email players' },
+      { href: `${base}/finance`, label: 'Finance', icon: 'money', hint: 'Money in and out, and player numbers' },
+    ];
   } else if (staff.data) {
     // A draft is set up first; the other tabs come once registration opens.
     tabs = draft

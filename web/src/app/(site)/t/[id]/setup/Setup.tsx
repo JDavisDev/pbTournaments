@@ -14,6 +14,7 @@ import { ChampionshipCard, StreamsCard } from './CourtCards';
 import { EventCard } from './EventCard';
 import { EventForm } from './EventForm';
 import { PricesCard } from './PricesCard';
+import { RemoveCard } from './RemoveCard';
 import { SaveAllProvider, useSaveAll, useUnsavedSections } from './SaveAll';
 import { AboutCard, DiscountCodesCard, FeesCard, PaymentsCard, QuestionsCard, RegistrationCard, SharingCard } from './SetupCards';
 import { SetupHeader } from './SetupHeader';
@@ -100,6 +101,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             <SharingCard tournament={data.tournament} />
             <StreamsCard tournament={data.tournament} courts={data.courts} />
             <ChampionshipCard key={`champ-${data.tournament.id}`} tournament={data.tournament} courts={data.courts} />
+            <RemoveCard tournament={data.tournament} onChanged={reload} />
           </div>
           <ContinueToDivisions onDone={() => (reload(), go('divisions'))} />
           <SaveBar onSaved={reload} />

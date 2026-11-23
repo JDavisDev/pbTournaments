@@ -14,11 +14,13 @@ import { Icon } from '@/components/Icon';
 import { useMyTeam } from '@/components/MatchDay';
 import { Button, Empty, Input, LinkButton, Select, Spinner } from '@/components/ui';
 import { ScoreDialog, type ScoreTarget } from '@/components/desk/ScoreDialog';
-import { getCourtBoard, getEvents, getMatches, getQueue, getTeams, getTournament } from '@/lib/api';
+import { RefundsDue } from '@/components/RefundsDue';
+import { getCancelledTournament, getCourtBoard, getEvents, getMatches, getQueue, getTeams, getTournament } from '@/lib/api';
 import { describeDivision } from '@/lib/eligibility';
 import { StreamEmbed, WatchChip } from '@/components/StreamEmbed';
-import { formatTime, isPlayable, priceSummary, registrationOpen, venueLine } from '@/lib/format';
-import { useLiveTournament, useNow, useStaffAccess } from '@/lib/hooks';
+import { formatDate, formatTime, isPlayable, priceSummary, registrationOpen, venueLine } from '@/lib/format';
+import type { CancelledTournament } from '@/lib/types';
+import { useLiveTournament, useLoad, useNow, useStaffAccess } from '@/lib/hooks';
 import { rulesOf } from '@/lib/scoring';
 import { imageUrl } from '@/lib/image';
 
@@ -45,8 +47,12 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
   const [myTeamId, setMyTeam] = useMyTeam(id);
   const [playAs, setPlayAs] = useState('');
   const router = useRouter();
+  // Hidden from the public once cancelled: its link shows the announcement instead.
+  const cancelled = useLoad(() => (error && error !== 'not-configured' ? getCancelledTournament(id) : Promise.resolve(null)), [id, !!error]);
 
   if (error === 'not-configured') return <ConnectNotice />;
+  if (error && cancelled.data === undefined && !cancelled.error) return <Spinner />;
+  if (error && cancelled.data) return <CancelledNotice tournament={cancelled.data} />;
   if (error) return <Empty>{error}</Empty>;
   if (!data) return <Spinner />;
   const { tournament, events, teams, matches, courts, queue } = data;
@@ -68,7 +74,8 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className={`grid gap-10 ${aside ? 'lg:grid-cols-[1fr_22rem]' : ''}`}>
       <div className="flex min-w-0 flex-col gap-10">
-        {!tournament.simple && <EligibilityAlert tournamentId={id} />}
+        {tournament.status === 'cancelled' && staff.data && !tournament.simple && <RefundsDue tournament={tournament} />}
+        {!tournament.simple && tournament.status !== 'cancelled' && <EligibilityAlert tournamentId={id} />}
         {tournament.image_id && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={imageUrl(tournament.image_id)!} alt="" decoding="async" className="max-h-72 w-full rounded-2xl object-cover" />
@@ -333,6 +340,30 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
         </aside>
       )}
       <ScoreDialog target={scoring} onClose={() => setScoring(null)} onDone={reload} />
+    </div>
+  );
+}
+
+/** What anyone sees at a cancelled tournament's link: its name and the announcement. */
+function CancelledNotice({ tournament: t }: { tournament: CancelledTournament }) {
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <p className="font-semibold text-late">Cancelled</p>
+      <h1 className="text-5xl">{t.name}</h1>
+      <p className="text-muted">{formatDate(t.starts_on)}</p>
+      {t.announcement && (
+        <div role="status" className="flex items-start gap-3 rounded-2xl border-2 border-warn bg-warn-soft p-4">
+          <Icon name="megaphone" className="mt-0.5 h-6 w-6 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-semibold whitespace-pre-wrap">
+              <Linked text={t.announcement} />
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              Cancelled {new Date(t.cancelled_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: t.time_zone })}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

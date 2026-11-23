@@ -6,10 +6,10 @@ import { useEffect, useState } from 'react';
 import { AddToCalendar } from '@/components/AddToCalendar';
 import { MatchAlerts } from '@/components/MatchAlerts';
 import { Badge, Button, Card, Empty, ErrorText, Modal, Spinner } from '@/components/ui';
-import { getRegistration, withdrawRegistration } from '@/lib/api';
+import { getCancelledTournament, getRegistration, withdrawRegistration } from '@/lib/api';
 import { textingAvailable } from '@/lib/config';
 import { formatMoney } from '@/lib/format';
-import { useAction } from '@/lib/hooks';
+import { useAction, useLoad } from '@/lib/hooks';
 import { goToCheckout } from '@/lib/http';
 import { withdrawalCredit } from '@/lib/money';
 import type { RegistrationView } from '@/lib/types';
@@ -47,6 +47,7 @@ export function RegistrationDone() {
   if (reg === undefined) return <Spinner />;
   if (reg === null) return <Empty>Registration not found.</Empty>;
 
+  if (reg.tournament_status === 'cancelled') return <CancelledRegistration reg={reg} />;
   const paid = reg.status === 'paid';
   const canWithdraw = reg.tournament_status !== 'complete' && reg.entries.length > 0 && reg.status !== 'cancelled';
   const offered = reg.entries.some((e) => e.offered);
@@ -298,5 +299,22 @@ function CopyLink({ path }: { path: string }) {
     >
       {copied ? 'Link copied' : 'copy their sign-up link'}
     </button>
+  );
+}
+
+/** The tournament was cancelled: its announcement, and what happens to their money. */
+function CancelledRegistration({ reg }: { reg: RegistrationView }) {
+  const notice = useLoad(() => getCancelledTournament(reg.tournament_id), [reg.tournament_id]);
+  return (
+    <Card className="mx-auto max-w-xl p-6">
+      <p className="font-semibold text-late">Cancelled</p>
+      <h2 className="mt-1 text-4xl">{reg.tournament_name} is cancelled</h2>
+      {notice.data?.announcement && <p className="mt-3 text-lg whitespace-pre-wrap">{notice.data.announcement}</p>}
+      <p className="mt-3 text-muted">
+        {reg.status === 'paid' || reg.status === 'refunded'
+          ? 'The organizer refunds what you paid; it goes back to the card you paid with, or they’ll be in touch.'
+          : 'Nothing was charged.'}
+      </p>
+    </Card>
   );
 }

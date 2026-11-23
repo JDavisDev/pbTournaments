@@ -1,6 +1,7 @@
 // Row shapes of the tables and views the screens read. See docs/api.md.
 
-export type TournamentStatus = 'draft' | 'registration' | 'live' | 'complete';
+/** cancelled: called off by its managers, kept (archived) for them but hidden from the public. */
+export type TournamentStatus = 'draft' | 'registration' | 'live' | 'complete' | 'cancelled';
 export type EventFormat = 'round_robin' | 'pools_to_bracket' | 'single_elim';
 export type MatchStatus = 'waiting' | 'queued' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
 /** 'medal': straight to the medal matches, seeds 1 v 2 for gold and 3 v 4 for bronze. */
@@ -102,6 +103,8 @@ export interface Tournament {
   /** A short notice for last-minute changes, at the top of the tournament's pages; announcement_at is when it changed. */
   announcement: string | null;
   announcement_at: string | null;
+  /** When its managers cancelled it (cancel_tournament). */
+  cancelled_at: string | null;
   /** Division start times show to players only once published. */
   times_published_at: string | null;
   /** Off: no texts (and no texting fee); emails still go out. */
@@ -237,6 +240,33 @@ export interface MyTournament {
   starts_on: string;
   status: TournamentStatus;
   role: 'owner' | StaffRole;
+  /** Cancelled: how many players it still owes a refund. */
+  refunds_due: number;
+}
+
+/** tournament_removal(): whether this account may delete it, and whether there's nothing on record to lose. */
+export interface TournamentRemoval {
+  can_delete: boolean;
+  deletable: boolean;
+}
+
+/** refunds_due(): a player the tournament owes money, and how much of it can go back to their card. */
+export interface RefundDue {
+  player_id: string;
+  name: string;
+  email: string | null;
+  owed_cents: number;
+  card_cents: number;
+}
+
+/** cancelled_tournament(): what anyone opening a cancelled tournament's link sees. */
+export interface CancelledTournament {
+  id: string;
+  name: string;
+  starts_on: string;
+  time_zone: string;
+  announcement: string | null;
+  cancelled_at: string;
 }
 
 /** tournament_team(): who can run a tournament. */

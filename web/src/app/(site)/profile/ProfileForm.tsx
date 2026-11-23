@@ -376,6 +376,11 @@ function MyTournaments() {
                 <span className="min-w-0">
                   <span className="block truncate font-semibold">{t.name}</span>
                   <span className="block text-sm text-muted">{formatDate(t.starts_on)}</span>
+                  {t.status === 'cancelled' && (
+                    <span className="block text-sm font-medium text-late">
+                      Cancelled{t.refunds_due > 0 ? ` · ${t.refunds_due} ${t.refunds_due === 1 ? 'refund' : 'refunds'} to send` : ''}
+                    </span>
+                  )}
                 </span>
                 <Badge tone={t.role === 'owner' ? 'live' : 'neutral'}>{roleLabel[t.role]}</Badge>
               </Link>
