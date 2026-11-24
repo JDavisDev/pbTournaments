@@ -37,8 +37,7 @@ export function DivisionPrep({
           <p className="text-sm font-semibold tracking-widest text-muted uppercase">Step 1 of 3 · Teams</p>
           <p className="mt-1 font-semibold">Teams and format can still change</p>
           <p className="text-muted">
-            The schedule below is a preview. When your teams are final, build the schedule. Then you can edit the order of play
-            before you start the division.
+            The schedule below is a preview. When your teams are final, build the schedule to set the order of play. After the division starts you can still reorder any match that hasn’t gone on court.
           </p>
         </div>
         <Button
@@ -63,10 +62,9 @@ export function DivisionPrep({
     <Card className="flex flex-col gap-3 p-4">
       <div>
         <p className="text-sm font-semibold tracking-widest text-muted uppercase">Step 2 of 3 · Order of play</p>
-        <p className="mt-1 font-semibold">The schedule is built. You can edit the order before you start.</p>
+        <p className="mt-1 font-semibold">The schedule is built. Set the order of play.</p>
         <p className="text-muted">
-          Once the division starts, matches go on court from the top of the order down. Use the arrows to move matches, or hold
-          one to skip it for now. Teams and format are locked while the schedule is built.
+          Once the division starts, matches go on court from the top of the order down. Use the arrows to move matches, or hold one to skip it for now. This isn’t final: during play you can keep reordering any match that hasn’t gone on court. Teams and format are locked while the schedule is built.
         </p>
       </div>
       {missing.length > 0 && (

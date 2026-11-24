@@ -59,7 +59,9 @@ export function StartDivision({
         <p className={built !== undefined ? 'mt-1 font-semibold' : 'font-semibold'}>{eventName} hasn’t started</p>
         <p className="text-muted">
           No matches go on court until you start it.
-          {built === false && ' Starting now builds the schedule from the teams entered, in the order shown, with no chance to edit it first.'}{simple ? ` ${teams} teams.` : ` ${teamsReady} of ${teams} teams are checked in. ${late}`}
+          {built === false && ' Starting now builds the schedule from the teams entered, in the order shown.'}
+          {built !== undefined &&
+            ' After the start you can keep reordering matches that haven’t gone on court, and until a match is played, Undo start takes you back to change teams or format.'}{simple ? ` ${teams} teams.` : ` ${teamsReady} of ${teams} teams are checked in. ${late}`}
         </p>
         {early && <p className="mt-1 text-sm text-called">{early}</p>}
       </div>

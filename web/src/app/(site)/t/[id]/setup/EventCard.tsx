@@ -281,7 +281,7 @@ export function EventCard({
           <div className="flex w-full flex-wrap items-center gap-2">
             <p className="text-sm text-muted">
               <strong className="text-text">Step 2 · Order of play.</strong> The schedule is built, so teams and format are
-              locked. You can edit the order of play until the division starts.
+              locked. Set the order of play now. During play you can keep reordering any match that hasn’t gone on court.
             </p>
             <LinkButton variant="primary" href={`/t/${event.tournament_id}/events/${event.id}`}>
               Edit order of play
@@ -297,6 +297,14 @@ export function EventCard({
             </Button>
           </div>
         ) : (
+          <>
+          {!event.finalized_at && (
+          <p className="w-full text-sm text-muted">
+            <strong className="text-text">Playing.</strong> Reorder or hold any match that hasn’t gone on court from the
+            division’s Queue or the Court desk.
+            {!played && ' No match has been played yet, so you can still clear the schedule to change teams or format.'}
+          </p>
+          )}
           <Button
             disabled={busy || played}
             title={played ? 'Matches have already been played' : undefined}
@@ -307,6 +315,7 @@ export function EventCard({
           >
             Clear schedule
           </Button>
+          </>
         )}
         {!scheduled && merges.length === 0 && (
           <Button

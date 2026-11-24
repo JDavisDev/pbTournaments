@@ -51,9 +51,11 @@ export function QueuePanel({
 
   return (
     <div className="flex flex-col gap-2">
-      {beforeStart && staff && (
+      {staff && (
         <p className="text-sm text-muted">
-          The order of play. Once the division starts, matches go on court from the top down as courts and teams are free.
+          {beforeStart
+            ? 'The order of play. Once the division starts, matches go on court from the top down as courts and teams are free. You can keep changing it during play.'
+            : 'Matches go on court from the top down as courts and teams are free. Move or hold any match that hasn’t gone on court yet.'}
         </p>
       )}
       <ErrorText>{error}</ErrorText>
