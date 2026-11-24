@@ -31,7 +31,7 @@ import { bracketSeeds, formatTime, isPlayable, minutesSince, ordinal, poolName }
 import { useLiveTournament, useLoad, useNow, useSession, useStaffAccess } from '@/lib/hooks';
 import { rulesOf } from '@/lib/scoring';
 import { estimateWait, formatWaitRange } from '@/lib/waitTime';
-import type { MatchDetails, QueueRow, Team } from '@/lib/types';
+import type { MatchDetails, QueueRow, ScoreEntryMode, Team } from '@/lib/types';
 import { usesCheckin } from '@/lib/types';
 
 async function load(id: string) {
@@ -140,7 +140,7 @@ export function TeamView({ params }: { params: Promise<{ id: string; teamId: str
         team={team}
         simple={data.tournament.simple}
         checkin={usesCheckin(data.tournament)}
-        anyoneScores={data.tournament.simple && data.tournament.anyone_scores}
+        scoreEntry={data.tournament.score_entry}
         checkInBy={
           event.started_at && data.tournament.checkin_grace_minutes !== null
             ? formatTime(new Date(new Date(event.started_at).getTime() + data.tournament.checkin_grace_minutes * 60_000).toISOString(), tz)
@@ -247,7 +247,7 @@ function MatchDayPanel({
   checkInBy,
   simple,
   checkin,
-  anyoneScores,
+  scoreEntry,
 }: {
   tournamentId: string;
   team: Team;
@@ -255,8 +255,8 @@ function MatchDayPanel({
   simple: boolean;
   /** Players check in at the desk (not at a Basic tournament, unless turned on). */
   checkin: boolean;
-  /** Anyone may enter the score of a match on court. */
-  anyoneScores: boolean;
+  /** Who may enter the score of a match on court. */
+  scoreEntry: ScoreEntryMode;
   /** The division has started (start_event). */
   started: boolean;
   /** When the team forfeits if it hasn't checked in, as a time; null = no deadline. */
@@ -273,17 +273,17 @@ function MatchDayPanel({
   const scoreCode = useScoreCode(onCourt?.id);
   const staff = useStaffAccess(tournamentId);
   const session = useSession();
-  // Logged in as one of this team's players: they score from here, unless a
-  // simple tournament keeps scores to its directors.
+  // Logged in as one of this team's players: they score from here, unless the
+  // tournament keeps scores to its directors.
   const mineTeams = useLoad(() => (session ? getMyTeams(tournamentId) : Promise.resolve([])), [tournamentId, session?.id]);
-  const myPlayer = !!mineTeams.data?.includes(team.id) && (!simple || anyoneScores);
+  const myPlayer = !!mineTeams.data?.includes(team.id) && scoreEntry !== 'staff';
   // Scores go in right here: with the code from the player's text link (it
   // proves they're in the match), logged in as one of its players, as
-  // tournament staff, or by anyone when a simple tournament allows it.
+  // tournament staff, or by anyone when the tournament allows it.
   const enterScore =
-    onCourt && scoreCode
+    onCourt && scoreCode && scoreEntry !== 'staff'
       ? (games: [number, number][]) => reportScoreByCode(scoreCode, games)
-      : onCourt && (staff.role || anyoneScores || myPlayer)
+      : onCourt && (staff.role || scoreEntry === 'anyone' || myPlayer)
         ? (games: [number, number][]) => reportScore(onCourt.id, games)
         : null;
   const allDone = mine.length > 0 && mine.every((m) => m.status === 'completed');
@@ -360,7 +360,7 @@ function MatchDayPanel({
           ) : (
             <p className="rounded-xl bg-surface-2 px-4 py-3 text-left">
               <b>To enter the score:</b>{' '}
-              {simple ? (
+              {simple || scoreEntry === 'staff' ? (
                 'tell the tournament director.'
               ) : session ? (
                 'tap the link in the text we sent you, or tell the front desk.'

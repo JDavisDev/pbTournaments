@@ -631,6 +631,52 @@ describe('access rules', () => {
       expect((await reportScore(db, match.id, [[11, 2]])).winner_team_id).toBe(a);
     });
   });
+
+  it('follows who the director lets enter scores', async () => {
+    const { tournamentId, director } = await createLiveTournament(db, { courts: 2, start: START });
+    const eventId = await addEvent(db, tournamentId, 'Open');
+    const playerUser = await createUser(db);
+    const davis = await addTeam(db, eventId, [await addPlayer(db, 'Alex', 'Davis', playerUser), await addPlayer(db, 'Ben', 'Lee')]);
+    await checkIn(db, davis);
+    for (const names of [['Park', 'Cho'], ['Ruiz', 'Shah'], ['Kim', 'Bell']] as [string, string][]) {
+      await checkIn(db, await addPair(db, eventId, names));
+    }
+    await generate(db, eventId);
+    const live = await liveMatches(db, tournamentId);
+    expect(live).toHaveLength(2);
+    const mine = live.find((m) => m.team1_id === davis || m.team2_id === davis)!;
+    const other = live.find((m) => m !== mine)!;
+    const setEntry = async (v: string) => {
+      await actAs(db, director);
+      await asRole(db, 'authenticated', () => db.query('update public.tournaments set score_entry = $2 where id = $1', [tournamentId, v]));
+    };
+    expect((await one(db, 'select score_entry from public.tournaments where id = $1', [tournamentId])).score_entry).toBe('players');
+
+    // Directors only: not the match's players, by account or by their text link.
+    await setEntry('staff');
+    await actAs(db, playerUser);
+    await asRole(db, 'authenticated', async () => {
+      await expect(reportScore(db, mine.id, [[11, 2]])).rejects.toThrow(/desk enters scores/);
+    });
+    const code = (await one(db, 'select report_code from public.matches where id = $1', [mine.id])).report_code;
+    await actAs(db, null);
+    await asRole(db, 'anon', async () => {
+      await expect(db.query(`select public.report_score_by_code($1, '[[11, 2]]'::jsonb)`, [code])).rejects.toThrow(/desk enters scores/);
+    });
+
+    // Anyone with the link: a stranger, signed out.
+    await setEntry('anyone');
+    await actAs(db, null);
+    await asRole(db, 'anon', async () => {
+      expect((await reportScore(db, other.id, [[11, 5]])).status).toBe('completed');
+    });
+
+    // Directors can always.
+    await setEntry('staff');
+    await asRole(db, 'authenticated', async () => {
+      expect((await reportScore(db, mine.id, [[11, 6]])).status).toBe('completed');
+    });
+  });
 });
 
 describe('court sections', () => {

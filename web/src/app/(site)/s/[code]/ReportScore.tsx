@@ -1,7 +1,8 @@
 'use client';
 
 // Where the link in a player's text goes: their court, "we're here", and the
-// score, with no account needed. The code in the link is the permission.
+// score, with no account needed. The code in the link is the permission,
+// unless the tournament keeps scores to its desk.
 import Link from 'next/link';
 import { use, useEffect, useEffectEvent } from 'react';
 import { CourtSign, FormatLine, MatchSteps, rememberScoreCode } from '@/components/MatchDay';
@@ -63,7 +64,13 @@ export function ReportScore({ params }: { params: Promise<{ code: string }> }) {
         </Card>
       )}
 
-      {live && (
+      {live && m.score_entry === 'staff' && (
+        <p className="rounded-xl bg-surface-2 px-4 py-3">
+          <b>When you finish,</b> tell the tournament desk the score. They enter it.
+        </p>
+      )}
+
+      {live && m.score_entry !== 'staff' && (
         <Card className="p-5">
           <h2 className="mb-1 text-3xl">Enter the score</h2>
           <p className="mb-3 text-muted">When you finish. Only one player needs to do this.</p>

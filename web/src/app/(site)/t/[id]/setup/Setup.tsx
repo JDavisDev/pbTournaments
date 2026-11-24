@@ -86,6 +86,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
                 tournament={data.tournament}
                 onChanged={reload}
               />
+              <ScoresCard key={`scores-${data.tournament.id}`} tournament={data.tournament} />
             </>
           )}
           {/* Optional: folded to a line each. */}

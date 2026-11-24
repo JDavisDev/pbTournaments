@@ -56,6 +56,9 @@ export interface TvSettings {
   event_ids?: string[];
 }
 
+/** Who enters scores: directors and court monitors only; also the match's own players; or anyone with the link. */
+export type ScoreEntryMode = 'staff' | 'players' | 'anyone';
+
 export interface Tournament {
   id: string;
   /** Null: a standalone Basic tournament, run by its tournament admins. */
@@ -127,8 +130,8 @@ export interface Tournament {
   setup_paid_at: string | null;
   /** Free, no registration, payments or texts: the director pastes in the teams ('registration' = published). */
   simple: boolean;
-  /** Simple tournaments: anyone with the link may enter the score of a match on court. */
-  anyone_scores: boolean;
+  /** Who may enter the score of a match on court. Staff always can. */
+  score_entry: ScoreEntryMode;
   /** Simple (Basic) tournaments: players check in at the desk, as at a full tournament. */
   basic_checkin: boolean;
 }
@@ -948,6 +951,7 @@ export interface MatchDetails {
 /** The match behind a score link. */
 export interface CodeMatch extends MatchDetails {
   tournament_name: string;
+  score_entry: ScoreEntryMode;
 }
 
 export interface StandingRow {

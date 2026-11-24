@@ -66,9 +66,10 @@ describe('simple tournaments', () => {
 
     await actAs(db, null);
     const score = () => asRole(db, 'anon', () => db.query(`select public.report_score($1, '[[11, 7]]'::jsonb)`, [match]));
-    await expect(score()).rejects.toThrow(/Only players in this match or tournament staff/);
+    expect(t.score_entry).toBe('staff');
+    await expect(score()).rejects.toThrow(/desk enters scores/);
     await actAs(db, owner);
-    await asUser(() => db.query('update public.tournaments set anyone_scores = true where id = $1', [t.id]));
+    await asUser(() => db.query(`update public.tournaments set score_entry = 'anyone' where id = $1`, [t.id]));
     await actAs(db, null);
     await score();
     expect((await one(db, 'select status from public.matches where id = $1', [match])).status).toBe('completed');

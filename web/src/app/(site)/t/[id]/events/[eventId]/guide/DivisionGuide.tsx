@@ -93,15 +93,23 @@ export function DivisionGuide({
           <>
             <Item>Watch the tournament page or the TV board: when your name is on a court, go straight there and play.</Item>
             <Item>
-              {t.anyone_scores
+              {t.score_entry === 'anyone'
                 ? 'When you finish, enter the score on the tournament page or your team page. That frees the court for the next match.'
-                : 'When you finish, tell the director the score. That frees the court for the next match.'}
+                : t.score_entry === 'players'
+                  ? 'When you finish, sign in and enter the score on your team page, or tell the director. That frees the court for the next match.'
+                  : 'When you finish, tell the director the score. That frees the court for the next match.'}
             </Item>
           </>
         ) : (
           <>
             <Item>You’ll get a text when your match is called, with your court. Your team page shows where you are in line.</Item>
-            <Item>Play your match, then enter the score from the link in your text or on your team page. That frees the court for the next match.</Item>
+            <Item>
+              {t.score_entry === 'staff'
+                ? 'Play your match, then tell the desk the score. That frees the court for the next match.'
+                : t.score_entry === 'anyone'
+                  ? 'Play your match, then enter the score on the tournament page, your team page or the link in your text. That frees the court for the next match.'
+                  : 'Play your match, then enter the score from the link in your text or on your team page. That frees the court for the next match.'}
+            </Item>
           </>
         )}
         <Item>If you need to leave or can’t play on, tell the desk: they can drop a team or bring in an alternate.</Item>

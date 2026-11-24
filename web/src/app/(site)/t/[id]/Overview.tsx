@@ -56,8 +56,8 @@ export function Overview({ params }: { params: Promise<{ id: string }> }) {
   if (error) return <Empty>{error}</Empty>;
   if (!data) return <Spinner />;
   const { tournament, events, teams, matches, courts, queue } = data;
-  // Court monitors and directors score from here too; anyone, when a simple tournament allows it.
-  const canScore = !!staff.monitor || (tournament.simple && tournament.anyone_scores);
+  // Court monitors and directors score from here too; anyone, when the tournament allows it.
+  const canScore = !!staff.monitor || tournament.score_entry === 'anyone';
   const found = search.length >= 2 ? teams.filter((t) => t.name.toLowerCase().includes(search.toLowerCase())) : [];
   const eventName = (eventId: string) => events.find((e) => e.id === eventId)?.name ?? '';
   const activeCourts = courts.filter((c) => c.match_id);

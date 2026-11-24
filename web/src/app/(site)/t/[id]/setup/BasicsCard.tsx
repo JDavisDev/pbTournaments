@@ -5,7 +5,7 @@ import { ErrorText, Field, Input, Select } from '@/components/ui';
 import { setBasicCheckin, setCourtCount, updateTournament } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
 import { US_STATES } from '@/lib/places';
-import type { Tournament } from '@/lib/types';
+import type { ScoreEntryMode, Tournament } from '@/lib/types';
 import { optionalNumber } from './fields';
 import { useUnsaved } from './SaveAll';
 import { SettingsGroup } from './SetupCards';
@@ -191,29 +191,41 @@ export function CheckinCard({ tournament, onChanged }: { tournament: Tournament;
   );
 }
 
-/** Simple tournaments: who may enter scores. */
+/** Who may enter the score of a match on court. Changeable any time; staff can always enter and fix scores. */
 export function ScoresCard({ tournament }: { tournament: Tournament }) {
-  const [anyone, setAnyone] = useState(tournament.anyone_scores);
-  useUnsaved('scores', anyone, () => updateTournament(tournament.id, { anyone_scores: anyone }));
+  const [entry, setEntry] = useState<ScoreEntryMode>(tournament.score_entry);
+  useUnsaved('scores', entry, () => updateTournament(tournament.id, { score_entry: entry }));
+  const options: [ScoreEntryMode, string, string][] = [
+    ['staff', 'Directors only', 'You and your court monitors enter scores at the court desk. Players tell the desk their score.'],
+    [
+      'players',
+      'Directors and players',
+      tournament.simple
+        ? 'Players enter their own match’s score from their team page, signed in with the email on their entry.'
+        : 'Players enter their own match’s score, signed in on their team page or from the link in their text.',
+    ],
+    ['anyone', 'Anyone with the link', 'Anyone on the tournament page can enter the score of a match on court.'],
+  ];
   return (
     <SettingsGroup
       title="Scores"
-      description="No registration, payments or texts here: players find their names and courts on the tournament page and the TV board."
+      description={
+        <>
+          Who enters the score when a match finishes. You and your court monitors can always enter and fix scores, and you
+          can change this at any time.
+          {tournament.simple && ' No registration, payments or texts here: players find their names and courts on the tournament page and the TV board.'}
+        </>
+      }
     >
       <fieldset className="flex flex-col gap-2">
         <legend className="sr-only">Who enters scores</legend>
-        {(
-          [
-            [false, 'Directors only', 'You and your court monitors enter scores at the court desk.'],
-            [true, 'Anyone with the link', 'Players enter the score of a match on court from the tournament page. You can fix any score.'],
-          ] as const
-        ).map(([value, label, hint]) => (
+        {options.map(([value, label, hint]) => (
           <button
-            key={label}
+            key={value}
             type="button"
-            aria-pressed={anyone === value}
-            onClick={() => setAnyone(value)}
-            className={`rounded-xl border px-4 py-3 text-left ${anyone === value ? 'border-accent bg-accent-soft' : 'border-border hover:bg-surface-2'}`}
+            aria-pressed={entry === value}
+            onClick={() => setEntry(value)}
+            className={`rounded-xl border px-4 py-3 text-left ${entry === value ? 'border-accent bg-accent-soft' : 'border-border hover:bg-surface-2'}`}
           >
             <span className="block font-semibold">{label}</span>
             <span className="block text-sm text-muted">{hint}</span>

@@ -180,7 +180,7 @@ const ops: Record<string, Op> = {
       'championship_rounds',
       'championship_wait_minutes',
       'final_wait_minutes',
-      'anyone_scores',
+      'score_entry',
     ]).then(() => null),
 
   saveEvent: async (tx, event: Row) => {
