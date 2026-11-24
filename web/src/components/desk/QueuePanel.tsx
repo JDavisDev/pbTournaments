@@ -26,6 +26,7 @@ export function QueueStatus({ row, staff = false }: { row: QueueRow; staff?: boo
   if (row.blocked_reason === 'division_not_started') return <Badge tone="called">Division not started</Badge>;
   if (staff && row.blocked_reason === 'on_hold') return <Badge tone="called">On hold</Badge>;
   if (staff && row.blocked_reason === 'not_checked_in') return <Badge tone="late">Not checked in</Badge>;
+  if (staff && row.blocked_reason === 'player_on_court') return <Badge tone="neutral">Team on court</Badge>;
   return <Badge tone="neutral">Scheduled</Badge>;
 }
 

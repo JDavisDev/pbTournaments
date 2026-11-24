@@ -113,7 +113,7 @@ export function CourtCard({
                 onChange={(e) => setPick(e.target.value)}
                 aria-label={`Send a match to ${court.court_name}`}
               >
-                <option value="">Send a match…</option>
+                <option value="">{sendable.length > 0 ? 'Send a match…' : 'Nothing to send'}</option>
                 {sendable.map((q) => (
                   <option key={q.match_id} value={q.match_id}>
                     #{q.queue_rank} {q.team1_name} v {q.team2_name}
@@ -135,6 +135,9 @@ export function CourtCard({
                 </Button>
               )}
             </div>
+          )}
+          {admin && state === 'open' && sendable.length === 0 && queue.length > 0 && (
+            <p className="text-xs text-muted">Every queued match has a team already on court.</p>
           )}
           <ErrorText>{error}</ErrorText>
         </div>
