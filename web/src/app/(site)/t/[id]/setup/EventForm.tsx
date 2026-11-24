@@ -47,6 +47,7 @@ function draftOf(event: TournamentEvent | undefined, timeZone: string, simple: b
     team_age_min: event?.team_age_min?.toString() ?? '',
     max_rounds: event?.max_rounds?.toString() ?? '',
     round_robin_times: event?.round_robin_times ?? 1,
+    round_robin_back_to_back: event?.round_robin_back_to_back ?? false,
     bracket_type: event?.bracket_type ?? ('single' as BracketType),
     third_place_match: event?.third_place_match ?? true,
     grand_final_reset: event?.grand_final_reset ?? true,
@@ -146,6 +147,8 @@ export function EventForm({
                     bracket_size: form.format === 'pools_to_bracket' ? form.bracket_size : null,
                     max_rounds: hasPools ? optionalNumber(form.max_rounds) : null,
                     round_robin_times: hasPools && form.pool_play !== 'swiss' ? form.round_robin_times : 1,
+                    round_robin_back_to_back:
+                      hasPools && form.pool_play !== 'swiss' && form.round_robin_times > 1 && form.round_robin_back_to_back,
                     bracket_type: form.bracket_type,
                     third_place_match: form.bracket_type === 'single' && form.third_place_match,
                     grand_final_reset: form.bracket_type === 'double' && form.grand_final_reset,

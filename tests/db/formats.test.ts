@@ -175,6 +175,22 @@ describe('double and triple round robins', () => {
     await db.query('update public.events set round_robin_times = 2 where id = $1', [eventId]);
     expect(await generate(db, eventId)).toBe(4 * 2);
   });
+
+  it('back to back: each rematch is the round right after the first meeting', async () => {
+    const { eventId } = await division(6, { format: 'round_robin' });
+    await db.query('update public.events set round_robin_times = 2, round_robin_back_to_back = true where id = $1', [eventId]);
+    // 6 teams: 5 rounds of 3 matches, each played twice in a row.
+    expect(await generate(db, eventId)).toBe(2 * 5 * 3);
+    const pool = await poolMatches(eventId);
+    const meetings = new Map<string, typeof pool>();
+    for (const m of pool) meetings.set(pairKey(m), [...(meetings.get(pairKey(m)) ?? []), m]);
+    expect(meetings.size).toBe(15);
+    for (const [first, second] of meetings.values()) {
+      expect(first.round % 2).toBe(1);
+      expect(second.round).toBe(first.round + 1);
+      expect([second.team1_id, second.team2_id]).toEqual([first.team2_id, first.team1_id]);
+    }
+  });
 });
 
 describe('straight to the medal matches', () => {

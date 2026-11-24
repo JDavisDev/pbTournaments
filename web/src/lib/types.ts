@@ -790,6 +790,8 @@ export interface TournamentEvent {
   max_rounds: number | null;
   /** Round robin: how many times teams in a pool play each other (2 = double round robin). */
   round_robin_times: number;
+  /** Double/triple round robin: play the repeats against an opponent in a row instead of after everyone. */
+  round_robin_back_to_back: boolean;
   pool_play: PoolPlay;
   /** Teams in the bracket; null = pool_count × advance_per_pool. */
   bracket_size: number | null;

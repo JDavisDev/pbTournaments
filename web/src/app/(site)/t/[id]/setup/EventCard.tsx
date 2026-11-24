@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { DivisionStatus, divisionState } from '@/components/DivisionStatus';
 import { Icon } from '@/components/Icon';
-import { Badge, Button, Card, ErrorText, Select, Textarea } from '@/components/ui';
+import { Badge, Button, Card, ErrorText, LinkButton, Select, Textarea } from '@/components/ui';
 import {
   addMockTeams,
   addTeamsFromText,
@@ -271,11 +271,31 @@ export function EventCard({
       <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
         {!scheduled ? (
           <p className="text-sm text-muted">
-            The schedule is built when the division starts, from the teams entered then.{' '}
+            <strong className="text-text">Step 1 · Teams.</strong> Teams and format can still change. When the teams are final,
+            build the schedule on the division page, then edit the order of play before you start.{' '}
             <Link href={`/t/${event.tournament_id}/events/${event.id}`} className="font-medium text-text underline">
-              Preview it
+              Preview the schedule
             </Link>
           </p>
+        ) : !event.started_at ? (
+          <div className="flex w-full flex-wrap items-center gap-2">
+            <p className="text-sm text-muted">
+              <strong className="text-text">Step 2 · Order of play.</strong> The schedule is built, so teams and format are
+              locked. You can edit the order of play until the division starts.
+            </p>
+            <LinkButton variant="primary" href={`/t/${event.tournament_id}/events/${event.id}`}>
+              Edit order of play
+            </LinkButton>
+            <Button
+              disabled={busy}
+              onClick={() =>
+                confirm('Unlock teams and format? The schedule is cleared, along with any changes to the order.') &&
+                run(() => clearMatches(event.id), onChanged)
+              }
+            >
+              Unlock teams and format
+            </Button>
+          </div>
         ) : (
           <Button
             disabled={busy || played}

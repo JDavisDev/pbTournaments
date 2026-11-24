@@ -34,11 +34,14 @@ export function QueuePanel({
   queue,
   staff,
   now,
+  beforeStart = false,
   onChanged,
 }: {
   queue: QueueRow[];
   staff: boolean;
   now: number;
+  /** A division's order of play before it starts: every match waits for the start, so that badge is left out. */
+  beforeStart?: boolean;
   onChanged: () => void;
 }) {
   const { busy, error, run } = useAction();
@@ -48,14 +51,19 @@ export function QueuePanel({
 
   return (
     <div className="flex flex-col gap-2">
+      {beforeStart && staff && (
+        <p className="text-sm text-muted">
+          The order of play. Once the division starts, matches go on court from the top down as courts and teams are free.
+        </p>
+      )}
       <ErrorText>{error}</ErrorText>
       <ol className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface">
         {queue.map((row, i) => (
           <li key={row.match_id} className="flex flex-wrap items-start gap-x-3 gap-y-1.5 px-3 py-2.5">
-            <span className="tnum mt-0.5 w-6 shrink-0 text-right text-sm font-semibold text-muted">{row.queue_rank}</span>
+            <span className="tnum mt-0.5 w-6 shrink-0 text-right text-sm font-semibold text-muted">{beforeStart ? i + 1 : row.queue_rank}</span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
-                <QueueStatus row={row} staff={staff} />
+                {!(beforeStart && row.blocked_reason === 'division_not_started') && <QueueStatus row={row} staff={staff} />}
                 {row.overdue && <Badge tone="late">Overdue</Badge>}
                 <MatchTags stage={row.stage} roundKey={row.round_key} championship={row.championship} />
                 <span className="truncate text-xs text-muted">

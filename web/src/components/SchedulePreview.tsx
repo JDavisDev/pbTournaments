@@ -7,7 +7,7 @@ import { Empty } from './ui';
  * Before a division starts: the pools and matches its teams would get now.
  * Nothing is fixed until the start builds the schedule.
  */
-export function SchedulePreview({ event: e, teams }: { event: TournamentEvent; teams: Team[] }) {
+export function SchedulePreview({ event: e, teams, director = false }: { event: TournamentEvent; teams: Team[]; director?: boolean }) {
   const preview = previewSchedule(e, teams);
   const swiss = e.format !== 'single_elim' && e.pool_play === 'swiss';
   return (
@@ -15,8 +15,8 @@ export function SchedulePreview({ event: e, teams }: { event: TournamentEvent; t
       <div>
         <h3 className="text-3xl">Schedule preview</h3>
         <p className="text-muted">
-          From the {preview.teams.length} teams entered now. The schedule is built when the division starts, so teams and
-          format can still change.
+          From the {preview.teams.length} teams entered so far. Teams and format can still change, so this isn’t final.
+          {director && ' You can edit the order of play once the teams are final and the schedule is built.'}
         </p>
       </div>
       {preview.problem ? (

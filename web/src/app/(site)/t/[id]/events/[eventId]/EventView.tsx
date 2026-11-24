@@ -14,6 +14,7 @@ import { MatchRow } from '@/components/MatchRow';
 import { Podium } from '@/components/Podium';
 import { StandingsTable } from '@/components/StandingsTable';
 import { SchedulePreview } from '@/components/SchedulePreview';
+import { DivisionPrep } from '@/components/DivisionPrep';
 import { StartDivision } from '@/components/StartDivision';
 import { WatchChip } from '@/components/StreamEmbed';
 import { Badge, Button, Card, Empty, ErrorText, Select, Spinner } from '@/components/ui';
@@ -127,7 +128,9 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
   const stage =
     all.length === 0
       ? 'Not scheduled'
-      : medals || finished
+      : !event.started_at
+        ? 'Schedule built'
+        : medals || finished
         ? 'Complete'
         : poolLeft.length > 0
           ? 'Pool play'
@@ -181,11 +184,13 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
     ...(bracket.length ? ([['bracket', 'Bracket']] as [Tab, string][]) : []),
     ['matches', `Matches ${matches.length ? `${played}/${matches.length}` : ''}`.trim()],
     ['teams', `Teams ${teams.length}`],
-    ...(isDirector ? ([['queue', `Queue ${queue.length}`]] as [Tab, string][]) : []),
+    ...(isDirector && all.length > 0 ? ([['queue', `${state === 'not_started' ? 'Order' : 'Queue'} ${queue.length}`]] as [Tab, string][]) : []),
   ];
   const defaultTab: Tab =
     all.length === 0
       ? 'teams'
+      : isDirector && state === 'not_started'
+        ? 'queue'
       : bracket.length && (poolLeft.length === 0 || !pools.length)
         ? 'bracket'
         : pools.length
@@ -212,6 +217,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
                 {stage === 'Pool play' && swiss ? 'Swiss rounds' : stage}
               </Badge>
             )}
+            {state === 'not_started' && all.length > 0 && <Badge>Schedule built</Badge>}
             {onCourt.length > 0 && <Badge tone="live">{onCourt.length} on court</Badge>}
           </div>
           <h2 className="mt-2 text-4xl sm:text-5xl">{event.name}</h2>
@@ -235,7 +241,19 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
 
       {state === 'not_started' &&
         (isDirector ? (
+          <>
+          <DivisionPrep
+            event={event}
+            teams={teams}
+            matches={all}
+            onEditOrder={() => {
+              setTab('queue');
+              document.getElementById('division-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            onChanged={reload}
+          />
           <StartDivision
+            built={all.length > 0}
             eventId={event.id}
             eventName={event.name}
             teams={teams.length}
@@ -246,6 +264,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
             timeZone={data.tournament.time_zone}
             onStarted={reload}
           />
+          </>
         ) : (
           <p className="text-muted">This division hasn’t started yet. Matches go on court once the director starts it.</p>
         ))}
@@ -267,7 +286,7 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         <Tile label={event.format === 'round_robin' ? 'Format' : 'Bracket'} value={formatShort(event, matches)} small />
       </dl>
 
-      {state === 'not_started' && all.length === 0 && <SchedulePreview event={event} teams={teams} />}
+      {state === 'not_started' && all.length === 0 && <SchedulePreview event={event} teams={teams} director={isDirector} />}
 
       {medals && (
         <section>
@@ -443,9 +462,9 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
         </div>
       )}
 
-      {all.length === 0 && <Empty>The schedule for this event hasn’t been built yet.</Empty>}
+      {all.length === 0 && state !== 'not_started' && <Empty>The schedule for this event hasn’t been built yet.</Empty>}
       <>
-        <div className="flex gap-1 overflow-x-auto rounded-lg bg-surface-2 p-1" role="tablist">
+        <div id="division-tabs" className="flex scroll-mt-4 gap-1 overflow-x-auto rounded-lg bg-surface-2 p-1" role="tablist">
           {tabs.map(([key, label]) => (
             <button
               key={key}
@@ -531,7 +550,9 @@ export function EventView({ params }: { params: Promise<{ id: string; eventId: s
           </>
         )}
 
-        {active === 'queue' && isDirector && <QueuePanel queue={queue} staff now={now} onChanged={reload} />}
+        {active === 'queue' && isDirector && (
+          <QueuePanel queue={queue} staff now={now} beforeStart={state === 'not_started'} onChanged={reload} />
+        )}
       </>
       <ScoreDialog target={score} onClose={() => setScore(null)} onDone={reload} />
       <MatchActionsDialog court={courtActions} courts={data.courts} onClose={() => setCourtActions(null)} onDone={reload} />
@@ -811,7 +832,7 @@ function Tile({
   );
 }
 
-/** Pool play → bracket → medals, with the current step lit. */
+/** Teams → order of play → pool play → bracket → complete, with the current step lit. */
 function StageTrack({
   event,
   pools,
@@ -823,17 +844,28 @@ function StageTrack({
 }) {
   const bracket =
     event.bracket_type === 'double' ? 'Double-elim bracket' : event.bracket_type === 'medal' ? 'Medal matches' : 'Bracket';
+  // Before the start: teams can change, then the schedule is built and its order can be edited.
+  const setup = ['Teams', 'Order of play'];
   const steps = [
+    ...setup,
     ...(pools || event.format !== 'single_elim' ? [event.pool_play === 'swiss' ? 'Swiss rounds' : 'Pool play'] : []),
     ...(event.format !== 'round_robin' ? [bracket] : []),
     'Complete',
   ];
   const current =
-    stage === 'Complete' ? steps.length - 1 : stage === 'Pool play' || stage === 'Not scheduled' ? 0 : steps.length - 2;
+    stage === 'Not scheduled'
+      ? 0
+      : stage === 'Schedule built'
+        ? 1
+        : stage === 'Complete'
+          ? steps.length - 1
+          : stage === 'Pool play'
+            ? setup.length
+            : steps.length - 2;
   return (
     <ol className="flex items-center gap-2 text-sm">
       {steps.map((s, i) => (
-        <li key={s} className="flex min-w-0 flex-1 items-center gap-2">
+        <li key={s} className={`flex min-w-0 flex-1 items-center gap-2 ${i === current ? 'max-sm:flex-auto max-sm:shrink-0' : ''}`}>
           <span
             className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${
               i < current || stage === 'Complete'
@@ -845,7 +877,8 @@ function StageTrack({
           >
             {i < current || stage === 'Complete' ? <Icon name="check" className="h-4 w-4" /> : i + 1}
           </span>
-          <span className={`leading-tight sm:whitespace-nowrap ${i === current ? 'font-semibold' : 'text-muted'}`}>{s}</span>
+          {/* On phones only the current step is named, so five steps fit. */}
+          <span className={`leading-tight sm:whitespace-nowrap ${i === current ? 'font-semibold' : 'text-muted max-sm:hidden'}`}>{s}</span>
           {i < steps.length - 1 && <span className="h-px flex-1 bg-border" />}
         </li>
       ))}

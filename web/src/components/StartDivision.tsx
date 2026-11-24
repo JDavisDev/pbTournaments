@@ -20,6 +20,7 @@ export function StartDivision({
   scheduledFor = null,
   timeZone,
   simple = false,
+  built,
   onStarted,
 }: {
   eventId: string;
@@ -33,6 +34,8 @@ export function StartDivision({
   timeZone: string;
   /** No check-in (a Basic tournament without it): everyone entered is there. */
   simple?: boolean;
+  /** On the division page: whether the schedule is built yet, for the step heading. Omitted elsewhere. */
+  built?: boolean;
   onStarted: () => void;
 }) {
   const { busy, error, run } = useAction();
@@ -52,9 +55,11 @@ export function StartDivision({
   return (
     <Card className="flex flex-col gap-3 border-2 border-called p-4">
       <div>
-        <p className="font-semibold">{eventName} hasn’t started</p>
+        {built !== undefined && <p className="text-sm font-semibold tracking-widest text-muted uppercase">Step 3 of 3 · Start</p>}
+        <p className={built !== undefined ? 'mt-1 font-semibold' : 'font-semibold'}>{eventName} hasn’t started</p>
         <p className="text-muted">
-          No matches go on court until you start it.{simple ? ` ${teams} teams.` : ` ${teamsReady} of ${teams} teams are checked in. ${late}`}
+          No matches go on court until you start it.
+          {built === false && ' Starting now builds the schedule from the teams entered, in the order shown, with no chance to edit it first.'}{simple ? ` ${teams} teams.` : ` ${teamsReady} of ${teams} teams are checked in. ${late}`}
         </p>
         {early && <p className="mt-1 text-sm text-called">{early}</p>}
       </div>

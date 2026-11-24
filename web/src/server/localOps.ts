@@ -71,6 +71,7 @@ const EVENT_COLUMNS = [
   'team_age_min',
   'max_rounds',
   'round_robin_times',
+  'round_robin_back_to_back',
   'pool_play',
   'bracket_size',
   'bracket_type',

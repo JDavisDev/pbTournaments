@@ -56,22 +56,29 @@ export function previewSchedule(e: TournamentEvent, entered: Team[]): SchedulePr
     let ring: (Team | null)[] = members.length % 2 ? [...members, null] : [...members];
     const size = ring.length;
     const rounds: PoolPreview['rounds'] = [];
-    // A double or triple round robin repeats it, sides swapped each time, as generate_pools does.
-    const total = (size - 1) * Math.max(1, e.round_robin_times ?? 1);
-    for (let round = 1; round <= Math.min(total, e.max_rounds ?? total); round++) {
-      const swap = Math.floor((round - 1) / (size - 1)) % 2 === 1;
-      const matches: Pairing[] = [];
-      let sitsOut: Team | null = null;
-      for (let slot = 0; slot < size / 2; slot++) {
-        const a = ring[slot];
-        const b = ring[size - 1 - slot];
-        if (a && b) matches.push(swap ? [b, a] : [a, b]);
-        else sitsOut = a ?? b;
+    // A double or triple round robin repeats each meeting, sides swapped each time, as
+    // generate_pools does: after the whole round robin, or straight after it (back to back).
+    const times = Math.max(1, e.round_robin_times ?? 1);
+    const cap = Math.min((size - 1) * times, e.max_rounds ?? Infinity);
+    for (let base = 1; base < size; base++) {
+      for (let time = 1; time <= times; time++) {
+        const round = e.round_robin_back_to_back ? (base - 1) * times + time : (time - 1) * (size - 1) + base;
+        if (round > cap) continue;
+        const swap = (time - 1) % 2 === 1;
+        const matches: Pairing[] = [];
+        let sitsOut: Team | null = null;
+        for (let slot = 0; slot < size / 2; slot++) {
+          const a = ring[slot];
+          const b = ring[size - 1 - slot];
+          if (a && b) matches.push(swap ? [b, a] : [a, b]);
+          else sitsOut = a ?? b;
+        }
+        rounds.push({ round, matches, sitsOut });
       }
-      rounds.push({ round, matches, sitsOut });
       // Keep the first team fixed and rotate the rest one place.
       ring = [ring[0], ring[size - 1], ...ring.slice(1, size - 1)];
     }
+    rounds.sort((x, y) => x.round - y.round);
     result.pools.push({ pool, teams: members, rounds });
   }
   return result;

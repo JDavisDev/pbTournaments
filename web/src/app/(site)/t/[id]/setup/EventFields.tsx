@@ -280,6 +280,14 @@ export function FormatFields({
             </Select>
           </Field>
         )}
+        {hasPools && !swiss && form.round_robin_times > 1 && (
+          <Check
+            label="Play each opponent back to back (rematch right after the first game)"
+            checked={form.round_robin_back_to_back}
+            disabled={scheduled}
+            onChange={(v) => set('round_robin_back_to_back', v)}
+          />
+        )}
         {hasPools && (
           <Field
             label={swiss ? 'Swiss rounds' : 'Max rounds'}
