@@ -87,6 +87,10 @@ const LISTING_COLUMNS = ['name', 'starts_on', 'ends_on', 'venue', 'city', 'state
 
 const games = (g: unknown) => JSON.stringify(g);
 
+/** jsonb columns go to the database as JSON text. */
+const jsonColumns = (changes: Row, keys: string[]) =>
+  Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, keys.includes(k) ? JSON.stringify(v) : v]));
+
 /** Same names and results as src/lib/remoteApi.ts. */
 const ops: Record<string, Op> = {
   getTournament: (tx, id: string) => one(tx, 'select * from public.tournaments where id = $1', [id]),
@@ -144,7 +148,7 @@ const ops: Record<string, Op> = {
   setTournamentImage: async (tx, id: string, data: string | null) =>
     (await one<{ v: string | null }>(tx, 'select public.set_tournament_image($1, $2) as v', [id, data])).v,
   updateTournament: (tx, id: string, changes: Row) =>
-    updateColumns(tx, 'tournaments', id, 'price_schedule' in changes ? { ...changes, price_schedule: JSON.stringify(changes.price_schedule) } : changes, [
+    updateColumns(tx, 'tournaments', id, jsonColumns(changes, ['price_schedule', 'tv_settings']), [
       'name',
       'starts_on',
       'time_zone',
@@ -156,6 +160,7 @@ const ops: Record<string, Op> = {
       'extra_event_fee_cents',
       'first_event_included',
       'price_schedule',
+      'tv_settings',
       'registration_reopened',
       'contact_email',
       'refund_fee_cents',

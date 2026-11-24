@@ -44,6 +44,18 @@ export interface Organization {
   slug: string;
 }
 
+/** A screen on the TV board. */
+export type TvScreen = 'courts' | 'standings' | 'schedule';
+/** tournaments.tv_settings. Missing keys take the defaults in lib/tv.ts. */
+export interface TvSettings {
+  /** Shown in turn, in this order. */
+  screens?: TvScreen[];
+  /** How long each screen stays up. */
+  seconds?: number;
+  /** Divisions on the standings and schedule screens; empty = all. */
+  event_ids?: string[];
+}
+
 export interface Tournament {
   id: string;
   /** Null: a standalone Basic tournament, run by its tournament admins. */
@@ -66,6 +78,8 @@ export interface Tournament {
   first_event_included: boolean;
   /** Prices that step up on dates; the regular price applies after the last. */
   price_schedule: PriceStep[];
+  /** What the TV board rotates through (see lib/tv.ts). {} = the court board alone. */
+  tv_settings: TvSettings;
   /** Registration reopened by a director while the tournament is live. */
   registration_reopened: boolean;
   /** Where players reach the organizer (Contact on the tournament's pages). */

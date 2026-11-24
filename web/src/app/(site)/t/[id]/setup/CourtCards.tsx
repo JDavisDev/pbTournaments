@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Check, Field, Input, Select } from '@/components/ui';
 import { renameCourt, setCourtChampionshipRank, setCourtStream, updateTournament } from '@/lib/api';
 import { championshipModes, championshipRankLabel } from '@/lib/format';
-import type { CourtBoardRow, RoundKey, Tournament } from '@/lib/types';
+import { tvScreens, tvSettings } from '@/lib/tv';
+import type { CourtBoardRow, RoundKey, Tournament, TournamentEvent, TvScreen } from '@/lib/types';
 import { isYoutubeUrl } from '@/lib/youtube';
 import { useUnsaved } from './SaveAll';
 import { SettingsGroup } from './SetupCards';
@@ -54,6 +55,102 @@ export function StreamsCard({ tournament, courts }: { tournament: Tournament; co
         </div>
       )}
       {bad && <p className="text-sm text-late">“{bad}” isn’t a YouTube link.</p>}
+    </SettingsGroup>
+  );
+}
+
+const tvSecondChoices = [10, 15, 20, 30, 45, 60, 90];
+
+/**
+ * What the TV board rotates through. Saved on the tournament, so every TV
+ * showing the board follows it within a few seconds.
+ */
+export function TvBoardCard({ tournament, events }: { tournament: Tournament; events: TournamentEvent[] }) {
+  const saved = tvSettings(tournament.tv_settings);
+  const [screens, setScreens] = useState<TvScreen[]>(saved.screens);
+  const [seconds, setSeconds] = useState(saved.seconds);
+  // Saved division ids that still exist; none = every division.
+  const [eventIds, setEventIds] = useState(() => saved.event_ids.filter((id) => events.some((e) => e.id === id)));
+  useUnsaved('tv', { screens, seconds, eventIds }, async () => {
+    if (screens.length === 0) throw new Error('Choose at least one screen for the TV board.');
+    await updateTournament(tournament.id, { tv_settings: { screens, seconds, event_ids: eventIds } });
+  });
+  const toggleScreen = (key: TvScreen, on: boolean) =>
+    // Kept in the listed order: courts, standings, schedule.
+    setScreens((cur) => tvScreens.map((x) => x.key).filter((k) => (k === key ? on : cur.includes(k))));
+  const toggleEvent = (id: string, on: boolean) => {
+    const all = events.map((e) => e.id);
+    const current = eventIds.length ? eventIds : all;
+    const next = all.filter((e) => (e === id ? on : current.includes(e)));
+    if (next.length === 0) return; // at least one division stays on
+    setEventIds(next.length === all.length ? [] : next);
+  };
+  const byDivision = screens.includes('standings') || screens.includes('schedule');
+  const summary = tvScreens.filter((x) => screens.includes(x.key)).map((x) => x.label).join(', ') || 'Nothing chosen';
+
+  return (
+    <SettingsGroup
+      title="TV board"
+      foldable
+      summary={summary}
+      description={
+        <>
+          What the screens at the venue show. With more than one screen chosen, the board rotates through them. TVs pick up
+          changes within a few seconds, so you can change this from your phone.{' '}
+          <a href={`/tv/${tournament.id}`} target="_blank" rel="noopener noreferrer" className="font-medium text-text underline">
+            Open the TV board
+          </a>
+        </>
+      }
+    >
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-sm font-medium">Screens</legend>
+        {tvScreens.map((x) => (
+          <label key={x.key} className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--accent)]"
+              checked={screens.includes(x.key)}
+              onChange={(e) => toggleScreen(x.key, e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">{x.label}</span>
+              <span className="block text-muted">{x.hint}</span>
+            </span>
+          </label>
+        ))}
+        {screens.length === 0 && <p className="text-sm text-late">Choose at least one screen.</p>}
+      </fieldset>
+      {screens.length > 1 && (
+        <Field label="Each screen shows for">
+          <Select value={seconds} onChange={(e) => setSeconds(Number(e.target.value))}>
+            {[...new Set([...tvSecondChoices, seconds])]
+              .sort((a, b) => a - b)
+              .map((n) => (
+                <option key={n} value={n}>
+                  {n < 60 ? `${n} seconds` : n % 60 === 0 ? `${n / 60} minute${n === 60 ? '' : 's'}` : `${n} seconds`}
+                </option>
+              ))}
+          </Select>
+        </Field>
+      )}
+      {byDivision && events.length > 1 && (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-sm font-medium">Divisions on the standings and schedule screens</legend>
+          {events.map((e) => (
+            <label key={e.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-5 w-5 shrink-0 accent-[var(--accent)]"
+                checked={eventIds.length === 0 || eventIds.includes(e.id)}
+                onChange={(ev) => toggleEvent(e.id, ev.target.checked)}
+              />
+              {e.name}
+            </label>
+          ))}
+          <p className="text-sm text-muted">A division shows once it has started. Untick all but one to keep a TV on one division.</p>
+        </fieldset>
+      )}
     </SettingsGroup>
   );
 }

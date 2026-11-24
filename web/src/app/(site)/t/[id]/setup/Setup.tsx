@@ -10,7 +10,7 @@ import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
 import { getCourtBoard, getEventMerges, getEvents, getMatches, getTeams, getTournament } from '@/lib/api';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import { BasicsCard, CheckinCard, ScoresCard } from './BasicsCard';
-import { ChampionshipCard, StreamsCard } from './CourtCards';
+import { ChampionshipCard, StreamsCard, TvBoardCard } from './CourtCards';
 import { EventCard } from './EventCard';
 import { EventForm } from './EventForm';
 import { PricesCard } from './PricesCard';
@@ -100,6 +100,7 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
             )}
             <SharingCard tournament={data.tournament} />
             <StreamsCard tournament={data.tournament} courts={data.courts} />
+            <TvBoardCard key={`tv-${data.tournament.id}`} tournament={data.tournament} events={data.events} />
             <ChampionshipCard key={`champ-${data.tournament.id}`} tournament={data.tournament} courts={data.courts} />
             <RemoveCard tournament={data.tournament} onChanged={reload} />
           </div>
