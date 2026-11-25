@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ErrorText, Field, Input, Select } from '@/components/ui';
-import { setBasicCheckin, setCourtCount, updateTournament } from '@/lib/api';
+import { setBasicCheckin, updateTournament } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
 import { US_STATES } from '@/lib/places';
 import type { ScoreEntryMode, Tournament } from '@/lib/types';
@@ -10,19 +10,10 @@ import { optionalNumber } from './fields';
 import { useUnsaved } from './SaveAll';
 import { SettingsGroup } from './SetupCards';
 
-/** The tournament's settings. `startHere`: a draft's first card, with its number of courts. */
-export function BasicsCard({
-  tournament,
-  courtCount,
-  startHere = false,
-}: {
-  tournament: Tournament;
-  courtCount?: number;
-  startHere?: boolean;
-}) {
+/** The tournament's settings. `startHere`: a draft's first card. Courts are in CourtsCard. */
+export function BasicsCard({ tournament, startHere = false }: { tournament: Tournament; startHere?: boolean }) {
   // new_tournament's placeholder name: ask for the real one.
   const unnamed = tournament.name === 'New tournament';
-  const [courts, setCourts] = useState(courtCount ?? 0);
   const [form, setForm] = useState({
     name: unnamed ? '' : tournament.name,
     starts_on: tournament.starts_on,
@@ -38,7 +29,7 @@ export function BasicsCard({
     contact_email: tournament.contact_email ?? '',
     dupr_score_type: tournament.dupr_score_type,
   });
-  useUnsaved('details', { form, courts }, async () => {
+  useUnsaved('details', { form }, async () => {
     if (!form.name.trim()) throw new Error('Give the tournament a name.');
     if (!form.starts_on) throw new Error('Pick the tournament’s date.');
     if (form.contact_email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contact_email.trim())) {
@@ -53,7 +44,6 @@ export function BasicsCard({
       contact_email: form.contact_email.trim() || null,
       checkin_grace_minutes: optionalNumber(form.checkin_grace_minutes),
     });
-    if (startHere && courts !== courtCount) await setCourtCount(tournament.id, courts);
   });
   const num = (key: keyof typeof form) => ({
     type: 'number',
@@ -82,11 +72,6 @@ export function BasicsCard({
         <Field label="Date" hint={startHere && !tournament.is_demo ? 'Filled in four weeks out. Check it.' : undefined}>
           <Input type="date" required value={form.starts_on} onChange={(e) => setForm({ ...form, starts_on: e.target.value })} />
         </Field>
-        {startHere && (
-          <Field label="Courts" hint="You can change this any time, even during play.">
-            <Input type="number" min={0} max={200} value={courts} onChange={(e) => setCourts(Number(e.target.value))} />
-          </Field>
-        )}
         <Field label="Venue" hint={tournament.simple ? undefined : 'Sent to DUPR with results'}>
           <Input placeholder="Club name, street, city" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
         </Field>

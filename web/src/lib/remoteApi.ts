@@ -700,6 +700,13 @@ export const sendMessage = (
     p_subject: subject ?? null,
   });
 
+/**
+ * Setup's court list, top to bottom: an id renames that court, no id adds one.
+ * Courts left out are removed. Names can trade places. Returns the court count.
+ */
+export const setCourts = (tournamentId: string, courts: { id: string | null; name: string }[]) =>
+  rpc<number>('set_courts', { p_tournament: tournamentId, p_courts: courts });
+
 export async function renameCourt(courtId: string, name: string) {
   await select(supabase().from('courts').update({ name }).eq('id', courtId).select('id'));
 }

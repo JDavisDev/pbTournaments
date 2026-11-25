@@ -409,10 +409,24 @@ export function GuideFields({ form, set }: FieldsProps) {
 export function ScoringFields({ form, set }: FieldsProps) {
   const hasPools = form.format !== 'single_elim';
   const hasBracket = form.format !== 'round_robin';
+  // Win by 1 is a cap equal to the game score; it follows the game score when that changes.
+  const winByOne = form.point_cap === form.games_to;
+  const bracketGamesTo = form.playoff_games_to ?? form.games_to;
+  const setGamesTo = (n: number) => {
+    set('games_to', n);
+    if (winByOne) set('point_cap', n);
+    if (form.playoff_point_cap === bracketGamesTo && form.playoff_games_to === null) set('playoff_point_cap', n);
+  };
+  const setBracketGamesTo = (n: number | null) => {
+    set('playoff_games_to', n);
+    if (form.playoff_point_cap === bracketGamesTo) set('playoff_point_cap', n ?? form.games_to);
+    // Pools win by 1 and the bracket follows them: keep it win by 1 at its own game score.
+    else if (form.playoff_point_cap === null && winByOne && n !== null && n !== form.games_to) set('playoff_point_cap', n);
+  };
   return (
     <Section title="Scoring">
       <Field label={hasBracket && hasPools ? 'Pool games to' : 'Games to'}>
-        <Select value={form.games_to} onChange={(e) => set('games_to', Number(e.target.value))}>
+        <Select value={form.games_to} onChange={(e) => setGamesTo(Number(e.target.value))}>
           {[11, 15, 21].map((n) => (
             <option key={n}>{n}</option>
           ))}
@@ -424,15 +438,23 @@ export function ScoringFields({ form, set }: FieldsProps) {
           <option value={3}>Best of 3</option>
         </Select>
       </Field>
-      <Field label={hasBracket && hasPools ? 'Pool point cap' : 'Point cap'} hint="Optional. Game ends here even if won by 1.">
-        <Input
-          type="number"
-          min={form.games_to}
-          placeholder="None (win by 2)"
-          value={form.point_cap ?? ''}
-          onChange={(e) => set('point_cap', optionalNumber(e.target.value))}
-        />
+      <Field label={hasBracket && hasPools ? 'Pool games win by' : 'Win by'}>
+        <Select value={winByOne ? 1 : 2} onChange={(e) => set('point_cap', e.target.value === '1' ? form.games_to : null)}>
+          <option value={2}>2 points</option>
+          <option value={1}>1 point</option>
+        </Select>
       </Field>
+      {!winByOne && (
+        <Field label={hasBracket && hasPools ? 'Pool point cap' : 'Point cap'} hint="Optional. Game ends here even if won by 1.">
+          <Input
+            type="number"
+            min={form.games_to + 1}
+            placeholder="None"
+            value={form.point_cap ?? ''}
+            onChange={(e) => set('point_cap', optionalNumber(e.target.value))}
+          />
+        </Field>
+      )}
       <Field label="Timeouts per team, per game" hint="Usually 2 in games to 11, 3 in games to 15 or 21.">
         <Input
           type="number"
@@ -467,7 +489,7 @@ export function ScoringFields({ form, set }: FieldsProps) {
       {hasBracket && hasPools && (
         <>
           <Field label="Bracket games to">
-            <Select value={form.playoff_games_to ?? ''} onChange={(e) => set('playoff_games_to', optionalNumber(e.target.value))}>
+            <Select value={form.playoff_games_to ?? ''} onChange={(e) => setBracketGamesTo(optionalNumber(e.target.value))}>
               <option value="">Same as pools</option>
               {[11, 15, 21].map((n) => (
                 <option key={n}>{n}</option>
@@ -481,14 +503,28 @@ export function ScoringFields({ form, set }: FieldsProps) {
               <option value={3}>Best of 3</option>
             </Select>
           </Field>
-          <Field label="Bracket point cap" hint="Optional. Blank = same as pools.">
-            <Input
-              type="number"
-              min={form.playoff_games_to ?? form.games_to}
-              value={form.playoff_point_cap ?? ''}
-              onChange={(e) => set('playoff_point_cap', optionalNumber(e.target.value))}
-            />
+          <Field label="Bracket games win by">
+            <Select
+              value={form.playoff_point_cap === null ? '' : form.playoff_point_cap === bracketGamesTo ? 1 : 'cap'}
+              onChange={(e) =>
+                set('playoff_point_cap', e.target.value === '' ? null : e.target.value === '1' ? bracketGamesTo : bracketGamesTo + 2)
+              }
+            >
+              <option value="">Same as pools</option>
+              <option value={1}>1 point</option>
+              <option value="cap">2 points, with a cap</option>
+            </Select>
           </Field>
+          {form.playoff_point_cap !== null && form.playoff_point_cap !== bracketGamesTo && (
+            <Field label="Bracket point cap" hint="Game ends here even if won by 1.">
+              <Input
+                type="number"
+                min={bracketGamesTo + 1}
+                value={form.playoff_point_cap}
+                onChange={(e) => set('playoff_point_cap', optionalNumber(e.target.value))}
+              />
+            </Field>
+          )}
         </>
       )}
     </Section>

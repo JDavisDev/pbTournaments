@@ -234,6 +234,8 @@ const ops: Record<string, Op> = {
   holdMatch: (tx, id: string, hold: boolean) => one(tx, 'select * from public.hold_match($1, $2)', [id, hold]),
   rebuildQueue: (tx, id: string) => tx.query('select public.rebuild_queue($1)', [id]).then(() => null),
   assignCourtsNow: async (tx, id: string) => (await one<{ n: number }>(tx, 'select public.assign_courts($1) as n', [id])).n,
+  setCourts: async (tx, id: string, courts: { id: string | null; name: string }[]) =>
+    (await one<{ n: number }>(tx, 'select public.set_courts($1, $2::jsonb) as n', [id, JSON.stringify(courts)])).n,
   renameCourt: (tx, id: string, name: string) =>
     tx.query('update public.courts set name = $2 where id = $1', [id, name]).then(() => null),
   setCourtStream: (tx, id: string, url: string | null) =>

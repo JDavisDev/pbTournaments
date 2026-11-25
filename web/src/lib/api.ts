@@ -39,6 +39,7 @@ export const {
   getCancelledTournament,
   setAutoAssign,
   setCourtCount,
+  setCourts,
   updateTournament,
   getStripeNotices,
   resolveStripeNotice,

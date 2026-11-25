@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Check, Field, Input, Select } from '@/components/ui';
-import { renameCourt, setCourtChampionshipRank, setCourtStream, updateTournament } from '@/lib/api';
+import { setCourtChampionshipRank, setCourtStream, setCourts, updateTournament } from '@/lib/api';
 import { championshipModes, championshipRankLabel } from '@/lib/format';
 import { tvScreens, tvSettings } from '@/lib/tv';
 import type { CourtBoardRow, RoundKey, Tournament, TournamentEvent, TvScreen } from '@/lib/types';
@@ -10,31 +10,146 @@ import { isYoutubeUrl } from '@/lib/youtube';
 import { useUnsaved } from './SaveAll';
 import { SettingsGroup } from './SetupCards';
 
-/** YouTube links: one for the whole event, and one per streamed court. */
+type CourtRow = { id: string | null; name: string };
+
+/** The number at the end of a court's name: "Court 12" → 12. */
+const courtNumber = (name: string) => {
+  const m = /(\d{1,6})\s*$/.exec(name.trim());
+  return m ? Number(m[1]) : null;
+};
+
+/** "Court N" for a new court, one past the highest-numbered court. */
+function nextCourtName(rows: CourtRow[]) {
+  const taken = new Set(rows.map((r) => r.name.trim().toLowerCase()));
+  let n = Math.max(rows.length, ...rows.map((r) => courtNumber(r.name) ?? 0)) + 1;
+  while (taken.has(`court ${n}`)) n++;
+  return `Court ${n}`;
+}
+
+/** The first number when the courts are "Court N", "Court N+1", … in order; otherwise null. */
+function numberedFrom(rows: CourtRow[]) {
+  const first = rows.length ? courtNumber(rows[0].name) : null;
+  if (first === null) return null;
+  return rows.every((r, i) => r.name.trim() === `Court ${first + i}`) ? first : null;
+}
+
+function courtListProblem(rows: CourtRow[]) {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const name = r.name.trim();
+    if (!name) return 'Every court needs a name.';
+    if (seen.has(name.toLowerCase())) return `Two courts are both called “${name}”.`;
+    seen.add(name.toLowerCase());
+  }
+  return null;
+}
+
+/**
+ * How many courts and what they're called. A tournament that has only courts
+ * 7-11 sets 5 courts numbered from 7, or types any names it likes.
+ */
+export function CourtsCard({ tournament, courts }: { tournament: Tournament; courts: CourtBoardRow[] }) {
+  // Every row typed so far; the first `count` are the courts. Lowering the
+  // count and raising it again brings the same courts back.
+  const [all, setAll] = useState<CourtRow[]>(() => courts.map((c) => ({ id: c.court_id, name: c.court_name })));
+  const [count, setCount] = useState(courts.length);
+  // What's typed in "Numbered from" while it has focus; otherwise it shows the current numbering.
+  const [fromText, setFromText] = useState<string | null>(null);
+  const rows = all.slice(0, count);
+  const problem = courtListProblem(rows);
+  useUnsaved('courts', rows, async () => {
+    if (problem) throw new Error(problem);
+    await setCourts(tournament.id, rows.map((r) => ({ id: r.id, name: r.name.trim() })));
+  });
+
+  const resize = (value: string) => {
+    const n = Math.max(0, Math.min(200, Math.floor(Number(value) || 0)));
+    setAll((cur) => {
+      const next = [...cur];
+      while (next.length < n) next.push({ id: null, name: nextCourtName(next) });
+      return next;
+    });
+    setCount(n);
+  };
+  const renumber = (value: string) => {
+    setFromText(value);
+    const start = Math.floor(Number(value));
+    if (!value.trim() || !(start >= 1 && start <= 9999)) return;
+    setAll((cur) => cur.map((r, i) => (i < count ? { ...r, name: `Court ${start + i}` } : r)));
+  };
+  const rename = (i: number, name: string) => setAll((cur) => cur.map((r, j) => (j === i ? { ...r, name } : r)));
+  const from = numberedFrom(rows);
+  const live = courts.some((c) => c.match_id);
+
+  return (
+    <SettingsGroup
+      title="Courts"
+      description="How many courts you’re using and what they’re called. Only on courts 7–11? Set 5 courts numbered from 7. Players, the court desk and the TV board see these names."
+    >
+      <div className="grid grid-cols-2 gap-4">
+        <Field
+          label="Courts"
+          hint={live ? 'Fewer removes the last ones; their matches go back to the queue.' : 'You can change this any time, even during play.'}
+        >
+          <Input type="number" min={0} max={200} inputMode="numeric" value={count} onChange={(e) => resize(e.target.value)} />
+        </Field>
+        <Field label="Numbered from" hint="Names them Court 7, Court 8, …">
+          <Input
+            type="number"
+            min={1}
+            inputMode="numeric"
+            placeholder="Custom"
+            disabled={count === 0}
+            value={fromText ?? from ?? ''}
+            onChange={(e) => renumber(e.target.value)}
+            onBlur={() => setFromText(null)}
+          />
+        </Field>
+      </div>
+      {count > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Names</span>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {rows.map((r, i) => (
+              <Input
+                key={r.id ?? `new-${i}`}
+                aria-label={`Court ${i + 1} name`}
+                maxLength={40}
+                value={r.name}
+                onChange={(e) => rename(i, e.target.value)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      {problem && <p className="text-sm text-late">{problem}</p>}
+    </SettingsGroup>
+  );
+}
+
+/** YouTube links: one for the whole event, and one per streamed court. Court names are in CourtsCard. */
 export function StreamsCard({ tournament, courts }: { tournament: Tournament; courts: CourtBoardRow[] }) {
   const [main, setMain] = useState(tournament.stream_url ?? '');
-  const [perCourt, setPerCourt] = useState<Record<string, { name: string; url: string }>>(() =>
-    Object.fromEntries(courts.map((c) => [c.court_id, { name: c.court_name, url: c.stream_url ?? '' }])),
+  const [perCourt, setPerCourt] = useState<Record<string, string>>(() =>
+    Object.fromEntries(courts.map((c) => [c.court_id, c.stream_url ?? ''])),
   );
-  const bad = [main, ...Object.values(perCourt).map((c) => c.url)].find((u) => u.trim() && !isYoutubeUrl(u.trim()));
+  const bad = [main, ...Object.values(perCourt)].find((u) => u.trim() && !isYoutubeUrl(u.trim()));
   useUnsaved('streams', { main, perCourt }, async () => {
     if (bad) throw new Error(`“${bad}” isn’t a YouTube link.`);
     await updateTournament(tournament.id, { stream_url: main.trim() || null });
     for (const c of courts) {
-      const next = perCourt[c.court_id];
-      if (!next) continue;
-      if (next.url.trim() !== (c.stream_url ?? '')) await setCourtStream(c.court_id, next.url.trim() || null);
-      if (next.name.trim() && next.name.trim() !== c.court_name) await renameCourt(c.court_id, next.name.trim());
+      const url = (perCourt[c.court_id] ?? '').trim();
+      if (url !== (c.stream_url ?? '')) await setCourtStream(c.court_id, url || null);
     }
   });
-  const streamed = (main.trim() ? 1 : 0) + Object.values(perCourt).filter((c) => c.url.trim()).length;
+  const streamed = (main.trim() ? 1 : 0) + Object.values(perCourt).filter((u) => u.trim()).length;
 
   return (
     <SettingsGroup
       title="Live streams"
       foldable
       summary={streamed ? `${streamed} stream${streamed === 1 ? '' : 's'}` : 'None'}
-      description="Paste YouTube links. Players see “Watch live” on the tournament page, and their court’s stream when their match is on it. Court names are set here too."
+      description="Paste YouTube links. Players see “Watch live” on the tournament page, and their court’s stream when their match is on it."
     >
       <Field label="Main stream">
         <Input placeholder="https://youtube.com/live/…" value={main} onChange={(e) => setMain(e.target.value)} />
@@ -42,16 +157,17 @@ export function StreamsCard({ tournament, courts }: { tournament: Tournament; co
       {courts.length > 0 && (
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Courts</span>
-          {courts.map((c) => {
-            const v = perCourt[c.court_id] ?? { name: c.court_name, url: '' };
-            const update = (patch: Partial<typeof v>) => setPerCourt((p) => ({ ...p, [c.court_id]: { ...v, ...patch } }));
-            return (
-              <div key={c.court_id} className="grid grid-cols-[6.5rem_1fr] gap-2">
-                <Input aria-label="Court name" value={v.name} onChange={(e) => update({ name: e.target.value })} />
-                <Input aria-label={`${c.court_name} stream`} placeholder="No stream" value={v.url} onChange={(e) => update({ url: e.target.value })} />
-              </div>
-            );
-          })}
+          {courts.map((c) => (
+            <div key={c.court_id} className="grid grid-cols-[6.5rem_1fr] items-center gap-2">
+              <span className="truncate text-sm">{c.court_name}</span>
+              <Input
+                aria-label={`${c.court_name} stream`}
+                placeholder="No stream"
+                value={perCourt[c.court_id] ?? ''}
+                onChange={(e) => setPerCourt((p) => ({ ...p, [c.court_id]: e.target.value }))}
+              />
+            </div>
+          ))}
         </div>
       )}
       {bad && <p className="text-sm text-late">“{bad}” isn’t a YouTube link.</p>}

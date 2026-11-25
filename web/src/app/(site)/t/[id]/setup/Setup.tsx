@@ -10,7 +10,7 @@ import { Button, Card, Empty, ErrorText, Spinner } from '@/components/ui';
 import { getCourtBoard, getEventMerges, getEvents, getMatches, getTeams, getTournament } from '@/lib/api';
 import { useAction, useLiveTournament, useStaffAccess } from '@/lib/hooks';
 import { BasicsCard, CheckinCard, ScoresCard } from './BasicsCard';
-import { ChampionshipCard, StreamsCard, TvBoardCard } from './CourtCards';
+import { ChampionshipCard, CourtsCard, StreamsCard, TvBoardCard } from './CourtCards';
 import { EventCard } from './EventCard';
 import { EventForm } from './EventForm';
 import { PricesCard } from './PricesCard';
@@ -66,11 +66,12 @@ export function Setup({ params }: { params: Promise<{ id: string }> }) {
       {/* Both steps stay mounted, so switching keeps what's typed. */}
       <SaveAllProvider>
         <section className={step === 'settings' ? 'flex flex-col' : 'hidden'}>
-          <BasicsCard
-            key={`details-${data.tournament.id}`}
+          <BasicsCard key={`details-${data.tournament.id}`} tournament={data.tournament} startHere={draft} />
+          {/* Starts over when the courts change (after a save), so added courts get their ids. */}
+          <CourtsCard
+            key={`courts-${data.courts.map((c) => `${c.court_id}:${c.court_name}`).join('|')}`}
             tournament={data.tournament}
-            courtCount={data.courts.length}
-            startHere={draft}
+            courts={data.courts}
           />
           <AboutCard key={`about-${data.tournament.id}`} tournament={data.tournament} />
           {simple ? (
@@ -202,6 +203,7 @@ function ContinueToDivisions({ onDone }: { onDone: () => void }) {
 
 const sectionNames: Record<string, string> = {
   details: 'Basics',
+  courts: 'Courts',
   about: 'About',
   prices: 'Prices',
   registration: 'Registration',

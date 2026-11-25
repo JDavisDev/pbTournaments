@@ -55,7 +55,12 @@ export function RoundFormatsEditor({
                 aria-label={`${label} games to`}
                 className="h-9"
                 value={f ? current.games_to : ''}
-                onChange={(e) => put(key, e.target.value === '' ? null : { ...current, games_to: Number(e.target.value) })}
+                onChange={(e) => {
+                  if (e.target.value === '') return put(key, null);
+                  const n = Number(e.target.value);
+                  // Win by 1 (a cap equal to the game score) stays win by 1.
+                  put(key, { ...current, games_to: n, point_cap: current.point_cap === current.games_to ? n : current.point_cap });
+                }}
               >
                 <option value="">Default</option>
                 {[11, 15, 21].map((n) => (
@@ -79,7 +84,7 @@ export function RoundFormatsEditor({
           );
         })}
       </div>
-      <p className="text-xs text-muted">Players are told their round’s format, e.g. “Best of 3 games to 15, win by 2.”</p>
+      <p className="text-xs text-muted">Players are told their round’s format, e.g. “Best of 3 games to 15, win by 2” or “One game to 11, win by 1.”</p>
     </div>
   );
 }

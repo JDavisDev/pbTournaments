@@ -152,7 +152,8 @@ export function podium(bracket: MatchDetails[]): Podium | null {
 
 /** "Bo3 to 15" style shorthand for a round's format. */
 export function shortFormat(f: { games_to: number; best_of: number; point_cap?: number | null }) {
-  return `${f.best_of === 1 ? '1 game' : `Bo${f.best_of}`} to ${f.games_to}${f.point_cap ? ` (cap ${f.point_cap})` : ''}`;
+  const cap = !f.point_cap ? '' : f.point_cap === f.games_to ? ' (win by 1)' : ` (cap ${f.point_cap})`;
+  return `${f.best_of === 1 ? '1 game' : `Bo${f.best_of}`} to ${f.games_to}${cap}`;
 }
 
 /** A court section: "Courts 1–5" for numbered courts in a row, else the names ("Court 2, Stadium"). */

@@ -16,6 +16,8 @@ export function rulesOf(m: { games_to: number | null; best_of: number | null; po
 
 export function describeRules(r: ScoringRules) {
   const games = r.bestOf === 1 ? 'One game' : `Best of ${r.bestOf}`;
+  // A cap equal to the game score is win by 1.
+  if (r.cap === r.gamesTo) return `${games} to ${r.gamesTo}, win by 1`;
   return `${games} to ${r.gamesTo}, win by 2${r.cap ? `, capped at ${r.cap}` : ''}`;
 }
 

@@ -37,7 +37,8 @@ Call a function from TypeScript with `supabase.rpc('report_score', { p_match, p_
 | `tournament_removal(p_tournament)` → `{can_delete, deletable}` | Staff | Whether this account may delete it (the organization's owners and admins; a standalone Basic tournament's admins), and `tournament_deletable` |
 | `delete_tournament(p_tournament)` | As `can_delete` | Deletes it and everything in it, only when `tournament_deletable`; otherwise says to cancel it. A plain `delete` on `tournaments` follows the same rules (it deletes nothing otherwise) |
 | `set_auto_assign(p_tournament, p_on)` → tournament | Staff | Pause (false) or resume sending matches to courts |
-| `set_court_count(p_tournament, p_count)` → int | Staff | Any number of courts, any time. Removed courts' live matches go back to the queue; courts with history are retired, not deleted |
+| `set_court_count(p_tournament, p_count)` → int | Staff | Any number of courts, any time. Removed courts' live matches go back to the queue; courts with history are retired, not deleted. A new court is named one past the highest-numbered court ("Court 12" after courts 7-11) |
+| `set_courts(p_tournament, p_courts)` → int | Staff | Setup's court list in one go: `[{id, name}]` top to bottom. An id renames that court, no id adds one (bringing back a removed court of that name), courts left out are removed as above. Names are trimmed, unique ignoring case, at most 40 characters, and can trade places |
 
 Tournament settings (`no_show_minutes`, `checkin_grace_minutes`, `overdue_after_minutes`, `match_slot_minutes`, name, date, time zone) are plain column updates.
 
@@ -59,7 +60,7 @@ Pools and brackets:
 - `confirm_seeds`: a bracket-only division's bracket is held (`on_hold`) so the director can review and swap seeds, then `start_bracket`. After pool play the bracket always waits: the director finalizes pool play (`finalize_pool_play`), which seeds it held, then starts it.
 - `round_formats`: a game format per bracket round, overriding the playoff format: `[{"key": "final", "games_to": 15, "best_of": 3, "point_cap": null}]`. Keys (`matches.round_key`): `final`, `semifinal`, `quarterfinal`, `earlier`, `bronze` (single elimination); `winners`, `losers`, `grand_final` (double elimination). A new event defaults to gold (`final`, `grand_final`) best of 3 games to 11 and bronze one game to 15, all win by 2.
 
-Each match has `side` (`main`: pools, single elimination and the winners bracket; `losers`; `final`: grand final and bronze), `round_key`, and `loser_to_match_id`/`loser_to_slot` (double elimination, bronze). Brackets of any size work: empty seeds are byes (`team1_bye`/`team2_bye`), and a match against a bye completes by itself with `is_bye = true`; screens don't count it as played. `match_details` gives every match its effective `games_to`, `best_of`, `point_cap` and `format_text` ("one game to 15, win by 2").
+Each match has `side` (`main`: pools, single elimination and the winners bracket; `losers`; `final`: grand final and bronze), `round_key`, and `loser_to_match_id`/`loser_to_slot` (double elimination, bronze). Brackets of any size work: empty seeds are byes (`team1_bye`/`team2_bye`), and a match against a bye completes by itself with `is_bye = true`; screens don't count it as played. `match_details` gives every match its effective `games_to`, `best_of`, `point_cap` and `format_text` ("one game to 15, win by 2"; a `point_cap` equal to `games_to` reads "win by 1").
 
 | Function | Who | What it does |
 |---|---|---|
